@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -34,6 +35,7 @@ class User extends Authenticatable
         'gender',
         'age',
         'city',
+        'avatar',
         'vk_id',
     ];
 
@@ -59,6 +61,15 @@ class User extends Authenticatable
             'password' => 'hashed',
             'age' => 'integer',
         ];
+    }
+
+    public function getAvatarAttribute($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($value);
     }
 
     /**

@@ -6,7 +6,7 @@ use App\Actions\Auth\RegisterUserAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
-use App\Models\Wish;
+use App\Services\UserStatisticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -43,32 +43,17 @@ class AuthController extends Controller
         ]);
     }
 
-    public function me(Request $request)
+    public function me(Request $request, UserStatisticsService $statisticsService)
     {
         $user = $request->user();
 
-        $totalWishes = Wish::query()
-            ->whereHas('wishlist', function ($query) use ($user) {
-                $query->where('owner_id', $user->id);
-            })
-            ->count();
-
-        $fulfilledWishes = Wish::query()
-            ->whereHas('wishlist', function ($query) use ($user) {
-                $query->where('owner_id', $user->id);
-            })
-            ->where('status', Wish::STATUS_FULFILLED)
-            ->count();
-
-        $friendsCount = $user->friends()->count();
+        $statistics = $statisticsService->getStatisticsForUser($user);
 
         return response()->json([
-            'user' => $user,
-            'statistics' => [
-                'wishes_total' => $totalWishes,
-                'wishes_fulfilled' => $fulfilledWishes,
-                'friends_total' => $friendsCount,
-            ],
+            'user' => array_merge($user->toArray(), [
+                'statistics' => $statistics,
+            ]),
+            'statistics' => $statistics,
         ]);
     }
 

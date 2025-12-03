@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\FriendController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ProductPreviewController;
 use App\Http\Controllers\Api\NotificationSettingController;
+use App\Http\Controllers\Api\ProfileAvatarController;
 use App\Http\Controllers\Auth\VkAuthController;
 
 Route::domain(env('APP_DOMAIN_API'))
@@ -29,6 +30,10 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/auth/me', [AuthController::class, 'me'])->name('api.auth.me');
             Route::post('/auth/logout', [AuthController::class, 'logout'])->name('api.auth.logout');
             Route::post('/auth/logout-all', [AuthController::class, 'logoutAll'])->name('api.auth.logout_all');
+
+            // Профиль текущего пользователя
+            Route::post('/profile/avatar', [ProfileAvatarController::class, 'store'])->name('api.profile.avatar.store');
+            Route::delete('/profile/avatar', [ProfileAvatarController::class, 'destroy'])->name('api.profile.avatar.destroy');
 
             Route::post('/products/preview', ProductPreviewController::class)->name('api.products.preview');
 

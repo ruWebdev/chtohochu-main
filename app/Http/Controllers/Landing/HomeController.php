@@ -11,7 +11,8 @@ class HomeController
     {
         return Inertia::render('Landing/Home', [
             'title' => __('landing.title'),
-            'description' => __('landing.description'),
+            'description' => __('landing.subtitle'),
+            'soon' => __('landing.soon'),
         ]);
     }
 }

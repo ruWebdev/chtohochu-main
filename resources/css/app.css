@@ -1,3 +1,56 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.landing-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at top left, #e5e7eb, #f9fafb);
+  color: #111827;
+}
+
+.landing-layout .header {
+  padding: 24px 32px;
+}
+
+.landing-layout .header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.landing-layout main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-hero {
+  text-align: center;
+  max-width: 640px;
+  padding: 40px 16px 80px;
+}
+
+.landing-hero__title {
+  font-size: clamp(40px, 7vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.landing-hero__subtitle {
+  font-size: clamp(18px, 3vw, 28px);
+  font-weight: 500;
+  margin-bottom: 32px;
+  color: #4b5563;
+}
+
+.landing-hero__soon {
+  font-size: clamp(20px, 3.5vw, 32px);
+  font-weight: 700;
+  color: #111827;
+}

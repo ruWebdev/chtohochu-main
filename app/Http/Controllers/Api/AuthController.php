@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Services\UserStatisticsService;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -21,7 +22,7 @@ class AuthController extends Controller
         return response()->json([
             'user' => $user,
             'token' => $token,
-        ]);
+        ], 201);
     }
 
     public function login(LoginRequest $request)
@@ -40,6 +41,23 @@ class AuthController extends Controller
         return response()->json([
             'user' => $user,
             'token' => $token,
+        ]);
+    }
+
+    public function checkUsername(Request $request)
+    {
+        $validated = $request->validate([
+            'username' => ['required', 'string', 'min:6', 'max:20', 'regex:/^[a-z0-9_]+$/'],
+        ]);
+
+        $username = strtolower($validated['username']);
+
+        $exists = User::query()
+            ->where('username', $username)
+            ->exists();
+
+        return response()->json([
+            'available' => ! $exists,
         ]);
     }
 

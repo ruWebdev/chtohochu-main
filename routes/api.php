@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\ProductPreviewController;
 use App\Http\Controllers\Api\NotificationSettingController;
 use App\Http\Controllers\Api\ProfileAvatarController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Auth\VkAuthController;
 
 Route::domain(env('APP_DOMAIN_API'))
@@ -22,6 +23,7 @@ Route::domain(env('APP_DOMAIN_API'))
 
         // Аутентификация (Sanctum)
         Route::post('/auth/register', [AuthController::class, 'register'])->name('api.auth.register');
+        Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])->name('api.auth.username.check');
         Route::post('/auth/login', [AuthController::class, 'login'])->name('api.auth.login');
         Route::post('/auth/vk', [VkAuthController::class, 'login'])
             ->middleware('throttle:10,1');
@@ -32,6 +34,7 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::post('/auth/logout-all', [AuthController::class, 'logoutAll'])->name('api.auth.logout_all');
 
             // Профиль текущего пользователя
+            Route::patch('/profile', [ProfileController::class, 'update'])->name('api.profile.update');
             Route::post('/profile/avatar', [ProfileAvatarController::class, 'store'])->name('api.profile.avatar.store');
             Route::delete('/profile/avatar', [ProfileAvatarController::class, 'destroy'])->name('api.profile.avatar.destroy');
 

@@ -14,8 +14,11 @@ class RegisterUserAction
     public function execute(array $data): User
     {
         return DB::transaction(function () use ($data) {
+            $username = strtolower($data['username']);
+
             $user = new User();
-            $user->name = $data['name'];
+            $user->name = $data['username'];
+            $user->username = $username;
             $user->email = $data['email'];
             $user->password = Hash::make($data['password']);
             $user->save();

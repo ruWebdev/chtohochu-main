@@ -26,11 +26,23 @@ class UserPushNotification extends Notification
     public function toFcm(object $notifiable): FcmMessage
     {
         return FcmMessage::create()
-            ->setNotification(
+            ->notification(
                 FcmNotification::create()
-                    ->setTitle($this->title)
-                    ->setBody($this->body)
+                    ->title($this->title)
+                    ->body($this->body)
             )
-            ->setData($this->data);
+            ->data($this->prepareData());
+    }
+
+    protected function prepareData(): array
+    {
+        if (empty($this->data)) {
+            return [];
+        }
+
+        return array_map(
+            static fn($value) => is_null($value) ? '' : (string) $value,
+            $this->data
+        );
     }
 }

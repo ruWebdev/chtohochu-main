@@ -26,7 +26,12 @@ class WishlistController extends Controller
         $user = $request->user();
 
         $query = Wishlist::query()
-            ->where('owner_id', $user->id)
+            ->where(function ($q) use ($user) {
+                $q->where('owner_id', $user->id)
+                    ->orWhereHas('participants', function ($q2) use ($user) {
+                        $q2->where('users.id', $user->id);
+                    });
+            })
             ->with([
                 'owner',
                 'participants',
@@ -42,6 +47,21 @@ class WishlistController extends Controller
 
         if ($request->filled('visibility')) {
             $query->whereIn('visibility', (array) $request->input('visibility'));
+        }
+
+        if ($request->filled('is_favorite')) {
+            $rawIsFavorite = $request->input('is_favorite');
+            $isFavorite = filter_var($rawIsFavorite, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+            if ($isFavorite === true) {
+                $query->whereHas('favorites', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            } elseif ($isFavorite === false) {
+                $query->whereDoesntHave('favorites', function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                });
+            }
         }
 
         return WishlistResource::collection($query->get());
@@ -114,20 +134,25 @@ class WishlistController extends Controller
      */
     public function update(UpdateWishlistRequest $request, Wishlist $wishlist)
     {
-        $this->authorize('update', $wishlist);
-
         $data = $request->validated();
+        $user = $request->user();
+
         $isFavorite = array_key_exists('is_favorite', $data) ? (bool) $data['is_favorite'] : null;
         unset($data['is_favorite']);
 
-        $wishlist->fill($data);
+        if ($data === []) {
+            $this->authorize('view', $wishlist);
+            $updatedFields = [];
+        } else {
+            $this->authorize('update', $wishlist);
 
-        // Запоминаем изменённые поля для события
-        $updatedFields = array_keys($wishlist->getDirty());
+            $wishlist->fill($data);
 
-        $wishlist->save();
+            // Запоминаем изменённые поля для события
+            $updatedFields = array_keys($wishlist->getDirty());
 
-        $user = $request->user();
+            $wishlist->save();
+        }
 
         if ($isFavorite === true) {
             $wishlist->favorites()->syncWithoutDetaching([$user->id]);

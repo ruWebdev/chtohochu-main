@@ -12,7 +12,28 @@ class WishlistPolicy
      */
     public function view(User $user, Wishlist $wishlist): bool
     {
-        return $wishlist->owner_id === $user->id;
+        if ($wishlist->owner_id === $user->id) {
+            return true;
+        }
+
+        if ($wishlist->participants()
+            ->where('users.id', $user->id)
+            ->exists()
+        ) {
+            return true;
+        }
+
+        if ($wishlist->visibility === Wishlist::VISIBILITY_PUBLIC) {
+            return true;
+        }
+
+        if ($wishlist->visibility === Wishlist::VISIBILITY_FRIENDS) {
+            $friendIds = $user->friendIds();
+
+            return in_array($wishlist->owner_id, $friendIds, true);
+        }
+
+        return false;
     }
 
     /**

@@ -4,13 +4,16 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use NotificationChannels\Fcm\FcmChannel;
 use NotificationChannels\Fcm\FcmMessage;
 use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
-class UserPushNotification extends Notification
+class UserPushNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    public string $connection = 'redis';
 
     public function __construct(
         public string $title,

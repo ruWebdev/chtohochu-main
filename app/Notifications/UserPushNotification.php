@@ -13,13 +13,13 @@ class UserPushNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public string $connection = 'redis';
-
     public function __construct(
         public string $title,
         public string $body,
         public array $data = [],
-    ) {}
+    ) {
+        $this->onConnection('redis');
+    }
 
     public function via(object $notifiable): array
     {

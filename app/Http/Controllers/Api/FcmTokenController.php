@@ -5,9 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FCM\StoreFcmTokenRequest;
 use App\Models\DeviceToken;
+use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Notification;
-use App\Notifications\TestPushNotification;
 
 class FcmTokenController extends Controller
 {
@@ -44,15 +43,16 @@ class FcmTokenController extends Controller
         ]);
     }
 
-    public function test(Request $request)
+    public function test(Request $request, PushNotificationService $pushNotificationService)
     {
         $user = $request->user();
 
-        Notification::send($user, new TestPushNotification(
+        $pushNotificationService->sendToUser(
+            user: $user,
             title: __('notifications.test_title'),
             body: __('notifications.test_body'),
             data: ['type' => 'test']
-        ));
+        );
 
         return response()->json([
             'message' => __('notifications.test_sent'),

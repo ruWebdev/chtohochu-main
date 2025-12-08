@@ -23,4 +23,25 @@ Route::domain(env('APP_DOMAIN_APP'))
 
         Route::get('/preview/user/{username}', UserPreviewController::class)
             ->name('sharing.preview.user');
+
+        // Универсальные ссылки Smart Links
+        Route::get('/app', function () {
+            return redirect()->route('sharing.resolve', ['path' => 'app']);
+        })->name('sharing.universal.app');
+
+        Route::get('/wishlist/{id}', function (string $id) {
+            return redirect()->route('sharing.preview.wishlist', ['wishlist' => $id]);
+        })->name('sharing.universal.wishlist');
+
+        Route::get('/wish/{id}', function (string $id) {
+            return redirect()->route('sharing.preview.wish', ['wish' => $id]);
+        })->name('sharing.universal.wish');
+
+        Route::get('/shopping-list/{id}', function (string $id) {
+            return redirect()->route('sharing.preview.shopping_list', ['shoppingList' => $id]);
+        })->name('sharing.universal.shopping_list');
+
+        Route::get('/user/{username}', function (string $username) {
+            return redirect()->route('sharing.preview.user', ['username' => $username]);
+        })->name('sharing.universal.user');
     });

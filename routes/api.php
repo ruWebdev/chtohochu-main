@@ -24,6 +24,16 @@ Route::domain(env('APP_DOMAIN_API'))
     ->group(function () {
         Route::get('/health', HealthController::class)->name('api.health');
 
+        // Временный отладочный эндпойнт для проверки расширения Redis в веб-окружении
+        Route::get('/debug/redis', function () {
+            return response()->json([
+                'extension_loaded' => extension_loaded('redis'),
+                'client' => config('database.redis.client'),
+                'php_version' => PHP_VERSION,
+                'sapi' => php_sapi_name(),
+            ]);
+        })->name('api.debug.redis');
+
         // Аутентификация (Sanctum)
         Route::post('/auth/register', [AuthController::class, 'register'])->name('api.auth.register');
         Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])->name('api.auth.username.check');

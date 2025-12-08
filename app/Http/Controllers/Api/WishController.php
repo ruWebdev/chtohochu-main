@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\Wish\WishDeleted;
+use App\Events\Wish\WishUpdated;
+use App\Events\Wishlist\WishlistItemAdded;
+use App\Events\Wishlist\WishlistItemRemoved;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Wishlist\StoreWishRequest;
 use App\Http\Requests\Wishlist\UpdateWishRequest;
@@ -62,6 +66,9 @@ class WishController extends Controller
 
         $wish = Wish::query()->create($data);
         $wish->load('claimers.user');
+
+        // Отправляем WebSocket-событие о добавлении желания в список
+        broadcast(new WishlistItemAdded($wishlist, $wish))->toOthers();
 
         return response()->json([
             'message' => __('wishlist.wish_created'),
@@ -125,10 +132,18 @@ class WishController extends Controller
             abort(404);
         }
 
+        // Запоминаем изменённые поля для события
         $wish->fill($request->validated());
+        $updatedFields = array_keys($wish->getDirty());
+
         $wish->save();
 
         $wish->load('claimers.user');
+
+        // Отправляем WebSocket-событие об обновлении желания
+        if (! empty($updatedFields)) {
+            broadcast(new WishUpdated($wish, $updatedFields))->toOthers();
+        }
 
         return response()->json([
             'message' => __('wishlist.wish_updated'),
@@ -147,7 +162,14 @@ class WishController extends Controller
             abort(404);
         }
 
+        $wishId = $wish->id;
+        $wishlistId = $wishlist->id;
+
         $wish->delete();
+
+        // Отправляем WebSocket-события об удалении желания
+        broadcast(new WishlistItemRemoved($wishlist, $wishId))->toOthers();
+        broadcast(new WishDeleted($wishId, $wishlistId));
 
         return response()->json([
             'message' => __('wishlist.wish_deleted'),
@@ -166,9 +188,16 @@ class WishController extends Controller
         $this->authorize('update', $wish);
 
         $wish->fill($request->validated());
+        $updatedFields = array_keys($wish->getDirty());
+
         $wish->save();
 
         $wish->load('claimers.user');
+
+        // Отправляем WebSocket-событие об обновлении желания
+        if (! empty($updatedFields)) {
+            broadcast(new WishUpdated($wish, $updatedFields))->toOthers();
+        }
 
         return response()->json([
             'message' => __('wishlist.wish_updated'),
@@ -187,7 +216,12 @@ class WishController extends Controller
 
         $this->authorize('delete', $wish);
 
+        $wishId = $wish->id;
+
         $wish->delete();
+
+        // Отправляем WebSocket-событие об удалении желания
+        broadcast(new WishDeleted($wishId, null));
 
         return response()->json([
             'message' => __('wishlist.wish_deleted'),

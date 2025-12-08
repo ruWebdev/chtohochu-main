@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\User\FriendRequestAccepted;
+use App\Events\User\FriendRequestCanceled;
+use App\Events\User\FriendRequestRejected;
+use App\Events\User\FriendRequestSent;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FriendRequestResource;
 use App\Http\Resources\FriendResource;
@@ -144,9 +148,18 @@ class FriendController extends Controller
             'message' => $data['message'] ?? null,
         ]);
 
+        $friendship->load(['requester', 'addressee']);
+
+        // Отправляем WebSocket-событие получателю запроса
+        broadcast(new FriendRequestSent(
+            $friendship,
+            $friendship->requester,
+            $friendship->addressee
+        ))->toOthers();
+
         return response()->json([
             'message' => __('friends.request_sent'),
-            'data' => new FriendRequestResource($friendship->load(['requester', 'addressee'])),
+            'data' => new FriendRequestResource($friendship),
         ], 201);
     }
 
@@ -170,6 +183,15 @@ class FriendController extends Controller
         $friendship->status = Friendship::STATUS_ACCEPTED;
         $friendship->save();
 
+        $friendship->load(['requester', 'addressee']);
+
+        // Отправляем WebSocket-событие отправителю запроса
+        broadcast(new FriendRequestAccepted(
+            $friendship,
+            $friendship->requester,
+            $friendship->addressee
+        ))->toOthers();
+
         return response()->json([
             'message' => __('friends.request_accepted'),
             'data' => [
@@ -191,8 +213,23 @@ class FriendController extends Controller
             abort(403);
         }
 
+        if ($friendship->status !== Friendship::STATUS_PENDING) {
+            return response()->json([
+                'message' => __('friends.cannot_accept'),
+            ], 422);
+        }
+
         $friendship->status = Friendship::STATUS_DECLINED;
         $friendship->save();
+
+        $friendship->load(['requester', 'addressee']);
+
+        // Отправляем WebSocket-событие об отклонении заявки отправителю
+        broadcast(new FriendRequestRejected(
+            $friendship,
+            $friendship->requester,
+            $friendship->addressee
+        ))->toOthers();
 
         return response()->json([
             'message' => __('friends.request_rejected'),
@@ -265,7 +302,19 @@ class FriendController extends Controller
             ], 422);
         }
 
+        $friendship->load(['requester', 'addressee']);
+
+        $friendshipId = $friendship->id;
+        $event = new FriendRequestCanceled(
+            $friendshipId,
+            $friendship->requester,
+            $friendship->addressee
+        );
+
         $friendship->delete();
+
+        // Отправляем WebSocket-событие получателю заявки
+        broadcast($event)->toOthers();
 
         return response()->noContent();
     }

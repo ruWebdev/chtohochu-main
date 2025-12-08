@@ -2,6 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\User\UserTaggedInList;
+use App\Events\Wishlist\WishlistDeleted;
+use App\Events\Wishlist\WishlistParticipantAdded;
+use App\Events\Wishlist\WishlistParticipantRemoved;
+use App\Events\Wishlist\WishlistUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Wishlist\StoreWishlistRequest;
 use App\Http\Requests\Wishlist\UpdateWishlistRequest;
@@ -116,6 +121,10 @@ class WishlistController extends Controller
         unset($data['is_favorite']);
 
         $wishlist->fill($data);
+
+        // Запоминаем изменённые поля для события
+        $updatedFields = array_keys($wishlist->getDirty());
+
         $wishlist->save();
 
         $user = $request->user();
@@ -135,6 +144,11 @@ class WishlistController extends Controller
             },
         ]);
 
+        // Отправляем WebSocket-событие об обновлении списка
+        if (! empty($updatedFields)) {
+            broadcast(new WishlistUpdated($wishlist, $updatedFields))->toOthers();
+        }
+
         return response()->json([
             'message' => __('wishlist.wishlist_updated'),
             'data' => new WishlistResource($wishlist),
@@ -148,7 +162,15 @@ class WishlistController extends Controller
     {
         $this->authorize('delete', $wishlist);
 
+        // Собираем данные для события до удаления
+        $wishlistId = $wishlist->id;
+        $wishlistName = $wishlist->name;
+        $participantIds = $wishlist->participants()->pluck('users.id')->toArray();
+
         $wishlist->delete();
+
+        // Отправляем WebSocket-событие об удалении списка
+        broadcast(new WishlistDeleted($wishlistId, $wishlistName, $participantIds));
 
         return response()->json([
             'message' => __('wishlist.wishlist_deleted'),
@@ -190,6 +212,17 @@ class WishlistController extends Controller
 
         $wishlist->load(['owner', 'participants', 'wishes']);
 
+        // Получаем добавленного участника
+        $participant = User::find($data['user_id']);
+
+        if ($participant) {
+            // Отправляем событие в канал списка
+            broadcast(new WishlistParticipantAdded($wishlist, $participant))->toOthers();
+
+            // Уведомляем добавленного пользователя
+            broadcast(new UserTaggedInList($participant, $wishlist, $currentUser));
+        }
+
         return response()->json([
             'message' => __('wishlist.participant_added'),
             'data' => new WishlistResource($wishlist),
@@ -213,7 +246,12 @@ class WishlistController extends Controller
             ], 422);
         }
 
+        $userId = $user->id;
+
         $wishlist->participants()->detach($user->id);
+
+        // Отправляем WebSocket-событие об удалении участника
+        broadcast(new WishlistParticipantRemoved($wishlist, $userId))->toOthers();
 
         return response()->json([
             'message' => __('wishlist.participant_removed'),

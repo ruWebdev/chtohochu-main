@@ -56,6 +56,7 @@ class Wishlist extends Model
         'visibility',
         'status',
         'avatar',
+        'card_color',
         'wishes_sort',
         'tags',
         'reminder_enabled',
@@ -98,5 +99,29 @@ class Wishlist extends Model
     {
         return $this->belongsToMany(User::class, 'wishlist_user')
             ->withTimestamps();
+    }
+
+    /**
+     * Пользователи, добавившие этот список желаний в избранное.
+     */
+    public function favorites()
+    {
+        return $this->belongsToMany(User::class, 'wishlist_favorites')
+            ->withTimestamps();
+    }
+
+    public function isFavoriteForUser(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->relationLoaded('favorites')) {
+            return $this->favorites->contains('id', $user->id);
+        }
+
+        return $this->favorites()
+            ->where('user_id', $user->id)
+            ->exists();
     }
 }

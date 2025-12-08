@@ -22,7 +22,14 @@ class WishlistController extends Controller
 
         $query = Wishlist::query()
             ->where('owner_id', $user->id)
-            ->with(['owner', 'participants', 'wishes']);
+            ->with([
+                'owner',
+                'participants',
+                'wishes',
+                'favorites' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                },
+            ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));
@@ -43,6 +50,8 @@ class WishlistController extends Controller
         $user = $request->user();
 
         $data = $request->validated();
+        $isFavorite = array_key_exists('is_favorite', $data) ? (bool) $data['is_favorite'] : false;
+        unset($data['is_favorite']);
         $data['owner_id'] = $user->id;
 
         if (empty($data['status'])) {
@@ -55,7 +64,18 @@ class WishlistController extends Controller
 
         $wishlist = Wishlist::query()->create($data);
 
-        $wishlist->load(['owner', 'participants', 'wishes']);
+        if ($isFavorite) {
+            $wishlist->favorites()->syncWithoutDetaching([$user->id]);
+        }
+
+        $wishlist->load([
+            'owner',
+            'participants',
+            'wishes',
+            'favorites' => function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            },
+        ]);
 
         return response()->json([
             'message' => __('wishlist.wishlist_created'),
@@ -70,7 +90,16 @@ class WishlistController extends Controller
     {
         $this->authorize('view', $wishlist);
 
-        $wishlist->load(['owner', 'participants', 'wishes']);
+        $user = $request->user();
+
+        $wishlist->load([
+            'owner',
+            'participants',
+            'wishes',
+            'favorites' => function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            },
+        ]);
 
         return new WishlistResource($wishlist);
     }
@@ -82,10 +111,29 @@ class WishlistController extends Controller
     {
         $this->authorize('update', $wishlist);
 
-        $wishlist->fill($request->validated());
+        $data = $request->validated();
+        $isFavorite = array_key_exists('is_favorite', $data) ? (bool) $data['is_favorite'] : null;
+        unset($data['is_favorite']);
+
+        $wishlist->fill($data);
         $wishlist->save();
 
-        $wishlist->load(['owner', 'participants', 'wishes']);
+        $user = $request->user();
+
+        if ($isFavorite === true) {
+            $wishlist->favorites()->syncWithoutDetaching([$user->id]);
+        } elseif ($isFavorite === false) {
+            $wishlist->favorites()->detach($user->id);
+        }
+
+        $wishlist->load([
+            'owner',
+            'participants',
+            'wishes',
+            'favorites' => function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            },
+        ]);
 
         return response()->json([
             'message' => __('wishlist.wishlist_updated'),
@@ -191,7 +239,14 @@ class WishlistController extends Controller
                 Wishlist::VISIBILITY_FRIENDS,
                 Wishlist::VISIBILITY_PUBLIC,
             ])
-            ->with(['owner', 'participants', 'wishes']);
+            ->with([
+                'owner',
+                'participants',
+                'wishes',
+                'favorites' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                },
+            ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));
@@ -211,7 +266,14 @@ class WishlistController extends Controller
         $query = Wishlist::query()
             ->where('visibility', Wishlist::VISIBILITY_PUBLIC)
             ->where('owner_id', '!=', $user->id)
-            ->with(['owner', 'participants', 'wishes']);
+            ->with([
+                'owner',
+                'participants',
+                'wishes',
+                'favorites' => function ($query) use ($user) {
+                    $query->where('user_id', $user->id);
+                },
+            ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));

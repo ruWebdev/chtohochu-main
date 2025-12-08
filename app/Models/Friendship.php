@@ -16,10 +16,14 @@ class Friendship extends Model
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_ACCEPTED = 'accepted';
+    public const STATUS_DECLINED = 'declined';
+    public const STATUS_BLOCKED = 'blocked';
 
     public const STATUSES = [
         self::STATUS_PENDING,
         self::STATUS_ACCEPTED,
+        self::STATUS_DECLINED,
+        self::STATUS_BLOCKED,
     ];
 
     /**
@@ -31,6 +35,7 @@ class Friendship extends Model
         'requester_id',
         'addressee_id',
         'status',
+        'message',
     ];
 
     /**

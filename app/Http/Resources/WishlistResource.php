@@ -26,12 +26,16 @@ class WishlistResource extends JsonResource
             'visibility' => $this->visibility,
             'status' => $this->status,
             'avatar' => $this->avatar,
+            'card_color' => $this->card_color,
             'participants' => WishlistUserResource::collection($participants ?? []),
             'sort_order' => $this->wishes_sort,
             'categories' => $this->tags ?? [],
             'reminder_date' => optional($this->reminder_at)?->toISOString(),
             'allow_claiming' => (bool) $this->allow_claiming,
             'show_claimers' => (bool) $this->show_claimers,
+            'is_favorite' => method_exists($this->resource, 'isFavoriteForUser')
+                ? $this->resource->isFavoriteForUser($request->user())
+                : false,
             'created_at' => optional($this->created_at)?->toISOString(),
             'updated_at' => optional($this->updated_at)?->toISOString(),
             'wishes' => WishResource::collection($wishes ?? []),

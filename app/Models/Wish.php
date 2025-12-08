@@ -61,6 +61,7 @@ class Wish extends Model
      */
     protected $fillable = [
         'wishlist_id',
+        'owner_id',
         'name',
         'visibility',
         'images',
@@ -109,6 +110,14 @@ class Wish extends Model
     public function wishlist()
     {
         return $this->belongsTo(Wishlist::class);
+    }
+
+    /**
+     * Владелец желания.
+     */
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_id');
     }
 
     /**

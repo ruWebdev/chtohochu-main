@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'landing' => \App\Http\Middleware\Segments\LandingSegment::class,
             'user' => \App\Http\Middleware\Segments\UserSegment::class,
             'admin' => \App\Http\Middleware\Segments\AdminSegment::class,
+            'app' => \App\Http\Middleware\Segments\AppSegment::class,
             'api.segment' => \App\Http\Middleware\Segments\ApiSegment::class,
         ]);
 

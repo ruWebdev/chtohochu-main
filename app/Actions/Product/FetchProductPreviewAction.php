@@ -14,6 +14,10 @@ class FetchProductPreviewAction
      */
     public function execute(string $url): array
     {
+        if ($this->isWildberriesUrl($url)) {
+            return $this->fetchWildberriesProductViaApi($url);
+        }
+
         $html = $this->loadHtml($url);
 
         [$name, $imageUrl] = $this->extractMeta($html);
@@ -31,20 +35,126 @@ class FetchProductPreviewAction
     }
 
     /**
-     * Загрузка HTML по ссылке.
+     * Проверка, что ссылка указывает на товар Wildberries.
      */
-    protected function loadHtml(string $url): string
+    protected function isWildberriesUrl(string $url): bool
     {
+        $parts = parse_url($url);
+
+        if (! isset($parts['host'], $parts['path'])) {
+            return false;
+        }
+
+        $host = Str::lower($parts['host']);
+
+        if ($host !== 'www.wildberries.ru' && $host !== 'wildberries.ru') {
+            return false;
+        }
+
+        return (bool) preg_match('#^/catalog/\\d+/detail\\.aspx#', $parts['path']);
+    }
+
+    /**
+     * Извлечение артикула (nmId) из ссылки Wildberries.
+     */
+    protected function extractWildberriesNmId(string $url): ?int
+    {
+        $parts = parse_url($url);
+
+        if (! isset($parts['path'])) {
+            return null;
+        }
+
+        if (! preg_match('#^/catalog/(\\d+)/detail\\.aspx#', $parts['path'], $matches)) {
+            return null;
+        }
+
+        return (int) $matches[1];
+    }
+
+    /**
+     * Получение названия и изображения товара Wildberries через публичный JSON-API.
+     */
+    protected function fetchWildberriesProductViaApi(string $url): array
+    {
+        $nmId = $this->extractWildberriesNmId($url);
+
+        if (! $nmId) {
+            throw new \RuntimeException('product.metadata_not_found');
+        }
+
         try {
-            $response = Http::withHeaders([
-                'User-Agent' => 'Mozilla/5.0 (compatible; chtohochu-bot/1.0; +https://' . config('app.url') . ')',
-                'Accept-Language' => 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-            ])->timeout(10)->get($url);
+            $response = Http::timeout(5)
+                ->retry(2, 500)
+                ->get('https://card.wb.ru/cards/v2/detail', [
+                    'appType' => 1,
+                    'curr' => 'rub',
+                    'dest' => -1257786,
+                    'nm' => $nmId,
+                ]);
         } catch (\Throwable $e) {
             throw new \RuntimeException('product.fetch_failed', 0, $e);
         }
 
         if (! $response->successful()) {
+            if ($response->status() === 404) {
+                throw new \RuntimeException('product.metadata_not_found');
+            }
+
+            throw new \RuntimeException('product.fetch_failed');
+        }
+
+        $json = $response->json();
+
+        if (
+            ! is_array($json)
+            || ! isset($json['data']['products'][0])
+            || ! is_array($json['data']['products'][0])
+        ) {
+            throw new \RuntimeException('product.metadata_not_found');
+        }
+
+        $product = $json['data']['products'][0];
+
+        $name = isset($product['name']) && is_string($product['name'])
+            ? trim($product['name'])
+            : null;
+
+        $nmIdFromApi = isset($product['id']) ? (string) $product['id'] : (string) $nmId;
+
+        $imageUrl = $this->buildWildberriesImageUrl($nmIdFromApi);
+
+        if ($imageUrl === '') {
+            throw new \RuntimeException('product.metadata_not_found');
+        }
+
+        $storedImageUrl = $this->downloadImage($imageUrl);
+
+        return [
+            'name' => $name ?: $url,
+            'image_url' => $storedImageUrl,
+        ];
+    }
+
+    /**
+     * Загрузка HTML по ссылке.
+     */
+    protected function loadHtml(string $url): string
+    {
+        try {
+            $response = Http::withHeaders($this->getDefaultHeaders())
+                ->timeout(10)
+                ->retry(2, 500)
+                ->get($url);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('product.fetch_failed', 0, $e);
+        }
+
+        if (! $response->successful()) {
+            if ($response->status() === 404) {
+                throw new \RuntimeException('product.metadata_not_found');
+            }
+
             throw new \RuntimeException('product.fetch_failed');
         }
 
@@ -113,15 +223,53 @@ class FetchProductPreviewAction
         return null;
     }
 
+    protected function buildWildberriesImageUrl(string $nmId): string
+    {
+        $nmId = trim($nmId);
+
+        if ($nmId === '') {
+            return '';
+        }
+
+        return 'https://images.wbstatic.net/big/new/' . $nmId . '-1.jpg';
+    }
+
+    protected function getDefaultHeaders(): array
+    {
+        return [
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept-Language' => 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        ];
+    }
+
+    protected function normalizeImageUrl(string $imageUrl): string
+    {
+        $imageUrl = trim($imageUrl);
+
+        if ($imageUrl === '') {
+            return $imageUrl;
+        }
+
+        if (Str::startsWith($imageUrl, '//')) {
+            return 'https:' . $imageUrl;
+        }
+
+        return $imageUrl;
+    }
+
     /**
      * Скачивание изображения и сохранение в публичном хранилище.
      */
     protected function downloadImage(string $imageUrl): string
     {
+        $imageUrl = $this->normalizeImageUrl($imageUrl);
+
         try {
-            $response = Http::withHeaders([
-                'User-Agent' => 'Mozilla/5.0 (compatible; chtohochu-bot/1.0; +https://' . config('app.url') . ')',
-            ])->timeout(15)->get($imageUrl);
+            $response = Http::withHeaders($this->getDefaultHeaders())
+                ->timeout(15)
+                ->retry(2, 500)
+                ->get($imageUrl);
         } catch (\Throwable $e) {
             throw new \RuntimeException('product.image_download_failed', 0, $e);
         }

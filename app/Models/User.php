@@ -31,6 +31,7 @@ class User extends Authenticatable
         'name',
         'username',
         'email',
+        'phone',
         'password',
         'about',
         'gender',
@@ -59,6 +60,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'last_seen_at' => 'datetime',
             'password' => 'hashed',
             'age' => 'integer',
             'birth_date' => 'date',
@@ -147,6 +149,26 @@ class User extends Authenticatable
         return $this->hasOne(NotificationSetting::class);
     }
 
+    public function blocks()
+    {
+        return $this->hasMany(UserBlock::class, 'user_id');
+    }
+
+    public function blockedBy()
+    {
+        return $this->hasMany(UserBlock::class, 'blocked_user_id');
+    }
+
+    public function invites()
+    {
+        return $this->hasMany(Invite::class, 'user_id');
+    }
+
+    public function invitesUsed()
+    {
+        return $this->hasMany(Invite::class, 'used_by');
+    }
+
     /**
      * Заявки в друзья, отправленные пользователем.
      */
@@ -163,10 +185,7 @@ class User extends Authenticatable
         return $this->hasMany(Friendship::class, 'addressee_id');
     }
 
-    /**
-     * Список друзей пользователя.
-     */
-    public function friends()
+    public function friendIds(): array
     {
         $acceptedSent = Friendship::query()
             ->where('requester_id', $this->id)
@@ -179,9 +198,30 @@ class User extends Authenticatable
             ->pluck('requester_id');
 
         $ids = $acceptedSent->merge($acceptedReceived)
-            ->unique()
+            ->unique();
+
+        $blockedUserIds = UserBlock::query()
+            ->where('user_id', $this->id)
+            ->pluck('blocked_user_id');
+
+        $blockedByUserIds = UserBlock::query()
+            ->where('blocked_user_id', $this->id)
+            ->pluck('user_id');
+
+        $blockedIds = $blockedUserIds->merge($blockedByUserIds)
+            ->unique();
+
+        return $ids->diff($blockedIds)
             ->values()
             ->all();
+    }
+
+    /**
+     * Список друзей пользователя.
+     */
+    public function friends()
+    {
+        $ids = $this->friendIds();
 
         if ($ids === []) {
             return static::query()

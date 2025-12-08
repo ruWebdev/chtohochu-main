@@ -46,6 +46,7 @@ class WishController extends Controller
 
         $data = $request->validated();
         $data['wishlist_id'] = $wishlist->id;
+        $data['owner_id'] = $wishlist->owner_id;
 
         if (empty($data['visibility'])) {
             $data['visibility'] = $wishlist->visibility;
@@ -70,8 +71,11 @@ class WishController extends Controller
 
     public function storeStandalone(StoreWishRequest $request)
     {
+        $user = $request->user();
+
         $data = $request->validated();
         $data['wishlist_id'] = null;
+        $data['owner_id'] = $user->id;
 
         if (empty($data['visibility'])) {
             $data['visibility'] = Wish::VISIBILITY_PERSONAL;
@@ -86,10 +90,11 @@ class WishController extends Controller
         }
 
         $wish = Wish::query()->create($data);
+        $wish->load('claimers.user');
 
         return response()->json([
             'message' => __('wishlist.wish_created'),
-            'data' => $wish,
+            'data' => new WishResource($wish),
         ], 201);
     }
 
@@ -141,6 +146,46 @@ class WishController extends Controller
         if ($wish->wishlist_id !== $wishlist->id) {
             abort(404);
         }
+
+        $wish->delete();
+
+        return response()->json([
+            'message' => __('wishlist.wish_deleted'),
+        ]);
+    }
+
+    /**
+     * Обновление standalone-желания (без списка).
+     */
+    public function updateStandalone(UpdateWishRequest $request, Wish $wish)
+    {
+        if ($wish->wishlist_id !== null) {
+            abort(404);
+        }
+
+        $this->authorize('update', $wish);
+
+        $wish->fill($request->validated());
+        $wish->save();
+
+        $wish->load('claimers.user');
+
+        return response()->json([
+            'message' => __('wishlist.wish_updated'),
+            'data' => new WishResource($wish),
+        ]);
+    }
+
+    /**
+     * Удаление standalone-желания (без списка).
+     */
+    public function destroyStandalone(Request $request, Wish $wish)
+    {
+        if ($wish->wishlist_id !== null) {
+            abort(404);
+        }
+
+        $this->authorize('delete', $wish);
 
         $wish->delete();
 
@@ -220,12 +265,15 @@ class WishController extends Controller
         }
 
         $query = Wish::query()
-            ->whereHas('wishlist', function ($q) use ($friendIds) {
-                $q->whereIn('owner_id', $friendIds)
-                    ->whereIn('visibility', [
-                        Wishlist::VISIBILITY_FRIENDS,
-                        Wishlist::VISIBILITY_PUBLIC,
-                    ]);
+            ->whereIn('owner_id', $friendIds)
+            ->where(function ($q) {
+                $q->whereNull('wishlist_id')
+                    ->orWhereHas('wishlist', function ($q2) {
+                        $q2->whereIn('visibility', [
+                            Wishlist::VISIBILITY_FRIENDS,
+                            Wishlist::VISIBILITY_PUBLIC,
+                        ]);
+                    });
             })
             ->whereIn('visibility', [
                 Wish::VISIBILITY_FRIENDS,
@@ -254,9 +302,12 @@ class WishController extends Controller
 
         $query = Wish::query()
             ->where('visibility', Wish::VISIBILITY_PUBLIC)
-            ->whereHas('wishlist', function ($q) use ($user) {
-                $q->where('visibility', Wishlist::VISIBILITY_PUBLIC)
-                    ->where('owner_id', '!=', $user->id);
+            ->where('owner_id', '!=', $user->id)
+            ->where(function ($q) {
+                $q->whereNull('wishlist_id')
+                    ->orWhereHas('wishlist', function ($q2) {
+                        $q2->where('visibility', Wishlist::VISIBILITY_PUBLIC);
+                    });
             })
             ->with('claimers.user');
 
@@ -268,8 +319,6 @@ class WishController extends Controller
             $query->whereIn('necessity', (array) $request->input('necessity'));
         }
 
-        return response()->json([
-            'data' => $query->get(),
-        ]);
+        return WishResource::collection($query->get());
     }
 }

@@ -52,6 +52,7 @@ class StoreWishlistRequest extends FormRequest
             'visibility' => ['sometimes', 'string', Rule::in(Wishlist::VISIBILITIES)],
             'status' => ['sometimes', 'string', Rule::in(Wishlist::STATUSES)],
             'avatar' => ['nullable', 'string', 'max:1024'],
+            'card_color' => ['sometimes', 'nullable', 'string', 'max:9', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'wishes_sort' => ['sometimes', 'string', Rule::in(Wishlist::WISHES_SORT_OPTIONS)],
             'sort_order' => ['sometimes', 'string', Rule::in(Wishlist::WISHES_SORT_OPTIONS)],
             'tags' => ['sometimes', 'array'],
@@ -63,6 +64,7 @@ class StoreWishlistRequest extends FormRequest
             'reminder_date' => ['sometimes', 'nullable', 'date'],
             'allow_claiming' => ['sometimes', 'boolean'],
             'show_claimers' => ['sometimes', 'boolean'],
+            'is_favorite' => ['sometimes', 'boolean'],
         ];
     }
 }

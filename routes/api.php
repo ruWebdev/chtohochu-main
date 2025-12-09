@@ -17,7 +17,7 @@ use App\Http\Controllers\Api\InviteController;
 use App\Http\Controllers\Api\NotificationSettingController;
 use App\Http\Controllers\Api\ProfileAvatarController;
 use App\Http\Controllers\Api\ProfileController;
-use App\Http\Controllers\Auth\VkAuthController;
+use App\Http\Controllers\Api\SocialAuthController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api', 'api.segment'])
@@ -38,7 +38,9 @@ Route::domain(env('APP_DOMAIN_API'))
         Route::post('/auth/register', [AuthController::class, 'register'])->name('api.auth.register');
         Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])->name('api.auth.username.check');
         Route::post('/auth/login', [AuthController::class, 'login'])->name('api.auth.login');
-        Route::post('/auth/vk', [VkAuthController::class, 'login'])
+        Route::post('/auth/vk', [SocialAuthController::class, 'vk'])
+            ->middleware('throttle:10,1');
+        Route::post('/auth/yandex', [SocialAuthController::class, 'yandex'])
             ->middleware('throttle:10,1');
 
         Route::middleware('auth:sanctum')->group(function () {

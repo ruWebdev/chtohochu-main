@@ -39,6 +39,7 @@ class User extends Authenticatable
         'city',
         'avatar',
         'vk_id',
+        'yandex_id',
     ];
 
     /**

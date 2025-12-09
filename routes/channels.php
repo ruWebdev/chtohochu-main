@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Broadcast;
 // Стандартный канал Laravel для модели User
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /*
 |--------------------------------------------------------------------------
@@ -31,14 +31,14 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
  */
 Broadcast::channel('user.{userId}', function ($user, $userId) {
     return $user->id === $userId;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Системные пуши и фоновые операции.
  */
 Broadcast::channel('user.actions.{userId}', function ($user, $userId) {
     return $user->id === $userId;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Presence-канал для онлайн-статуса.
@@ -54,7 +54,7 @@ Broadcast::channel('user.online.{userId}', function ($user, $userId) {
     }
 
     return false;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /*
 |--------------------------------------------------------------------------
@@ -85,7 +85,7 @@ Broadcast::channel('list.members.{listId}', function ($user, $listId) {
     }
 
     return false;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Приватный канал списка желаний.
@@ -100,7 +100,7 @@ Broadcast::channel('list.{listId}', function ($user, $listId) {
 
     return $wishlist->owner_id === $user->id
         || $wishlist->participants()->where('user_id', $user->id)->exists();
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Публичный канал списка желаний.
@@ -114,7 +114,7 @@ Broadcast::channel('list.open.{listId}', function ($user, $listId) {
     }
 
     return $wishlist->visibility === Wishlist::VISIBILITY_PUBLIC;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /*
 |--------------------------------------------------------------------------
@@ -146,7 +146,7 @@ Broadcast::channel('item.{itemId}', function ($user, $itemId) {
 
     return $wishlist->owner_id === $user->id
         || $wishlist->participants()->where('user_id', $user->id)->exists();
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Presence-канал желания для совместного редактирования.
@@ -189,7 +189,7 @@ Broadcast::channel('item.editors.{itemId}', function ($user, $itemId) {
     }
 
     return false;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /*
 |--------------------------------------------------------------------------
@@ -203,7 +203,7 @@ Broadcast::channel('item.editors.{itemId}', function ($user, $itemId) {
  */
 Broadcast::channel('feed.global', function ($user) {
     return $user !== null;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Глобальный системный канал.
@@ -211,11 +211,11 @@ Broadcast::channel('feed.global', function ($user) {
  */
 Broadcast::channel('system-global', function ($user) {
     return $user !== null;
-});
+}, ['guards' => ['web', 'sanctum']]);
 
 /**
  * Канал мониторинга для администраторов.
  */
 Broadcast::channel('admin-monitor', function ($user) {
     return $user->hasRole('admin');
-});
+}, ['guards' => ['web', 'sanctum']]);

@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: исходящая заявка в друзья отменена отправителем.
- * Канал: private-user.{addresseeId}
+ * Канал: user.{addresseeId}
  */
 class FriendRequestCanceled implements ShouldBroadcast
 {
@@ -29,7 +29,7 @@ class FriendRequestCanceled implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('private-user.' . $this->addressee->id),
+            new PrivateChannel('user.' . $this->addressee->id),
         ];
     }
 

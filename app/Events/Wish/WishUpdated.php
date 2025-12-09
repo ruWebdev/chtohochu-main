@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: желание обновлено.
- * Канал: private-item.{itemId}
+ * Канал: item.{itemId}
  */
 class WishUpdated implements ShouldBroadcast
 {
@@ -28,12 +28,12 @@ class WishUpdated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $channels = [
-            new PrivateChannel('private-item.' . $this->wish->id),
+            new PrivateChannel('item.' . $this->wish->id),
         ];
 
         // Также уведомляем канал списка, если желание привязано к списку
         if ($this->wish->wishlist_id) {
-            $channels[] = new PrivateChannel('presence-list.' . $this->wish->wishlist_id);
+            $channels[] = new PrivateChannel('list.members.' . $this->wish->wishlist_id);
         }
 
         return $channels;

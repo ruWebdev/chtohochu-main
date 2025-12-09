@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: заявка в друзья отклонена получателем.
- * Канал: private-user.{requesterId}
+ * Канал: user.{requesterId}
  */
 class FriendRequestRejected implements ShouldBroadcast
 {
@@ -30,7 +30,7 @@ class FriendRequestRejected implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('private-user.' . $this->requester->id),
+            new PrivateChannel('user.' . $this->requester->id),
         ];
     }
 

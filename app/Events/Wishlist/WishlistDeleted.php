@@ -10,7 +10,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: список желаний удалён.
- * Канал: private-list.{listId}
+ * Канал: list.{listId}
  */
 class WishlistDeleted implements ShouldBroadcast
 {
@@ -28,12 +28,12 @@ class WishlistDeleted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $channels = [
-            new PrivateChannel('private-list.' . $this->wishlistId),
+            new PrivateChannel('list.' . $this->wishlistId),
         ];
 
         // Также уведомляем каждого участника персонально
         foreach ($this->participantIds as $userId) {
-            $channels[] = new PrivateChannel('private-user.' . $userId);
+            $channels[] = new PrivateChannel('user.' . $userId);
         }
 
         return $channels;

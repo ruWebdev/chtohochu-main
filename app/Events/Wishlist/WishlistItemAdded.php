@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: в список добавлено новое желание.
- * Канал: presence-list.{listId}
+ * Канал: list.members.{listId}
  */
 class WishlistItemAdded implements ShouldBroadcast
 {
@@ -29,7 +29,7 @@ class WishlistItemAdded implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PresenceChannel('presence-list.' . $this->wishlist->id),
+            new PresenceChannel('list.members.' . $this->wishlist->id),
         ];
     }
 

@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: отправлен запрос в друзья.
- * Канал: private-user.{userId}
+ * Канал: user.{userId}
  */
 class FriendRequestSent implements ShouldBroadcast
 {
@@ -30,7 +30,7 @@ class FriendRequestSent implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('private-user.' . $this->addressee->id),
+            new PrivateChannel('user.' . $this->addressee->id),
         ];
     }
 

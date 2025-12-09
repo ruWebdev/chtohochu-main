@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: пользователя добавили в список как участника.
- * Канал: private-user.{userId}
+ * Канал: user.{userId}
  */
 class UserTaggedInList implements ShouldBroadcast
 {
@@ -31,7 +31,7 @@ class UserTaggedInList implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('private-user.' . $this->user->id),
+            new PrivateChannel('user.' . $this->user->id),
         ];
     }
 

@@ -29,14 +29,14 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
  * Персональные уведомления пользователя.
  * Разрешено только самому пользователю.
  */
-Broadcast::channel('private-user.{userId}', function ($user, $userId) {
+Broadcast::channel('user.{userId}', function ($user, $userId) {
     return $user->id === $userId;
 });
 
 /**
  * Системные пуши и фоновые операции.
  */
-Broadcast::channel('private-actions.{userId}', function ($user, $userId) {
+Broadcast::channel('user.actions.{userId}', function ($user, $userId) {
     return $user->id === $userId;
 });
 
@@ -44,7 +44,7 @@ Broadcast::channel('private-actions.{userId}', function ($user, $userId) {
  * Presence-канал для онлайн-статуса.
  * Возвращает данные пользователя для отображения в списке онлайн.
  */
-Broadcast::channel('presence-online.{userId}', function ($user, $userId) {
+Broadcast::channel('user.online.{userId}', function ($user, $userId) {
     if ($user->id === $userId) {
         return [
             'id' => $user->id,
@@ -66,7 +66,7 @@ Broadcast::channel('presence-online.{userId}', function ($user, $userId) {
  * Presence-канал списка желаний.
  * Разрешено владельцу и участникам.
  */
-Broadcast::channel('presence-list.{listId}', function ($user, $listId) {
+Broadcast::channel('list.members.{listId}', function ($user, $listId) {
     $wishlist = Wishlist::find($listId);
 
     if (! $wishlist) {
@@ -91,7 +91,7 @@ Broadcast::channel('presence-list.{listId}', function ($user, $listId) {
  * Приватный канал списка желаний.
  * Разрешено владельцу и участникам (editor/admin).
  */
-Broadcast::channel('private-list.{listId}', function ($user, $listId) {
+Broadcast::channel('list.{listId}', function ($user, $listId) {
     $wishlist = Wishlist::find($listId);
 
     if (! $wishlist) {
@@ -106,7 +106,7 @@ Broadcast::channel('private-list.{listId}', function ($user, $listId) {
  * Публичный канал списка желаний.
  * Доступен всем авторизованным пользователям, если список публичный.
  */
-Broadcast::channel('public-list.{listId}', function ($user, $listId) {
+Broadcast::channel('list.open.{listId}', function ($user, $listId) {
     $wishlist = Wishlist::find($listId);
 
     if (! $wishlist) {
@@ -126,7 +126,7 @@ Broadcast::channel('public-list.{listId}', function ($user, $listId) {
  * Приватный канал желания.
  * Разрешено, если у пользователя есть доступ к списку, где находится желание.
  */
-Broadcast::channel('private-item.{itemId}', function ($user, $itemId) {
+Broadcast::channel('item.{itemId}', function ($user, $itemId) {
     $wish = Wish::find($itemId);
 
     if (! $wish) {
@@ -151,7 +151,7 @@ Broadcast::channel('private-item.{itemId}', function ($user, $itemId) {
 /**
  * Presence-канал желания для совместного редактирования.
  */
-Broadcast::channel('presence-item.{itemId}', function ($user, $itemId) {
+Broadcast::channel('item.editors.{itemId}', function ($user, $itemId) {
     $wish = Wish::find($itemId);
 
     if (! $wish) {
@@ -201,7 +201,7 @@ Broadcast::channel('presence-item.{itemId}', function ($user, $itemId) {
  * Публичный канал ленты (тренды, рекомендации).
  * Доступен всем авторизованным пользователям.
  */
-Broadcast::channel('public-feed', function ($user) {
+Broadcast::channel('feed.global', function ($user) {
     return $user !== null;
 });
 

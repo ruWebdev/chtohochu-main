@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: желание удалено.
- * Канал: private-item.{itemId}, presence-list.{listId}
+ * Канал: item.{itemId}, list.members.{listId}
  */
 class WishDeleted implements ShouldBroadcast
 {
@@ -28,11 +28,11 @@ class WishDeleted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $channels = [
-            new PrivateChannel('private-item.' . $this->wishId),
+            new PrivateChannel('item.' . $this->wishId),
         ];
 
         if ($this->wishlistId) {
-            $channels[] = new PresenceChannel('presence-list.' . $this->wishlistId);
+            $channels[] = new PresenceChannel('list.members.' . $this->wishlistId);
         }
 
         return $channels;

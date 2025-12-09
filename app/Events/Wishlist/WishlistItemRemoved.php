@@ -11,7 +11,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Событие: желание удалено из списка.
- * Канал: presence-list.{listId}
+ * Канал: list.members.{listId}
  */
 class WishlistItemRemoved implements ShouldBroadcast
 {
@@ -28,7 +28,7 @@ class WishlistItemRemoved implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PresenceChannel('presence-list.' . $this->wishlist->id),
+            new PresenceChannel('list.members.' . $this->wishlist->id),
         ];
     }
 

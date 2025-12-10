@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -25,6 +26,7 @@ class SocialAuthController extends Controller
         try {
             $socialUser = Socialite::driver('vkontakte')->userFromToken($accessToken);
         } catch (\Throwable $e) {
+            Log::error('VK Auth Failed: ' . $e->getMessage());
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'VK'])],
             ]);
@@ -32,7 +34,13 @@ class SocialAuthController extends Controller
 
         $providerId = $socialUser->getId();
         $email = $socialUser->getEmail();
-        $name = $socialUser->getName() ?: 'Пользователь VK';
+        $name = $socialUser->getName();
+        if (empty($name) && isset($socialUser->user['first_name'])) {
+            $name = $socialUser->user['first_name'] . (isset($socialUser->user['last_name']) ? ' ' . $socialUser->user['last_name'] : '');
+        }
+        if (empty($name)) {
+            $name = 'Пользователь VK';
+        }
 
         if (! $providerId) {
             throw ValidationException::withMessages([
@@ -82,6 +90,7 @@ class SocialAuthController extends Controller
         try {
             $socialUser = Socialite::driver('yandex')->userFromToken($accessToken);
         } catch (\Throwable $e) {
+            Log::error('Yandex Auth Failed: ' . $e->getMessage());
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'Яндекс'])],
             ]);
@@ -89,7 +98,16 @@ class SocialAuthController extends Controller
 
         $providerId = $socialUser->getId();
         $email = $socialUser->getEmail();
-        $name = $socialUser->getName() ?: 'Пользователь Яндекс';
+        $name = $socialUser->getName();
+        if (empty($name) && isset($socialUser->user['real_name'])) {
+            $name = $socialUser->user['real_name'];
+        }
+        if (empty($name) && isset($socialUser->user['first_name'])) {
+            $name = $socialUser->user['first_name'] . (isset($socialUser->user['last_name']) ? ' ' . $socialUser->user['last_name'] : '');
+        }
+        if (empty($name)) {
+            $name = 'Пользователь Яндекс';
+        }
 
         if (! $providerId) {
             throw ValidationException::withMessages([

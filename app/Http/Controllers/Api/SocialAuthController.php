@@ -156,11 +156,21 @@ class SocialAuthController extends Controller
             'fields' => 'id,first_name,last_name,photo_200,domain',
         ]);
 
+        $body = $response->json();
+
+        Log::info('VK users.get response', [
+            'status' => $response->status(),
+            'body' => $body,
+        ]);
+
         if (! $response->ok()) {
             return null;
         }
 
-        $body = $response->json();
+        if (isset($body['error'])) {
+            // VK вернул ошибку авторизации или запроса
+            return null;
+        }
 
         if (! isset($body['response'][0])) {
             return null;

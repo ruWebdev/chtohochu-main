@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
@@ -23,29 +24,26 @@ class SocialAuthController extends Controller
 
         $accessToken = $data['access_token'];
 
-        try {
-            $socialUser = Socialite::driver('vkontakte')->userFromToken($accessToken);
-        } catch (\Throwable $e) {
-            Log::error('VK Auth Failed: ' . $e->getMessage());
+        $vkProfile = $this->fetchVkProfile($accessToken);
+
+        if (! $vkProfile) {
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'VK'])],
             ]);
         }
 
-        $providerId = $socialUser->getId();
-        $email = $socialUser->getEmail();
-        $name = $socialUser->getName();
-        if (empty($name) && isset($socialUser->user['first_name'])) {
-            $name = $socialUser->user['first_name'] . (isset($socialUser->user['last_name']) ? ' ' . $socialUser->user['last_name'] : '');
-        }
-        if (empty($name)) {
-            $name = 'Пользователь VK';
-        }
+        $providerId = $vkProfile['id'] ?? null;
+        $email = $vkProfile['email'] ?? null;
+        $name = trim(($vkProfile['first_name'] ?? '') . ' ' . ($vkProfile['last_name'] ?? ''));
 
         if (! $providerId) {
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_no_id', ['provider' => 'VK'])],
             ]);
+        }
+
+        if (! $name) {
+            $name = 'Пользователь VK';
         }
 
         $user = User::query()
@@ -141,5 +139,39 @@ class SocialAuthController extends Controller
             'user' => $user,
             'token' => $token,
         ]);
+    }
+
+    /**
+     * Запрашивает профиль пользователя у VK по access_token.
+     */
+    protected function fetchVkProfile(string $accessToken): ?array
+    {
+        $vkConfig = config('services.vk');
+
+        $response = Http::withHeaders([
+            'User-Agent' => 'Mozilla/5.0 (compatible; chtohochu-app/1.0)',
+        ])->get('https://api.vk.com/method/users.get', [
+            'access_token' => $accessToken,
+            'v' => $vkConfig['version'] ?? '5.199',
+            'fields' => 'id,first_name,last_name,photo_200,domain',
+        ]);
+
+        if (! $response->ok()) {
+            return null;
+        }
+
+        $body = $response->json();
+
+        if (! isset($body['response'][0])) {
+            return null;
+        }
+
+        $user = $body['response'][0];
+
+        return [
+            'id' => $user['id'],
+            'first_name' => $user['first_name'] ?? null,
+            'last_name' => $user['last_name'] ?? null,
+        ];
     }
 }

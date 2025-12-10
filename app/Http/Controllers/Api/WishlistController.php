@@ -299,7 +299,7 @@ class WishlistController extends Controller
         $query = Wishlist::query()
             ->whereIn('owner_id', $friendIds)
             ->whereIn('visibility', [
-                Wishlist::VISIBILITY_FRIENDS,
+                Wishlist::VISIBILITY_LINK,
                 Wishlist::VISIBILITY_PUBLIC,
             ])
             ->with([

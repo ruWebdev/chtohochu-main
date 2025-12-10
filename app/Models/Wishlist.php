@@ -15,12 +15,12 @@ class Wishlist extends Model
     public $incrementing = false;
 
     public const VISIBILITY_PERSONAL = 'personal';
-    public const VISIBILITY_FRIENDS = 'friends';
+    public const VISIBILITY_LINK = 'link';
     public const VISIBILITY_PUBLIC = 'public';
 
     public const VISIBILITIES = [
         self::VISIBILITY_PERSONAL,
-        self::VISIBILITY_FRIENDS,
+        self::VISIBILITY_LINK,
         self::VISIBILITY_PUBLIC,
     ];
 

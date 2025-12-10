@@ -304,13 +304,13 @@ class WishController extends Controller
                 $q->whereNull('wishlist_id')
                     ->orWhereHas('wishlist', function ($q2) {
                         $q2->whereIn('visibility', [
-                            Wishlist::VISIBILITY_FRIENDS,
+                            Wishlist::VISIBILITY_LINK,
                             Wishlist::VISIBILITY_PUBLIC,
                         ]);
                     });
             })
             ->whereIn('visibility', [
-                Wish::VISIBILITY_FRIENDS,
+                Wish::VISIBILITY_LINK,
                 Wish::VISIBILITY_PUBLIC,
             ])
             ->with('claimers.user');

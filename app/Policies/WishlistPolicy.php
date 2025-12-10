@@ -27,7 +27,7 @@ class WishlistPolicy
             return true;
         }
 
-        if ($wishlist->visibility === Wishlist::VISIBILITY_FRIENDS) {
+        if ($wishlist->visibility === Wishlist::VISIBILITY_LINK) {
             $friendIds = $user->friendIds();
 
             return in_array($wishlist->owner_id, $friendIds, true);

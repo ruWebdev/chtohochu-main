@@ -67,6 +67,8 @@ class Wish extends Model
         'images',
         'necessity',
         'description',
+        'private_notes',
+        'checklist',
         'url',
         'desired_price',
         'price_min',
@@ -80,6 +82,10 @@ class Wish extends Model
         'executor_user_id',
         'hide_price',
         'allow_claiming',
+        'allow_comments',
+        'allow_sharing',
+        'purchase_receipt',
+        'purchase_date',
         'sort_index',
         'in_progress',
     ];
@@ -91,6 +97,7 @@ class Wish extends Model
      */
     protected $casts = [
         'images' => 'array',
+        'checklist' => 'array',
         'desired_price' => 'decimal:2',
         'price_min' => 'decimal:2',
         'price_max' => 'decimal:2',
@@ -98,8 +105,11 @@ class Wish extends Model
         'reminder_enabled' => 'bool',
         'reminder_at' => 'datetime',
         'deadline_at' => 'datetime',
+        'purchase_date' => 'datetime',
         'hide_price' => 'bool',
         'allow_claiming' => 'bool',
+        'allow_comments' => 'bool',
+        'allow_sharing' => 'bool',
         'sort_index' => 'integer',
         'in_progress' => 'bool',
     ];
@@ -137,5 +147,75 @@ class Wish extends Model
     public function claimers()
     {
         return $this->hasMany(WishClaim::class);
+    }
+
+    /**
+     * Комментарии к желанию.
+     */
+    public function comments()
+    {
+        return $this->hasMany(WishComment::class)->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Лайки желания.
+     */
+    public function likes()
+    {
+        return $this->hasMany(WishLike::class);
+    }
+
+    /**
+     * История изменений желания.
+     */
+    public function history()
+    {
+        return $this->hasMany(WishHistory::class)->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Прикреплённые файлы.
+     */
+    public function attachments()
+    {
+        return $this->hasMany(WishAttachment::class);
+    }
+
+    /**
+     * Проверяет, лайкнул ли пользователь это желание.
+     */
+    public function isLikedByUser(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        return $this->likes()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Получает права доступа для пользователя.
+     */
+    public function getPermissionsForUser(?User $user): array
+    {
+        $isOwner = $user && $this->owner_id === $user->id;
+        $isAuthenticated = $user !== null;
+
+        // Проверяем, является ли пользователь редактором списка
+        $isEditor = false;
+        if ($user && $this->wishlist) {
+            $participant = $this->wishlist->participants()->where('user_id', $user->id)->first();
+            $isEditor = $participant && in_array($participant->pivot->role ?? 'viewer', ['editor', 'admin']);
+        }
+
+        return [
+            'can_edit' => $isOwner || $isEditor,
+            'can_delete' => $isOwner,
+            'can_comment' => $isAuthenticated && ($this->allow_comments ?? true),
+            'can_like' => $isAuthenticated,
+            'can_claim' => $isAuthenticated && !$isOwner && ($this->allow_claiming ?? true),
+            'can_share' => $this->allow_sharing ?? true,
+            'can_add_to_list' => $isAuthenticated && !$isOwner,
+            'can_view_private_notes' => $isOwner,
+        ];
     }
 }

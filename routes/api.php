@@ -18,6 +18,9 @@ use App\Http\Controllers\Api\NotificationSettingController;
 use App\Http\Controllers\Api\ProfileAvatarController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\WishCommentController;
+use App\Http\Controllers\Api\WishLikeController;
+use App\Http\Controllers\Api\WishClaimController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api', 'api.segment'])
@@ -153,5 +156,22 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/wishlists/{wishlist}/wishes/{wish}/participants', [WishController::class, 'participants'])->name('api.wishes.participants.index');
             Route::post('/wishlists/{wishlist}/wishes/{wish}/participants', [WishController::class, 'addParticipant'])->name('api.wishes.participants.add');
             Route::delete('/wishlists/{wishlist}/wishes/{wish}/participants/{user}', [WishController::class, 'removeParticipant'])->name('api.wishes.participants.remove');
+
+            // Комментарии к желаниям
+            Route::get('/wishes/{wish}/comments', [WishCommentController::class, 'index'])->name('api.wishes.comments.index');
+            Route::post('/wishes/{wish}/comments', [WishCommentController::class, 'store'])->name('api.wishes.comments.store');
+            Route::patch('/wishes/{wish}/comments/{comment}', [WishCommentController::class, 'update'])->name('api.wishes.comments.update');
+            Route::delete('/wishes/{wish}/comments/{comment}', [WishCommentController::class, 'destroy'])->name('api.wishes.comments.destroy');
+
+            // Лайки желаний
+            Route::get('/wishes/{wish}/likes', [WishLikeController::class, 'index'])->name('api.wishes.likes.index');
+            Route::post('/wishes/{wish}/likes', [WishLikeController::class, 'store'])->name('api.wishes.likes.store');
+            Route::delete('/wishes/{wish}/likes', [WishLikeController::class, 'destroy'])->name('api.wishes.likes.destroy');
+            Route::post('/wishes/{wish}/likes/toggle', [WishLikeController::class, 'toggle'])->name('api.wishes.likes.toggle');
+
+            // Бронирование желаний (claim)
+            Route::get('/wishes/{wish}/claims', [WishClaimController::class, 'index'])->name('api.wishes.claims.index');
+            Route::post('/wishes/{wish}/claims', [WishClaimController::class, 'store'])->name('api.wishes.claims.store');
+            Route::delete('/wishes/{wish}/claims', [WishClaimController::class, 'destroy'])->name('api.wishes.claims.destroy');
         });
     });

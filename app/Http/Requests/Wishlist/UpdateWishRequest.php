@@ -19,6 +19,59 @@ class UpdateWishRequest extends FormRequest
 
         $mapped = [];
 
+        // Мобильный клиент Android отправляет часть полей в camelCase — маппим их в snake_case.
+        if (array_key_exists('desiredPrice', $data) && ! array_key_exists('desired_price', $data)) {
+            $mapped['desired_price'] = $data['desiredPrice'];
+        }
+
+        if (array_key_exists('priceMin', $data) && ! array_key_exists('price_min', $data)) {
+            $mapped['price_min'] = $data['priceMin'];
+        }
+
+        if (array_key_exists('priceMax', $data) && ! array_key_exists('price_max', $data)) {
+            $mapped['price_max'] = $data['priceMax'];
+        }
+
+        if (array_key_exists('hidePrice', $data) && ! array_key_exists('hide_price', $data)) {
+            $mapped['hide_price'] = $data['hidePrice'];
+        }
+
+        if (array_key_exists('allowClaiming', $data) && ! array_key_exists('allow_claiming', $data)) {
+            $mapped['allow_claiming'] = $data['allowClaiming'];
+        }
+
+        if (array_key_exists('allowComments', $data) && ! array_key_exists('allow_comments', $data)) {
+            $mapped['allow_comments'] = $data['allowComments'];
+        }
+
+        if (array_key_exists('allowSharing', $data) && ! array_key_exists('allow_sharing', $data)) {
+            $mapped['allow_sharing'] = $data['allowSharing'];
+        }
+
+        if (array_key_exists('privateNotes', $data) && ! array_key_exists('private_notes', $data)) {
+            $mapped['private_notes'] = $data['privateNotes'];
+        }
+
+        if (array_key_exists('deadlineDate', $data) && ! array_key_exists('deadline_at', $data)) {
+            $mapped['deadline_at'] = $data['deadlineDate'];
+        }
+
+        if (array_key_exists('sortIndex', $data) && ! array_key_exists('sort_index', $data)) {
+            $mapped['sort_index'] = $data['sortIndex'];
+        }
+
+        if (array_key_exists('purchaseReceipt', $data) && ! array_key_exists('purchase_receipt', $data)) {
+            $mapped['purchase_receipt'] = $data['purchaseReceipt'];
+        }
+
+        if (array_key_exists('purchaseDate', $data) && ! array_key_exists('purchase_date', $data)) {
+            $mapped['purchase_date'] = $data['purchaseDate'];
+        }
+
+        if (array_key_exists('inProgress', $data) && ! array_key_exists('in_progress', $data)) {
+            $mapped['in_progress'] = $data['inProgress'];
+        }
+
         if (array_key_exists('link', $data) && ! array_key_exists('url', $data)) {
             $mapped['url'] = $data['link'];
         }

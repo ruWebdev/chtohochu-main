@@ -52,9 +52,15 @@ class SocialAuthController extends Controller
             ->first();
 
         if (! $user) {
+            $emailForCreate = $email;
+
+            if (! $emailForCreate) {
+                $emailForCreate = 'vk_' . $providerId . '@vk.local';
+            }
+
             $user = User::query()->create([
                 'name' => $name,
-                'email' => $email,
+                'email' => $emailForCreate,
                 'password' => bcrypt(Str::random(32)),
                 'vk_id' => (string) $providerId,
             ]);
@@ -119,9 +125,15 @@ class SocialAuthController extends Controller
             ->first();
 
         if (! $user) {
+            $emailForCreate = $email;
+
+            if (! $emailForCreate) {
+                $emailForCreate = 'yandex_' . $providerId . '@yandex.local';
+            }
+
             $user = User::query()->create([
                 'name' => $name,
-                'email' => $email,
+                'email' => $emailForCreate,
                 'password' => bcrypt(Str::random(32)),
                 'yandex_id' => (string) $providerId,
             ]);

@@ -38,6 +38,7 @@ return [
     'vk' => [
         'client_id' => env('VK_APP_ID'),
         'client_secret' => env('VK_APP_SECRET'),
+        'service_token' => env('VK_SERVICE_TOKEN'),
         'version' => env('VK_API_VERSION', '5.199'),
     ],
 

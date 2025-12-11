@@ -24,7 +24,10 @@ class WishController extends Controller
     {
         $this->authorize('view', $wishlist);
 
-        $query = $wishlist->wishes()->with('claimers.user');
+        $query = $wishlist->wishes()->with([
+            'claimers.user',
+            'comments.user',
+        ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));
@@ -65,7 +68,7 @@ class WishController extends Controller
         }
 
         $wish = Wish::query()->create($data);
-        $wish->load('claimers.user');
+        $wish->load(['claimers.user', 'comments.user']);
 
         // Отправляем WebSocket-событие о добавлении желания в список
         broadcast(new WishlistItemAdded($wishlist, $wish))->toOthers();
@@ -97,7 +100,7 @@ class WishController extends Controller
         }
 
         $wish = Wish::query()->create($data);
-        $wish->load('claimers.user');
+        $wish->load(['claimers.user', 'comments.user']);
 
         return response()->json([
             'message' => __('wishlist.wish_created'),
@@ -138,7 +141,7 @@ class WishController extends Controller
 
         $wish->save();
 
-        $wish->load('claimers.user');
+        $wish->load(['claimers.user', 'comments.user']);
 
         // Отправляем WebSocket-событие об обновлении желания
         if (! empty($updatedFields)) {
@@ -313,7 +316,10 @@ class WishController extends Controller
                 Wish::VISIBILITY_LINK,
                 Wish::VISIBILITY_PUBLIC,
             ])
-            ->with('claimers.user');
+            ->with([
+                'claimers.user',
+                'comments.user',
+            ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));
@@ -343,7 +349,10 @@ class WishController extends Controller
                         $q2->where('visibility', Wishlist::VISIBILITY_PUBLIC);
                     });
             })
-            ->with('claimers.user');
+            ->with([
+                'claimers.user',
+                'comments.user',
+            ]);
 
         if ($request->filled('status')) {
             $query->whereIn('status', (array) $request->input('status'));

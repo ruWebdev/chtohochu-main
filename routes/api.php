@@ -114,6 +114,7 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::post('/shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'store'])->name('api.shopping_list_items.store');
             Route::patch('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListItemController::class, 'update'])->name('api.shopping_list_items.update');
             Route::delete('/shopping-lists/{shoppingList}/items/{item}', [ShoppingListItemController::class, 'destroy'])->name('api.shopping_list_items.destroy');
+            Route::post('/shopping-lists/{shoppingList}/items/{item}/image', [ShoppingListItemController::class, 'uploadImage'])->name('api.shopping_list_items.image.store');
 
             // Списки желаний
             Route::get('/wishlists', [WishlistController::class, 'index'])->name('api.wishlists.index');

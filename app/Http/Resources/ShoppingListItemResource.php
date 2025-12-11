@@ -17,11 +17,24 @@ class ShoppingListItemResource extends JsonResource
             return $user->name;
         });
 
+        $previewUrl = $this->image_preview_url ?? $this->image_url;
+
         return [
             'id' => $this->id,
             'shopping_list_id' => $this->shopping_list_id,
             'name' => $this->name,
-            'image_url' => $this->image_url ?? null,
+
+            // Старое плоское поле для обратной совместимости с клиентами,
+            // которые ещё не перешли на объект image.
+            'image_url' => $previewUrl ?? null,
+
+            // Новый объект изображения с разными размерами.
+            'image' => [
+                'full' => $this->image_full_url ?? $this->image_url,
+                'preview' => $previewUrl,
+                'thumbnail' => $this->image_thumb_url,
+            ],
+
             'quantity' => $this->quantity ?? 1,
             'unit' => $this->unit ?? 'шт',
             'priority' => $this->priority ?? null,

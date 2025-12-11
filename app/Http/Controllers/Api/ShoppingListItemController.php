@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopping\StoreShoppingListItemRequest;
 use App\Http\Requests\Shopping\UpdateShoppingListItemRequest;
+use App\Http\Requests\Shopping\UploadShoppingListItemImageRequest;
 use App\Models\ShoppingList;
 use App\Models\ShoppingListItem;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\ShoppingListItemResource;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 
 class ShoppingListItemController extends Controller
 {
@@ -83,6 +87,67 @@ class ShoppingListItemController extends Controller
 
         return response()->json([
             'message' => __('shopping.item_deleted'),
+        ]);
+    }
+
+    /**
+     * Загрузка и обработка изображения для пункта списка покупок.
+     * Генерирует три webp-версии: full (1200px), preview (300px), thumbnail (80px).
+     */
+    public function uploadImage(
+        UploadShoppingListItemImageRequest $request,
+        ShoppingList $shoppingList,
+        ShoppingListItem $item
+    ) {
+        $this->authorize('update', $shoppingList);
+
+        if ($item->shopping_list_id !== $shoppingList->id) {
+            abort(404);
+        }
+
+        $file = $request->file('image');
+
+        $manager = new ImageManager(new ImagickDriver());
+        $image = $manager->read($file->getPathname());
+
+        $basePath = 'shopping-items/' . $item->id;
+
+        // Удаляем предыдущие файлы, если они были
+        $pathsToDelete = array_filter([
+            $item->image_full_url,
+            $item->image_preview_url,
+            $item->image_thumb_url,
+        ]);
+
+        if (!empty($pathsToDelete)) {
+            Storage::disk('public')->delete($pathsToDelete);
+        }
+
+        // Генерация трёх размеров (по длинной стороне)
+        $full = $image->scaleDown(1200, 1200);
+        $preview = $image->scaleDown(300, 300);
+        $thumb = $image->scaleDown(80, 80);
+
+        $fullPath = $basePath . '/full.webp';
+        $previewPath = $basePath . '/preview.webp';
+        $thumbPath = $basePath . '/thumb.webp';
+
+        Storage::disk('public')->put($fullPath, (string) $full->toWebp(80));
+        Storage::disk('public')->put($previewPath, (string) $preview->toWebp(80));
+        Storage::disk('public')->put($thumbPath, (string) $thumb->toWebp(80));
+
+        $item->image_full_url = $fullPath;
+        $item->image_preview_url = $previewPath;
+        $item->image_thumb_url = $thumbPath;
+        // Для обратной совместимости заполняем плоское поле превью-версией
+        $item->image_url = $previewPath;
+        $item->save();
+
+        $item->load(['assignedUser', 'completedBy']);
+
+        return response()->json([
+            'message' => __('shopping.item_updated'),
+            'data' => new ShoppingListItemResource($item),
         ]);
     }
 }

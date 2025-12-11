@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class WishResource extends JsonResource
 {
@@ -31,7 +32,7 @@ class WishResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'visibility' => $this->visibility,
-            'images' => $this->images ?? [],
+            'images' => $this->getFullImageUrls(),
             'link' => $this->url,
             'necessity' => $this->necessity,
             'priority' => $this->priority,

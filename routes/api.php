@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\WishCommentController;
 use App\Http\Controllers\Api\WishLikeController;
 use App\Http\Controllers\Api\WishClaimController;
+use App\Http\Controllers\Api\WishImageController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api', 'api.segment'])
@@ -145,6 +146,10 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::delete('/wishes/{wish}', [WishController::class, 'destroyStandalone'])->name('api.wishes.destroy_standalone');
             Route::get('/wishes/friends', [WishController::class, 'friends'])->name('api.wishes.friends');
             Route::get('/wishes/public', [WishController::class, 'public'])->name('api.wishes.public');
+
+            // Изображения желаний
+            Route::post('/wishes/{wish}/images', [WishImageController::class, 'store'])->name('api.wishes.images.store');
+            Route::delete('/wishes/{wish}/images/{index}', [WishImageController::class, 'destroy'])->name('api.wishes.images.destroy');
 
             // Генерация ссылок для шаринга
             Route::post('/wishlists/{wishlist}/share', [ShareController::class, 'wishlist'])->name('api.share.wishlist');

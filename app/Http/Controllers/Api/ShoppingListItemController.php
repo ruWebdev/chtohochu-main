@@ -124,9 +124,10 @@ class ShoppingListItemController extends Controller
         }
 
         // Генерация трёх размеров (по длинной стороне)
-        $full = $image->scaleDown(1200, 1200);
-        $preview = $image->scaleDown(300, 300);
-        $thumb = $image->scaleDown(80, 80);
+        // Важно: scaleDown мутирует объект, поэтому клонируем перед каждым ресайзом
+        $full = (clone $image)->scaleDown(1200, 1200);
+        $preview = (clone $image)->scaleDown(300, 300);
+        $thumb = (clone $image)->scaleDown(80, 80);
 
         $fullPath = $basePath . '/full.webp';
         $previewPath = $basePath . '/preview.webp';

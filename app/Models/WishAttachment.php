@@ -21,6 +21,8 @@ class WishAttachment extends Model
         'wish_id',
         'file_name',
         'file_url',
+        'preview_url',
+        'thumbnail_url',
         'file_type',
         'file_size',
     ];

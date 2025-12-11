@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ShoppingListItemResource extends JsonResource
 {
@@ -17,7 +18,14 @@ class ShoppingListItemResource extends JsonResource
             return $user->name;
         });
 
-        $previewUrl = $this->image_preview_url ?? $this->image_url;
+        // Формируем полные URL для изображений
+        $fullUrl = $this->image_full_url ? Storage::disk('public')->url($this->image_full_url) : null;
+        $previewUrl = $this->image_preview_url ? Storage::disk('public')->url($this->image_preview_url) : null;
+        $thumbUrl = $this->image_thumb_url ? Storage::disk('public')->url($this->image_thumb_url) : null;
+
+        // Для обратной совместимости: если новых полей нет, используем старое image_url
+        $legacyUrl = $this->image_url ? Storage::disk('public')->url($this->image_url) : null;
+        $previewUrlFinal = $previewUrl ?? $legacyUrl;
 
         return [
             'id' => $this->id,
@@ -26,13 +34,13 @@ class ShoppingListItemResource extends JsonResource
 
             // Старое плоское поле для обратной совместимости с клиентами,
             // которые ещё не перешли на объект image.
-            'image_url' => $previewUrl ?? null,
+            'image_url' => $previewUrlFinal,
 
             // Новый объект изображения с разными размерами.
             'image' => [
-                'full' => $this->image_full_url ?? $this->image_url,
-                'preview' => $previewUrl,
-                'thumbnail' => $this->image_thumb_url,
+                'full' => $fullUrl ?? $legacyUrl,
+                'preview' => $previewUrlFinal,
+                'thumbnail' => $thumbUrl,
             ],
 
             'quantity' => $this->quantity ?? 1,

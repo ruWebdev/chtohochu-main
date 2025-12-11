@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Wish extends Model
 {
@@ -217,5 +218,24 @@ class Wish extends Model
             'can_add_to_list' => $isAuthenticated && !$isOwner,
             'can_view_private_notes' => $isOwner,
         ];
+    }
+
+    /**
+     * Получает массив полных URL изображений.
+     */
+    public function getFullImageUrls(): array
+    {
+        $images = $this->images ?? [];
+
+        return array_map(function ($path) {
+            if (empty($path)) {
+                return null;
+            }
+            // Если это уже полный URL, возвращаем как есть
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                return $path;
+            }
+            return Storage::disk('public')->url($path);
+        }, $images);
     }
 }

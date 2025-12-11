@@ -10,15 +10,11 @@ class UserStatisticsService
     public function getStatisticsForUser(User $user): array
     {
         $totalWishes = Wish::query()
-            ->whereHas('wishlist', function ($query) use ($user) {
-                $query->where('owner_id', $user->id);
-            })
+            ->where('owner_id', $user->id)
             ->count();
 
         $fulfilledWishes = Wish::query()
-            ->whereHas('wishlist', function ($query) use ($user) {
-                $query->where('owner_id', $user->id);
-            })
+            ->where('owner_id', $user->id)
             ->where('status', Wish::STATUS_FULFILLED)
             ->count();
 

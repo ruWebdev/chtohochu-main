@@ -40,6 +40,7 @@ class StoreShoppingListRequest extends FormRequest
             'is_shared' => ['sometimes', 'boolean'],
             'status' => ['sometimes', 'string', Rule::in(ShoppingList::STATUSES)],
             'avatar' => ['nullable', 'string', 'max:1024'],
+            'card_color' => ['sometimes', 'nullable', 'string', 'max:9', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'notifications_enabled' => ['sometimes', 'boolean'],
             'deadline_at' => ['sometimes', 'nullable', 'date'],
             'deadline_date' => ['sometimes', 'nullable', 'date'],

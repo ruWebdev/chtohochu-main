@@ -36,6 +36,7 @@ class ShoppingList extends Model
         'is_shared',
         'status',
         'avatar',
+        'card_color',
         'notifications_enabled',
         'deadline_at',
         'event_name',

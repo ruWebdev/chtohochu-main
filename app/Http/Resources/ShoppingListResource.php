@@ -21,6 +21,7 @@ class ShoppingListResource extends JsonResource
             'is_shared' => (bool) $this->is_shared,
             'status' => $this->status,
             'avatar' => $this->avatar,
+            'card_color' => $this->card_color,
             'owner_id' => $this->owner_id,
             'owner_name' => $owner?->name,
             'owner_avatar' => $owner?->avatar ?? null,

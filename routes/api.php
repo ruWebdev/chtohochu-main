@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\WishCommentController;
 use App\Http\Controllers\Api\WishLikeController;
 use App\Http\Controllers\Api\WishClaimController;
 use App\Http\Controllers\Api\WishImageController;
+use App\Http\Controllers\Api\AppNotificationController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api', 'api.segment'])
@@ -99,6 +100,13 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::post('/fcm/token', [FcmTokenController::class, 'store'])->name('api.fcm.token.store');
             Route::delete('/fcm/token', [FcmTokenController::class, 'destroy'])->name('api.fcm.token.destroy');
             Route::post('/fcm/test', [FcmTokenController::class, 'test'])->name('api.fcm.test');
+
+            // Уведомления приложения
+            Route::get('/notifications', [AppNotificationController::class, 'index'])->name('api.notifications.index');
+            Route::get('/notifications/unread-count', [AppNotificationController::class, 'unreadCount'])->name('api.notifications.unread_count');
+            Route::post('/notifications/{notification}/read', [AppNotificationController::class, 'markAsRead'])->name('api.notifications.mark_read');
+            Route::post('/notifications/read-all', [AppNotificationController::class, 'markAllAsRead'])->name('api.notifications.mark_all_read');
+            Route::delete('/notifications/{notification}', [AppNotificationController::class, 'destroy'])->name('api.notifications.destroy');
 
             // QR-коды для шаринга
             Route::get('/qr/{type}/{id?}.png', QrController::class)->name('api.qr.generate');

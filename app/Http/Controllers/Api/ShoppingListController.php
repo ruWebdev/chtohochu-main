@@ -8,6 +8,8 @@ use App\Http\Requests\Shopping\UpdateShoppingListRequest;
 use App\Models\ShoppingList;
 use App\Models\ShoppingListActivity;
 use App\Models\User;
+use App\Models\AppNotification;
+use App\Events\User\UserTaggedInShoppingList;
 use Illuminate\Http\Request;
 use App\Http\Resources\ShoppingListResource;
 
@@ -152,9 +154,36 @@ class ShoppingListController extends Controller
 
         $shoppingList->participants()->syncWithoutDetaching([$data['user_id']]);
 
+        $shoppingList->load(['items', 'owner', 'participants']);
+
+        // Получаем добавленного участника
+        $participant = User::find($data['user_id']);
+
+        if ($participant) {
+            // Уведомляем добавленного пользователя через WebSocket
+            broadcast(new UserTaggedInShoppingList($participant, $shoppingList, $currentUser));
+
+            // Сохраняем уведомление в БД
+            AppNotification::create([
+                'user_id' => $participant->id,
+                'type' => AppNotification::TYPE_SHOPPING_LIST_INVITE,
+                'title' => __('notifications.shopping_list_invite_title'),
+                'body' => __('notifications.shopping_list_invite_body', [
+                    'inviter' => $currentUser->name,
+                    'list' => $shoppingList->name,
+                ]),
+                'data' => [
+                    'list_id' => $shoppingList->id,
+                    'list_name' => $shoppingList->name,
+                    'inviter_id' => $currentUser->id,
+                    'inviter_name' => $currentUser->name,
+                ],
+            ]);
+        }
+
         return response()->json([
             'message' => __('shopping.participant_added'),
-            'data' => $shoppingList->load('participants'),
+            'data' => new ShoppingListResource($shoppingList),
         ]);
     }
 

@@ -15,6 +15,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use App\Http\Resources\WishlistResource;
 use App\Http\Resources\WishlistUserResource;
+use App\Models\AppNotification;
 
 class WishlistController extends Controller
 {
@@ -246,6 +247,23 @@ class WishlistController extends Controller
 
             // Уведомляем добавленного пользователя
             broadcast(new UserTaggedInList($participant, $wishlist, $currentUser));
+
+            // Сохраняем уведомление в БД
+            AppNotification::create([
+                'user_id' => $participant->id,
+                'type' => AppNotification::TYPE_WISHLIST_INVITE,
+                'title' => __('notifications.wishlist_invite_title'),
+                'body' => __('notifications.wishlist_invite_body', [
+                    'inviter' => $currentUser->name,
+                    'list' => $wishlist->name,
+                ]),
+                'data' => [
+                    'list_id' => $wishlist->id,
+                    'list_name' => $wishlist->name,
+                    'inviter_id' => $currentUser->id,
+                    'inviter_name' => $currentUser->name,
+                ],
+            ]);
         }
 
         return response()->json([

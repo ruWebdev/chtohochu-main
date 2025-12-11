@@ -2,6 +2,7 @@
 
 use App\Models\Wish;
 use App\Models\Wishlist;
+use App\Models\ShoppingList;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -114,6 +115,27 @@ Broadcast::channel('list.open.{listId}', function ($user, $listId) {
     }
 
     return $wishlist->visibility === Wishlist::VISIBILITY_PUBLIC;
+}, ['guards' => ['web', 'sanctum']]);
+
+/*
+|--------------------------------------------------------------------------
+| Shopping List Channels
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Приватный канал списка покупок.
+ * Разрешено владельцу и участникам.
+ */
+Broadcast::channel('shopping-list.{listId}', function ($user, $listId) {
+    $shoppingList = ShoppingList::find($listId);
+
+    if (! $shoppingList) {
+        return false;
+    }
+
+    return $shoppingList->owner_id === $user->id
+        || $shoppingList->participants()->where('user_id', $user->id)->exists();
 }, ['guards' => ['web', 'sanctum']]);
 
 /*

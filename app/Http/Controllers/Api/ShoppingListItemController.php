@@ -11,6 +11,9 @@ use App\Models\ShoppingListItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Resources\ShoppingListItemResource;
+use App\Events\ShoppingList\ShoppingListItemCreated;
+use App\Events\ShoppingList\ShoppingListItemUpdated;
+use App\Events\ShoppingList\ShoppingListItemDeleted;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 
@@ -44,6 +47,9 @@ class ShoppingListItemController extends Controller
         $item = ShoppingListItem::query()->create($data);
         $item->load(['assignedUser', 'completedBy']);
 
+        // Отправляем WebSocket событие для LIVE-синхронизации
+        broadcast(new ShoppingListItemCreated($item))->toOthers();
+
         return response()->json([
             'message' => __('shopping.item_created'),
             'data' => new ShoppingListItemResource($item),
@@ -62,9 +68,18 @@ class ShoppingListItemController extends Controller
         }
 
         $item->fill($request->validated());
+
+        // Запоминаем изменённые поля для события
+        $changedFields = array_keys($item->getDirty());
+
         $item->save();
 
         $item->load(['assignedUser', 'completedBy']);
+
+        // Отправляем WebSocket событие для LIVE-синхронизации
+        if (!empty($changedFields)) {
+            broadcast(new ShoppingListItemUpdated($item, $changedFields))->toOthers();
+        }
 
         return response()->json([
             'message' => __('shopping.item_updated'),
@@ -83,7 +98,13 @@ class ShoppingListItemController extends Controller
             abort(404);
         }
 
+        $itemId = $item->id;
+        $shoppingListId = $item->shopping_list_id;
+
         $item->delete();
+
+        // Отправляем WebSocket событие для LIVE-синхронизации
+        broadcast(new ShoppingListItemDeleted($itemId, $shoppingListId))->toOthers();
 
         return response()->json([
             'message' => __('shopping.item_deleted'),

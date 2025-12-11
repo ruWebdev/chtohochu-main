@@ -119,7 +119,7 @@ class WishController extends Controller
             abort(404);
         }
 
-        $wish->load('claimers.user');
+        $wish->load(['claimers.user', 'comments.user']);
 
         return new WishResource($wish);
     }

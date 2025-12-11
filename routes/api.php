@@ -118,6 +118,14 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::patch('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'update'])->name('api.shopping_lists.update');
             Route::delete('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'destroy'])->name('api.shopping_lists.destroy');
 
+            // Участники списков покупок
+            Route::get('/shopping-lists/{shoppingList}/participants', [ShoppingListController::class, 'participants'])
+                ->name('api.shopping_lists.participants.index');
+            Route::post('/shopping-lists/{shoppingList}/participants', [ShoppingListController::class, 'addParticipant'])
+                ->name('api.shopping_lists.participants.add');
+            Route::delete('/shopping-lists/{shoppingList}/participants/{user}', [ShoppingListController::class, 'removeParticipant'])
+                ->name('api.shopping_lists.participants.remove');
+
             // Пункты списков покупок
             Route::get('/shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'index'])->name('api.shopping_list_items.index');
             Route::post('/shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'store'])->name('api.shopping_list_items.store');

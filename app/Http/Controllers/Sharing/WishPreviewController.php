@@ -11,7 +11,7 @@ class WishPreviewController extends Controller
 {
     public function __invoke(Request $request, Wish $wish)
     {
-        if ($wish->visibility !== Wish::VISIBILITY_PUBLIC) {
+        if (!($wish->allow_sharing ?? true)) {
             abort(404);
         }
 

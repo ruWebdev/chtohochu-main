@@ -84,6 +84,30 @@ class UpdateWishRequest extends FormRequest
             $mapped['deadline_at'] = $data['deadline_date'];
         }
 
+        // Маппинг элементов чек-листа из camelCase в snake_case
+        if (array_key_exists('checklist', $data) && is_array($data['checklist'])) {
+            $mapped['checklist'] = array_map(function ($item) {
+                $mappedItem = [];
+                if (isset($item['id'])) {
+                    $mappedItem['id'] = $item['id'];
+                }
+                if (isset($item['text'])) {
+                    $mappedItem['text'] = $item['text'];
+                }
+                if (array_key_exists('isCompleted', $item)) {
+                    $mappedItem['is_completed'] = $item['isCompleted'];
+                } elseif (array_key_exists('is_completed', $item)) {
+                    $mappedItem['is_completed'] = $item['is_completed'];
+                }
+                if (array_key_exists('sortIndex', $item)) {
+                    $mappedItem['sort_index'] = $item['sortIndex'];
+                } elseif (array_key_exists('sort_index', $item)) {
+                    $mappedItem['sort_index'] = $item['sort_index'];
+                }
+                return $mappedItem;
+            }, $data['checklist']);
+        }
+
         if ($mapped !== []) {
             $this->merge($mapped);
         }
@@ -117,6 +141,14 @@ class UpdateWishRequest extends FormRequest
             'allow_claiming' => ['sometimes', 'boolean'],
             'sort_index' => ['sometimes', 'integer', 'min:0'],
             'in_progress' => ['sometimes', 'boolean'],
+            'private_notes' => ['sometimes', 'nullable', 'string', 'max:5000'],
+            'checklist' => ['sometimes', 'nullable', 'array'],
+            'checklist.*.id' => ['sometimes', 'string', 'max:36'],
+            'checklist.*.text' => ['required_with:checklist', 'string', 'max:500'],
+            'checklist.*.is_completed' => ['sometimes', 'boolean'],
+            'checklist.*.sort_index' => ['sometimes', 'integer', 'min:0'],
+            'allow_comments' => ['sometimes', 'boolean'],
+            'allow_sharing' => ['sometimes', 'boolean'],
         ];
     }
 }

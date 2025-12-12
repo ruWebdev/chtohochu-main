@@ -7,6 +7,7 @@ use App\Http\Requests\FCM\StoreFcmTokenRequest;
 use App\Models\DeviceToken;
 use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class FcmTokenController extends Controller
 {
@@ -58,15 +59,18 @@ class FcmTokenController extends Controller
     {
         $user = $request->user();
 
-        $pushNotificationService->sendToUser(
+        $traceId = (string) Str::uuid();
+
+        $sentTraceId = $pushNotificationService->sendToUser(
             user: $user,
             title: __('notifications.test_title'),
             body: __('notifications.test_body'),
-            data: ['type' => 'test']
+            data: ['type' => 'test', 'trace_id' => $traceId]
         );
 
         return response()->json([
             'message' => __('notifications.test_sent'),
+            'trace_id' => $sentTraceId,
         ]);
     }
 }

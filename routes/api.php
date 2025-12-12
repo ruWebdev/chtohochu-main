@@ -106,6 +106,7 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/notifications/unread-count', [AppNotificationController::class, 'unreadCount'])->name('api.notifications.unread_count');
             Route::post('/notifications/{notification}/read', [AppNotificationController::class, 'markAsRead'])->name('api.notifications.mark_read');
             Route::post('/notifications/read-all', [AppNotificationController::class, 'markAllAsRead'])->name('api.notifications.mark_all_read');
+            Route::delete('/notifications', [AppNotificationController::class, 'destroyAll'])->name('api.notifications.destroy_all');
             Route::delete('/notifications/{notification}', [AppNotificationController::class, 'destroy'])->name('api.notifications.destroy');
 
             // QR-коды для шаринга

@@ -102,4 +102,20 @@ class AppNotificationController extends Controller
             'message' => __('notifications.deleted'),
         ]);
     }
+
+    /**
+     * Удалить все уведомления текущего пользователя.
+     */
+    public function destroyAll(Request $request)
+    {
+        $user = $request->user();
+
+        AppNotification::query()
+            ->where('user_id', $user->id)
+            ->delete();
+
+        return response()->json([
+            'message' => __('notifications.all_deleted'),
+        ]);
+    }
 }

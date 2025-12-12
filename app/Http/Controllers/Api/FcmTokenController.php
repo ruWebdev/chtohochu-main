@@ -14,12 +14,17 @@ class FcmTokenController extends Controller
     {
         $user = $request->user();
 
+        $tokenValue = $request->string('token')->toString();
+        $platformValue = $request->filled('platform')
+            ? $request->string('platform')->toString()
+            : null;
+
         $token = DeviceToken::query()
             ->updateOrCreate(
-                ['token' => $request->string('token')],
+                ['token' => $tokenValue],
                 [
                     'user_id' => $user->id,
-                    'platform' => $request->string('platform'),
+                    'platform' => $platformValue,
                     'last_used_at' => now(),
                 ]
             );
@@ -36,7 +41,13 @@ class FcmTokenController extends Controller
             'token' => ['required', 'string'],
         ]);
 
-        DeviceToken::query()->where('token', $request->string('token'))->delete();
+        $user = $request->user();
+        $tokenValue = $request->string('token')->toString();
+
+        DeviceToken::query()
+            ->where('user_id', $user->id)
+            ->where('token', $tokenValue)
+            ->delete();
 
         return response()->json([
             'message' => __('fcm.token_deleted'),

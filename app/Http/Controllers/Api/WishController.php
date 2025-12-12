@@ -4,14 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Events\Wish\WishDeleted;
 use App\Events\Wish\WishUpdated;
+use App\Events\User\WishlistNewWishAdded;
 use App\Events\Wishlist\WishlistItemAdded;
 use App\Events\Wishlist\WishlistItemRemoved;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Wishlist\StoreWishRequest;
 use App\Http\Requests\Wishlist\UpdateWishRequest;
+use App\Models\AppNotification;
 use App\Models\Wishlist;
 use App\Models\Wish;
 use App\Models\User;
+use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use App\Http\Resources\WishResource;
 
@@ -47,9 +50,11 @@ class WishController extends Controller
     /**
      * Создание желания внутри списка желаний.
      */
-    public function store(StoreWishRequest $request, Wishlist $wishlist)
+    public function store(StoreWishRequest $request, Wishlist $wishlist, PushNotificationService $pushNotificationService)
     {
         $this->authorize('update', $wishlist);
+
+        $currentUser = $request->user();
 
         $data = $request->validated();
         $data['wishlist_id'] = $wishlist->id;
@@ -72,6 +77,62 @@ class WishController extends Controller
 
         // Отправляем WebSocket-событие о добавлении желания в список
         broadcast(new WishlistItemAdded($wishlist, $wish))->toOthers();
+
+        $recipients = $wishlist->participants()
+            ->with('notificationSetting')
+            ->get();
+
+        if ($recipients->isNotEmpty()) {
+            foreach ($recipients as $recipient) {
+                AppNotification::create([
+                    'user_id' => $recipient->id,
+                    'type' => AppNotification::TYPE_WISHLIST_NEW_WISH,
+                    'title' => __('notifications.wishlist_new_wish_title'),
+                    'body' => __('notifications.wishlist_new_wish_body', [
+                        'author' => $currentUser->name,
+                        'list' => $wishlist->name,
+                        'wish' => $wish->name,
+                    ]),
+                    'data' => [
+                        'list_id' => $wishlist->id,
+                        'list_name' => $wishlist->name,
+                        'wish_id' => $wish->id,
+                        'wish_name' => $wish->name,
+                        'author_id' => $currentUser->id,
+                        'author_name' => $currentUser->name,
+                    ],
+                ]);
+
+                broadcast(new WishlistNewWishAdded($recipient, $wishlist, $wish, $currentUser));
+            }
+
+            $pushRecipients = $recipients->filter(static function (User $user) {
+                $settings = $user->notificationSetting;
+
+                if (! $settings) {
+                    return false;
+                }
+
+                return $settings->push_enabled && $settings->new_wishes;
+            });
+
+            if ($pushRecipients->isNotEmpty()) {
+                $pushNotificationService->sendToUsers(
+                    users: $pushRecipients,
+                    title: __('notifications.wishlist_new_wish_title'),
+                    body: __('notifications.wishlist_new_wish_body', [
+                        'author' => $currentUser->name,
+                        'list' => $wishlist->name,
+                        'wish' => $wish->name,
+                    ]),
+                    data: [
+                        'type' => AppNotification::TYPE_WISHLIST_NEW_WISH,
+                        'list_id' => $wishlist->id,
+                        'wish_id' => $wish->id,
+                    ]
+                );
+            }
+        }
 
         return response()->json([
             'message' => __('wishlist.wish_created'),

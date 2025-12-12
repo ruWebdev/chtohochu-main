@@ -16,6 +16,7 @@ class AppNotification extends Model
 
     // Типы уведомлений
     public const TYPE_WISHLIST_INVITE = 'wishlist_invite';
+    public const TYPE_WISHLIST_NEW_WISH = 'wishlist_new_wish';
     public const TYPE_SHOPPING_LIST_INVITE = 'shopping_list_invite';
     public const TYPE_FRIEND_REQUEST = 'friend_request';
     public const TYPE_FRIEND_ACCEPTED = 'friend_accepted';

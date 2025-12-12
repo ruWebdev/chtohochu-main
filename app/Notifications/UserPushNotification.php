@@ -34,7 +34,18 @@ class UserPushNotification extends Notification implements ShouldQueue
                     ->title($this->title)
                     ->body($this->body)
             )
-            ->data($this->prepareData());
+            ->data($this->prepareData())
+            ->custom([
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'channel_id' => 'default',
+                        'sound' => 'default',
+                        'default_vibrate_timings' => true,
+                        'default_sound' => true,
+                    ],
+                ],
+            ]);
     }
 
     protected function prepareData(): array

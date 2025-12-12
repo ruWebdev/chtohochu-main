@@ -1,18 +1,36 @@
 <?php
 
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Проект Firebase по умолчанию
+    |--------------------------------------------------------------------------
+    |
+    | Имя проекта, который будет использоваться по умолчанию.
+    | Должно соответствовать ключу в массиве 'projects' ниже.
+    |
+    */
     'default' => env('FIREBASE_PROJECT', 'app'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Проекты Firebase
+    |--------------------------------------------------------------------------
+    |
+    | Конфигурация проектов Firebase. Для FCM достаточно указать credentials.
+    |
+    */
     'projects' => [
         'app' => [
             'credentials' => [
-                'file' => env('FIREBASE_CREDENTIALS'), // путь к service account JSON
+                'file' => env('FIREBASE_CREDENTIALS'),
             ],
-            'database' => [
-                'url' => env('FIREBASE_DATABASE_URL'),
-            ],
-            'storage' => [
-                'default_bucket' => env('FIREBASE_STORAGE_BUCKET'),
+        ],
+
+        // Альтернативный проект с именем из FIREBASE_PROJECT
+        'chtohochu-47574' => [
+            'credentials' => [
+                'file' => env('FIREBASE_CREDENTIALS'),
             ],
         ],
     ],

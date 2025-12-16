@@ -147,6 +147,7 @@ Route::domain(env('APP_DOMAIN_API'))
             // Участники списков желаний
             Route::get('/wishlists/{wishlist}/participants', [WishlistController::class, 'participants'])->name('api.wishlists.participants.index');
             Route::post('/wishlists/{wishlist}/participants', [WishlistController::class, 'addParticipant'])->name('api.wishlists.participants.add');
+            Route::patch('/wishlists/{wishlist}/participants/{user}', [WishlistController::class, 'updateParticipant'])->name('api.wishlists.participants.update');
             Route::delete('/wishlists/{wishlist}/participants/{user}', [WishlistController::class, 'removeParticipant'])->name('api.wishlists.participants.remove');
 
             // Желания в списке желаний

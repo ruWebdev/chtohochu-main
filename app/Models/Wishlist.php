@@ -98,6 +98,7 @@ class Wishlist extends Model
     public function participants()
     {
         return $this->belongsToMany(User::class, 'wishlist_user')
+            ->withPivot('role')
             ->withTimestamps();
     }
 

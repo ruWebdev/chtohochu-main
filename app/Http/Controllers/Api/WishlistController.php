@@ -273,6 +273,45 @@ class WishlistController extends Controller
     }
 
     /**
+     * Обновление роли участника списка желаний.
+     */
+    public function updateParticipant(Request $request, Wishlist $wishlist, User $user)
+    {
+        $currentUser = $request->user();
+
+        if ($currentUser->id !== $wishlist->owner_id) {
+            abort(403);
+        }
+
+        if ($user->id === $wishlist->owner_id) {
+            return response()->json([
+                'message' => __('wishlist.cannot_change_owner_role'),
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'role' => ['required', 'string', 'in:viewer,editor'],
+        ]);
+
+        $wishlist->participants()->updateExistingPivot($user->id, [
+            'role' => $data['role'],
+        ]);
+
+        $participant = $wishlist->participants()
+            ->where('users.id', $user->id)
+            ->first();
+
+        if (! $participant) {
+            abort(404);
+        }
+
+        return response()->json([
+            'message' => __('wishlist.participant_role_updated'),
+            'data' => new WishlistUserResource($participant),
+        ]);
+    }
+
+    /**
      * Удаление участника из списка желаний.
      */
     public function removeParticipant(Request $request, Wishlist $wishlist, User $user)

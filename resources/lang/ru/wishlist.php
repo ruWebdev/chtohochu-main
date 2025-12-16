@@ -11,8 +11,10 @@ return [
 
     'cannot_add_owner_as_participant' => 'Нельзя добавить владельца как участника списка желаний.',
     'cannot_remove_owner' => 'Нельзя удалить владельца из списка желаний.',
+    'cannot_change_owner_role' => 'Нельзя изменить роль владельца списка желаний.',
     'participant_added' => 'Участник успешно добавлен в список желаний.',
     'participant_removed' => 'Участник удалён из списка желаний.',
+    'participant_role_updated' => 'Роль участника обновлена.',
 
     'wish_participant_added' => 'Участник добавлен к желанию.',
     'wish_participant_removed' => 'Участник удалён из желания.',

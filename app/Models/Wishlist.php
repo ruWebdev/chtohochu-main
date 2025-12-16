@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Wishlist extends Model
 {
@@ -97,9 +98,20 @@ class Wishlist extends Model
      */
     public function participants()
     {
-        return $this->belongsToMany(User::class, 'wishlist_user')
-            ->withPivot('role')
+        $relation = $this->belongsToMany(User::class, 'wishlist_user')
             ->withTimestamps();
+
+        static $hasRoleColumn = null;
+
+        if ($hasRoleColumn === null) {
+            $hasRoleColumn = Schema::hasColumn('wishlist_user', 'role');
+        }
+
+        if ($hasRoleColumn) {
+            $relation->withPivot('role');
+        }
+
+        return $relation;
     }
 
     /**

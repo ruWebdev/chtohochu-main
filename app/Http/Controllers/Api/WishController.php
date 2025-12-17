@@ -49,16 +49,18 @@ class WishController extends Controller
 
     /**
      * Создание желания внутри списка желаний.
+     * Доступно владельцу списка и участникам с ролью editor.
      */
     public function store(StoreWishRequest $request, Wishlist $wishlist, PushNotificationService $pushNotificationService)
     {
-        $this->authorize('update', $wishlist);
+        $this->authorize('addWish', $wishlist);
 
         $currentUser = $request->user();
 
         $data = $request->validated();
         $data['wishlist_id'] = $wishlist->id;
-        $data['owner_id'] = $wishlist->owner_id;
+        // Владелец желания — тот, кто его создаёт (не обязательно владелец списка)
+        $data['owner_id'] = $currentUser->id;
 
         if (empty($data['visibility'])) {
             $data['visibility'] = $wishlist->visibility;
@@ -187,13 +189,17 @@ class WishController extends Controller
 
     /**
      * Обновление желания.
+     * Доступно владельцу списка и участникам с ролью editor (только свои желания).
      */
     public function update(UpdateWishRequest $request, Wishlist $wishlist, Wish $wish)
     {
-        $this->authorize('update', $wishlist);
-
         if ($wish->wishlist_id !== $wishlist->id) {
             abort(404);
+        }
+
+        // Проверяем право на редактирование с учётом владельца желания
+        if (! $request->user()->can('editWish', [$wishlist, $wish->owner_id])) {
+            abort(403);
         }
 
         // Запоминаем изменённые поля для события
@@ -217,13 +223,17 @@ class WishController extends Controller
 
     /**
      * Удаление желания.
+     * Доступно владельцу списка и участникам с ролью editor (только свои желания).
      */
     public function destroy(Request $request, Wishlist $wishlist, Wish $wish)
     {
-        $this->authorize('update', $wishlist);
-
         if ($wish->wishlist_id !== $wishlist->id) {
             abort(404);
+        }
+
+        // Проверяем право на удаление с учётом владельца желания
+        if (! $request->user()->can('deleteWish', [$wishlist, $wish->owner_id])) {
+            abort(403);
         }
 
         $wishId = $wish->id;

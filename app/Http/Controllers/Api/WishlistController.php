@@ -205,10 +205,11 @@ class WishlistController extends Controller
 
     /**
      * Список участников списка желаний.
+     * Доступно только владельцу и участникам списка.
      */
     public function participants(Request $request, Wishlist $wishlist)
     {
-        $this->authorize('view', $wishlist);
+        $this->authorize('viewParticipants', $wishlist);
 
         return WishlistUserResource::collection($wishlist->participants()->get());
     }
@@ -328,6 +329,13 @@ class WishlistController extends Controller
             ], 422);
         }
 
+        // Проверяем, что пользователь является участником
+        if (! $wishlist->participants()->where('users.id', $user->id)->exists()) {
+            return response()->json([
+                'message' => __('wishlist.user_not_participant'),
+            ], 404);
+        }
+
         $userId = $user->id;
 
         $wishlist->participants()->detach($user->id);
@@ -337,6 +345,25 @@ class WishlistController extends Controller
 
         return response()->json([
             'message' => __('wishlist.participant_removed'),
+        ]);
+    }
+
+    /**
+     * Покинуть список желаний (для участников).
+     */
+    public function leave(Request $request, Wishlist $wishlist)
+    {
+        $this->authorize('leave', $wishlist);
+
+        $user = $request->user();
+
+        $wishlist->participants()->detach($user->id);
+
+        // Отправляем WebSocket-событие об удалении участника
+        broadcast(new WishlistParticipantRemoved($wishlist, $user->id))->toOthers();
+
+        return response()->json([
+            'message' => __('wishlist.left_list'),
         ]);
     }
 

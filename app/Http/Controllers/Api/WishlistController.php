@@ -205,29 +205,32 @@ class WishlistController extends Controller
 
     /**
      * Список участников списка желаний.
-     * Доступно только владельцу и участникам списка.
+     * Доступно ТОЛЬКО владельцу списка (страница управления участниками).
      */
     public function participants(Request $request, Wishlist $wishlist)
     {
-        $this->authorize('viewParticipants', $wishlist);
+        $this->authorize('manageParticipants', $wishlist);
 
         return WishlistUserResource::collection($wishlist->participants()->get());
     }
 
     /**
      * Добавление участника в список желаний.
+     * Доступно ТОЛЬКО владельцу списка.
      */
     public function addParticipant(Request $request, Wishlist $wishlist)
     {
-        $currentUser = $request->user();
+        $this->authorize('manageParticipants', $wishlist);
 
-        if ($currentUser->id !== $wishlist->owner_id) {
-            abort(403);
-        }
+        $currentUser = $request->user();
 
         $data = $request->validate([
             'user_id' => ['required', 'string', 'exists:users,id'],
+            'role' => ['sometimes', 'string', 'in:viewer,editor'],
         ]);
+
+        // Роль по умолчанию — editor
+        $role = $data['role'] ?? 'editor';
 
         if ($data['user_id'] === $wishlist->owner_id) {
             return response()->json([
@@ -235,7 +238,14 @@ class WishlistController extends Controller
             ], 422);
         }
 
-        $wishlist->participants()->syncWithoutDetaching([$data['user_id']]);
+        // Проверяем, не является ли пользователь уже участником
+        if ($wishlist->participants()->where('users.id', $data['user_id'])->exists()) {
+            return response()->json([
+                'message' => __('wishlist.user_already_participant'),
+            ], 422);
+        }
+
+        $wishlist->participants()->attach($data['user_id'], ['role' => $role]);
 
         $wishlist->load(['owner', 'participants', 'wishes']);
 
@@ -275,19 +285,23 @@ class WishlistController extends Controller
 
     /**
      * Обновление роли участника списка желаний.
+     * Доступно ТОЛЬКО владельцу списка.
      */
     public function updateParticipant(Request $request, Wishlist $wishlist, User $user)
     {
-        $currentUser = $request->user();
-
-        if ($currentUser->id !== $wishlist->owner_id) {
-            abort(403);
-        }
+        $this->authorize('manageParticipants', $wishlist);
 
         if ($user->id === $wishlist->owner_id) {
             return response()->json([
                 'message' => __('wishlist.cannot_change_owner_role'),
             ], 422);
+        }
+
+        // Проверяем, что пользователь является участником
+        if (! $wishlist->participants()->where('users.id', $user->id)->exists()) {
+            return response()->json([
+                'message' => __('wishlist.user_not_participant'),
+            ], 404);
         }
 
         $data = $request->validate([
@@ -302,9 +316,8 @@ class WishlistController extends Controller
             ->where('users.id', $user->id)
             ->first();
 
-        if (! $participant) {
-            abort(404);
-        }
+        // Отправляем WebSocket-событие об изменении роли
+        broadcast(new WishlistParticipantAdded($wishlist, $participant))->toOthers();
 
         return response()->json([
             'message' => __('wishlist.participant_role_updated'),
@@ -314,14 +327,11 @@ class WishlistController extends Controller
 
     /**
      * Удаление участника из списка желаний.
+     * Доступно ТОЛЬКО владельцу списка.
      */
     public function removeParticipant(Request $request, Wishlist $wishlist, User $user)
     {
-        $currentUser = $request->user();
-
-        if ($currentUser->id !== $wishlist->owner_id) {
-            abort(403);
-        }
+        $this->authorize('manageParticipants', $wishlist);
 
         if ($user->id === $wishlist->owner_id) {
             return response()->json([
@@ -337,6 +347,7 @@ class WishlistController extends Controller
         }
 
         $userId = $user->id;
+        $userName = $user->name;
 
         $wishlist->participants()->detach($user->id);
 
@@ -345,6 +356,10 @@ class WishlistController extends Controller
 
         return response()->json([
             'message' => __('wishlist.participant_removed'),
+            'data' => [
+                'user_id' => $userId,
+                'user_name' => $userName,
+            ],
         ]);
     }
 

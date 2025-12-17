@@ -15,6 +15,7 @@ return [
     'participant_added' => 'Участник успешно добавлен в список желаний.',
     'participant_removed' => 'Участник удалён из списка желаний.',
     'participant_role_updated' => 'Роль участника обновлена.',
+    'user_already_participant' => 'Пользователь уже является участником списка.',
 
     'wish_participant_added' => 'Участник добавлен к желанию.',
     'wish_participant_removed' => 'Участник удалён из желания.',

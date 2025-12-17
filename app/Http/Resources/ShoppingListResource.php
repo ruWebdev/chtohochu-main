@@ -13,6 +13,18 @@ class ShoppingListResource extends JsonResource
         $participants = $this->whenLoaded('participants');
         $items = $this->whenLoaded('items');
 
+        // Оптимизированный подсчёт товаров
+        $itemsCount = 0;
+        $completedCount = 0;
+
+        if ($this->relationLoaded('items')) {
+            $itemsCount = $this->items->count();
+            $completedCount = $this->items->where('is_purchased', true)->count();
+        } elseif (isset($this->items_count)) {
+            $itemsCount = $this->items_count;
+            $completedCount = $this->completed_count ?? 0;
+        }
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -26,6 +38,8 @@ class ShoppingListResource extends JsonResource
             'owner_name' => $owner?->name,
             'owner_avatar' => $owner?->avatar ?? null,
             'participants' => WishlistUserResource::collection($participants ?? []),
+            'items_count' => $itemsCount,
+            'completed_count' => $completedCount,
             'sort_order' => $this->sort_order ?? 0,
             'deadline_date' => optional($this->deadline_at)?->toISOString(),
             'event_name' => $this->event_name,

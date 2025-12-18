@@ -234,4 +234,12 @@ class User extends Authenticatable
             ->whereIn('id', $ids)
             ->get();
     }
+
+    /**
+     * Состояние индикаторов bottom navigation bar.
+     */
+    public function bottomNavBadge()
+    {
+        return $this->hasOne(BottomNavBadge::class);
+    }
 }

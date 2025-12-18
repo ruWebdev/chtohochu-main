@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\WishLikeController;
 use App\Http\Controllers\Api\WishClaimController;
 use App\Http\Controllers\Api\WishImageController;
 use App\Http\Controllers\Api\AppNotificationController;
+use App\Http\Controllers\Api\BottomNavBadgeController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api', 'api.segment'])
@@ -198,5 +199,9 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/wishes/{wish}/claims', [WishClaimController::class, 'index'])->name('api.wishes.claims.index');
             Route::post('/wishes/{wish}/claims', [WishClaimController::class, 'store'])->name('api.wishes.claims.store');
             Route::delete('/wishes/{wish}/claims', [WishClaimController::class, 'destroy'])->name('api.wishes.claims.destroy');
+
+            // Индикаторы bottom navigation bar
+            Route::get('/badges', [BottomNavBadgeController::class, 'index'])->name('api.badges.index');
+            Route::post('/badges/clear', [BottomNavBadgeController::class, 'clear'])->name('api.badges.clear');
         });
     });

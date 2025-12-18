@@ -20,4 +20,12 @@ return [
     // Новые желания в общих списках
     'wishlist_new_wish_title' => 'Новое желание в общем списке',
     'wishlist_new_wish_body' => ':author добавил(а) желание «:wish» в список «:list»',
+
+    // Уведомления для участников списков покупок
+    'shopping_list_removed_title' => 'Вас удалили из списка',
+    'shopping_list_removed_body' => 'Вы были удалены из списка «:list»',
+    'shopping_list_left_title' => 'Участник покинул список',
+    'shopping_list_left_body' => ':user покинул(а) список «:list»',
+    'shopping_list_participant_added_title' => 'Новый участник',
+    'shopping_list_participant_added_body' => ':user присоединился к списку «:list»',
 ];

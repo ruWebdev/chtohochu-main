@@ -49,6 +49,9 @@ Route::domain(env('APP_DOMAIN_API'))
         Route::post('/auth/yandex', [SocialAuthController::class, 'yandex'])
             ->middleware('throttle:10,1');
 
+        // Resolve share-ссылки (доступно без авторизации)
+        Route::get('/share/resolve/{token}', [ShareController::class, 'resolve'])->name('api.share.resolve');
+
         Route::middleware('auth:sanctum')->group(function () {
             Route::get('/auth/me', [AuthController::class, 'me'])->name('api.auth.me');
             Route::post('/auth/logout', [AuthController::class, 'logout'])->name('api.auth.logout');
@@ -127,6 +130,8 @@ Route::domain(env('APP_DOMAIN_API'))
                 ->name('api.shopping_lists.participants.add');
             Route::delete('/shopping-lists/{shoppingList}/participants/{user}', [ShoppingListController::class, 'removeParticipant'])
                 ->name('api.shopping_lists.participants.remove');
+            Route::post('/shopping-lists/{shoppingList}/leave', [ShoppingListController::class, 'leave'])
+                ->name('api.shopping_lists.leave');
 
             // Пункты списков покупок
             Route::get('/shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'index'])->name('api.shopping_list_items.index');
@@ -171,7 +176,13 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::post('/wishes/{wish}/images', [WishImageController::class, 'store'])->name('api.wishes.images.store');
             Route::delete('/wishes/{wish}/images/{index}', [WishImageController::class, 'destroy'])->name('api.wishes.images.destroy');
 
-            // Генерация ссылок для шаринга
+            // Генерация ссылок для шаринга (новый унифицированный API)
+            Route::post('/share/link', [ShareController::class, 'createLink'])->name('api.share.link');
+            Route::post('/share/join/{token}', [ShareController::class, 'join'])->name('api.share.join');
+            Route::post('/share/copy-wish/{token}', [ShareController::class, 'copyWish'])->name('api.share.copy_wish');
+            Route::delete('/share/links/{token}', [ShareController::class, 'revokeLink'])->name('api.share.revoke');
+
+            // Генерация ссылок для шаринга (обратная совместимость)
             Route::post('/wishlists/{wishlist}/share', [ShareController::class, 'wishlist'])->name('api.share.wishlist');
             Route::post('/wishlists/{wishlist}/wishes/{wish}/share', [ShareController::class, 'wish'])->name('api.share.wish');
             Route::post('/shopping-lists/{shoppingList}/share', [ShareController::class, 'shoppingList'])->name('api.share.shopping_list');

@@ -10,6 +10,11 @@ use App\Models\ShoppingListActivity;
 use App\Models\User;
 use App\Models\AppNotification;
 use App\Events\User\UserTaggedInShoppingList;
+use App\Events\ShoppingList\ShoppingListParticipantAdded;
+use App\Events\ShoppingList\ShoppingListParticipantRemoved;
+use App\Events\ShoppingList\ShoppingListParticipantLeft;
+use App\Enums\NotificationEventType;
+use App\Services\PushDispatcher;
 use Illuminate\Http\Request;
 use App\Http\Resources\ShoppingListResource;
 
@@ -163,22 +168,27 @@ class ShoppingListController extends Controller
             // Уведомляем добавленного пользователя через WebSocket
             broadcast(new UserTaggedInShoppingList($participant, $shoppingList, $currentUser));
 
-            // Сохраняем уведомление в БД
-            AppNotification::create([
-                'user_id' => $participant->id,
-                'type' => AppNotification::TYPE_SHOPPING_LIST_INVITE,
-                'title' => __('notifications.shopping_list_invite_title'),
-                'body' => __('notifications.shopping_list_invite_body', [
+            // Транслируем событие всем участникам списка
+            broadcast(new ShoppingListParticipantAdded($shoppingList, $participant, $currentUser));
+
+            // Отправляем push через диспетчер с проверкой согласий
+            $pushDispatcher = app(PushDispatcher::class);
+            $pushDispatcher->notify(
+                $participant,
+                NotificationEventType::SHOPPING_MEMBER_INVITED,
+                __('notifications.shopping_list_invite_title'),
+                __('notifications.shopping_list_invite_body', [
                     'inviter' => $currentUser->name,
                     'list' => $shoppingList->name,
                 ]),
-                'data' => [
+                [
                     'list_id' => $shoppingList->id,
                     'list_name' => $shoppingList->name,
                     'inviter_id' => $currentUser->id,
                     'inviter_name' => $currentUser->name,
                 ],
-            ]);
+                $currentUser
+            );
         }
 
         return response()->json([
@@ -206,8 +216,80 @@ class ShoppingListController extends Controller
 
         $shoppingList->participants()->detach($user->id);
 
+        // Транслируем событие всем участникам списка
+        broadcast(new ShoppingListParticipantRemoved($shoppingList, $user, $currentUser));
+
+        // Отправляем push через диспетчер с проверкой согласий
+        $pushDispatcher = app(PushDispatcher::class);
+        $pushDispatcher->notify(
+            $user,
+            NotificationEventType::SHOPPING_MEMBER_REMOVED,
+            __('notifications.shopping_list_removed_title'),
+            __('notifications.shopping_list_removed_body', [
+                'list' => $shoppingList->name,
+            ]),
+            [
+                'list_id' => $shoppingList->id,
+                'list_name' => $shoppingList->name,
+            ],
+            $currentUser
+        );
+
         return response()->json([
             'message' => __('shopping.participant_removed'),
+        ]);
+    }
+
+    /**
+     * Выход текущего пользователя из совместного списка покупок.
+     */
+    public function leave(Request $request, ShoppingList $shoppingList)
+    {
+        $currentUser = $request->user();
+
+        // Владелец не может покинуть свой список
+        if ($currentUser->id === $shoppingList->owner_id) {
+            return response()->json([
+                'message' => __('shopping.owner_cannot_leave'),
+            ], 422);
+        }
+
+        // Проверяем, что пользователь является участником
+        if (! $shoppingList->participants()->where('users.id', $currentUser->id)->exists()) {
+            return response()->json([
+                'message' => __('shopping.not_participant'),
+            ], 422);
+        }
+
+        $shoppingList->participants()->detach($currentUser->id);
+
+        // Транслируем событие всем участникам списка
+        broadcast(new ShoppingListParticipantLeft($shoppingList, $currentUser));
+
+        // Уведомляем владельца о выходе участника через диспетчер
+        $owner = User::find($shoppingList->owner_id);
+        if ($owner) {
+            $pushDispatcher = app(PushDispatcher::class);
+            $pushDispatcher->notify(
+                $owner,
+                NotificationEventType::SHOPPING_MEMBER_LEFT,
+                __('notifications.shopping_list_left_title'),
+                __('notifications.shopping_list_left_body', [
+                    'user' => $currentUser->name,
+                    'list' => $shoppingList->name,
+                ]),
+                [
+                    'list_id' => $shoppingList->id,
+                    'list_name' => $shoppingList->name,
+                    'user_id' => $currentUser->id,
+                    'user_name' => $currentUser->name,
+                ],
+                $currentUser
+            );
+        }
+
+        return response()->json([
+            'message' => __('shopping.left_list'),
         ]);
     }
 

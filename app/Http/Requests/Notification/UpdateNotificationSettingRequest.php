@@ -19,6 +19,14 @@ class UpdateNotificationSettingRequest extends FormRequest
             'wishFulfilled' => ['sometimes', 'boolean'],
             'reminders' => ['sometimes', 'boolean'],
             'newWishes' => ['sometimes', 'boolean'],
+            // Новые поля согласно спецификации
+            'listInvites' => ['sometimes', 'boolean'],
+            'listMemberChanges' => ['sometimes', 'boolean'],
+            'wishComments' => ['sometimes', 'boolean'],
+            'shoppingListInvites' => ['sometimes', 'boolean'],
+            'shoppingMemberChanges' => ['sometimes', 'boolean'],
+            'shoppingItemChecked' => ['sometimes', 'boolean'],
+            'systemAnnouncements' => ['sometimes', 'boolean'],
         ];
     }
 }

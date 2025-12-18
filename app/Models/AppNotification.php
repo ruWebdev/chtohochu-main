@@ -18,6 +18,9 @@ class AppNotification extends Model
     public const TYPE_WISHLIST_INVITE = 'wishlist_invite';
     public const TYPE_WISHLIST_NEW_WISH = 'wishlist_new_wish';
     public const TYPE_SHOPPING_LIST_INVITE = 'shopping_list_invite';
+    public const TYPE_SHOPPING_LIST_REMOVED = 'shopping_list_removed';
+    public const TYPE_SHOPPING_LIST_LEFT = 'shopping_list_left';
+    public const TYPE_SHOPPING_LIST_PARTICIPANT_ADDED = 'shopping_list_participant_added';
     public const TYPE_FRIEND_REQUEST = 'friend_request';
     public const TYPE_FRIEND_ACCEPTED = 'friend_accepted';
     public const TYPE_WISH_COMMENT = 'wish_comment';

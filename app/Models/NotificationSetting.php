@@ -21,6 +21,14 @@ class NotificationSetting extends Model
         'wish_fulfilled',
         'reminders',
         'new_wishes',
+        // Новые поля согласно спецификации
+        'list_invites',
+        'list_member_changes',
+        'wish_comments',
+        'shopping_list_invites',
+        'shopping_member_changes',
+        'shopping_item_checked',
+        'system_announcements',
     ];
 
     protected $casts = [
@@ -29,6 +37,13 @@ class NotificationSetting extends Model
         'wish_fulfilled' => 'bool',
         'reminders' => 'bool',
         'new_wishes' => 'bool',
+        'list_invites' => 'bool',
+        'list_member_changes' => 'bool',
+        'wish_comments' => 'bool',
+        'shopping_list_invites' => 'bool',
+        'shopping_member_changes' => 'bool',
+        'shopping_item_checked' => 'bool',
+        'system_announcements' => 'bool',
     ];
 
     public function user()

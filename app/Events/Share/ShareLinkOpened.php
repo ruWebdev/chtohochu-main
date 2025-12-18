@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Events\Share;
+
+use App\Models\ShareToken;
+use App\Models\User;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Queue\SerializesModels;
+
+/**
+ * Событие открытия share-ссылки.
+ */
+class ShareLinkOpened
+{
+    use Dispatchable, InteractsWithSockets, SerializesModels;
+
+    public function __construct(
+        public ShareToken $shareToken,
+        public ?User $viewer = null
+    ) {}
+}

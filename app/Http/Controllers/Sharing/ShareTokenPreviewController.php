@@ -18,75 +18,48 @@ class ShareTokenPreviewController extends Controller
         $shareToken = ShareToken::byToken($token)->first();
 
         if (!$shareToken) {
-            return $this->errorResponse('not_found', 'Ссылка не найдена', 404);
+            return $this->redirectToApp($token, 'not_found');
         }
 
         if ($shareToken->isRevoked()) {
-            return $this->errorResponse('revoked', 'Ссылка была отозвана', 410);
+            return $this->redirectToApp($token, 'revoked');
         }
 
         if (!$shareToken->isActive()) {
-            return $this->errorResponse('expired', 'Срок действия ссылки истёк', 410);
+            return $this->redirectToApp($token, 'expired');
         }
 
         $entity = $shareToken->getEntity();
 
         if (!$entity) {
-            return $this->errorResponse('entity_deleted', 'Объект больше недоступен', 410);
+            return $this->redirectToApp($token, 'entity_deleted');
         }
 
-        $scheme = (string) config('sharing.deep_link_scheme', 'chtohochu');
-        $appStoreUrl = (string) config('sharing.app_store_url');
-        $playStoreUrl = (string) config('sharing.play_store_url');
-
-        $response = [
-            'type' => $shareToken->entity_type,
-            'id' => $shareToken->entity_id,
-            'token' => $shareToken->share_token,
-            'title' => $shareToken->title,
-            'description' => $shareToken->description,
-            'preview_image_url' => $shareToken->preview_image_url,
-            'owner' => [
-                'id' => $entity->owner?->id,
-                'name' => $entity->owner?->name,
-                'avatar' => $entity->owner?->avatar_url ?? $entity->owner?->avatar,
-            ],
-            'deeplink' => $scheme . '://s/' . $shareToken->share_token,
-            'app_store_url' => $appStoreUrl,
-            'play_store_url' => $playStoreUrl,
-        ];
-
-        // Добавляем специфичные данные в зависимости от типа сущности
-        switch ($shareToken->entity_type) {
-            case ShareToken::ENTITY_WISH:
-                $response['wish'] = $this->buildWishData($entity);
-                break;
-
-            case ShareToken::ENTITY_WISHLIST:
-                $response['wishlist'] = $this->buildWishlistData($entity);
-                break;
-
-            case ShareToken::ENTITY_SHOPPING_LIST:
-                $response['shopping_list'] = $this->buildShoppingListData($entity);
-                break;
-        }
-
-        return response()->json(['data' => $response]);
+        // Все проверки прошли — редиректим на SPA/веб-обёртку с токеном
+        return $this->redirectToApp($shareToken->share_token);
     }
 
-    private function errorResponse(string $error, string $message, int $status): \Illuminate\Http\JsonResponse
+    /**
+     * Выполняет redirect на SPA/веб-обёртку, передавая токен и, опционально, код ошибки.
+     *
+     * Никогда не отдаёт JSON, чтобы пользователь не видел "сырой" ответ.
+     */
+    private function redirectToApp(string $token, ?string $error = null)
     {
-        $scheme = (string) config('sharing.deep_link_scheme', 'chtohochu');
-        $appStoreUrl = (string) config('sharing.app_store_url');
-        $playStoreUrl = (string) config('sharing.play_store_url');
+        // Базовый URL SPA / веб-приложения. Обычно совпадает с sharing.share_base_url.
+        $baseUrl = rtrim((string) config('sharing.share_base_url'), '/');
 
-        return response()->json([
-            'error' => $error,
-            'message' => $message,
-            'deeplink' => $scheme . '://app',
-            'app_store_url' => $appStoreUrl,
-            'play_store_url' => $playStoreUrl,
-        ], $status);
+        $query = [
+            'sharedToken' => $token,
+        ];
+
+        if ($error !== null) {
+            $query['error'] = $error;
+        }
+
+        $url = $baseUrl . '/?' . http_build_query($query);
+
+        return redirect()->away($url, 302);
     }
 
     private function buildWishData($wish): array

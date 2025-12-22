@@ -81,6 +81,7 @@
 <script setup>
 import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import SharingLayout from '@/Layouts/SharingLayout.vue';
 
 const page = usePage();

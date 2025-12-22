@@ -7,6 +7,7 @@ use App\Http\Controllers\Sharing\WishlistPreviewController;
 use App\Http\Controllers\Sharing\WishPreviewController;
 use App\Http\Controllers\Sharing\ShoppingListPreviewController;
 use App\Http\Controllers\Sharing\UserPreviewController;
+use App\Http\Controllers\Sharing\InviteLandingController;
 
 Route::domain(env('APP_DOMAIN_APP'))
     ->middleware(['web', 'app'])
@@ -29,6 +30,9 @@ Route::domain(env('APP_DOMAIN_APP'))
         Route::get('/preview/user/{username}', UserPreviewController::class)
             ->name('sharing.preview.user');
 
+        Route::get('/invite/{username}', InviteLandingController::class)
+            ->name('sharing.invite.user');
+
         // Универсальные ссылки Smart Links
         Route::get('/app', function () {
             return redirect()->route('sharing.resolve', ['path' => 'app']);
@@ -47,6 +51,6 @@ Route::domain(env('APP_DOMAIN_APP'))
         })->name('sharing.universal.shopping_list');
 
         Route::get('/user/{username}', function (string $username) {
-            return redirect()->route('sharing.preview.user', ['username' => $username]);
+            return redirect()->route('sharing.invite.user', ['username' => $username]);
         })->name('sharing.universal.user');
     });

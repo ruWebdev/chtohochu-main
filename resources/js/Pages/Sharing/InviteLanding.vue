@@ -1,34 +1,34 @@
 <template>
   <LandingLayout :title="title">
-    <section class="landing-hero">
-      <header>
+    <section class="landing-hero space-y-6">
+      <header class="space-y-2">
         <h1 class="landing-hero__title">{{ title }}</h1>
         <p class="landing-hero__subtitle" v-if="subtitle">
           {{ subtitle }}
         </p>
       </header>
 
-      <section v-if="user">
-        <div v-if="user.avatar" class="mb-4">
-          <img :src="user.avatar" :alt="user.name" class="mx-auto rounded-full w-24 h-24 object-cover" />
+      <section v-if="user" class="space-y-3">
+        <div v-if="user.avatar" class="flex justify-center">
+          <img :src="user.avatar" :alt="user.name" class="rounded-full w-24 h-24 object-cover shadow-md" />
         </div>
-        <h2 class="text-xl font-semibold mb-2">{{ user.name }}</h2>
-        <p v-if="user.about" class="text-gray-600 mb-2">
+        <h2 class="text-xl font-semibold text-gray-900 text-center">{{ user.name }}</h2>
+        <p v-if="user.about" class="text-gray-600 text-sm text-center">
           {{ user.about }}
         </p>
-        <p v-if="publicWishlistsCount > 0" class="text-gray-500 mb-4">
+        <p v-if="publicWishlistsCount > 0" class="text-gray-500 text-sm text-center">
           Открытых списков желаний: {{ publicWishlistsCount }}
         </p>
       </section>
 
-      <section class="mt-6">
-        <p class="landing-hero__subtitle mb-4">
-          Установите приложение «Что Хочу», чтобы создавать свои списки желаний и покупок,
-          приглашать друзей и отмечать исполненные желания.
+      <section class="pt-4 border-t border-gray-200 space-y-3">
+        <p class="text-sm text-gray-600 text-center">
+          Установите приложение «Что Хочу», чтобы создавать списки желаний и покупок и
+          делиться ими с друзьями.
         </p>
-        <div class="flex flex-col items-center gap-3">
-          <a :href="deeplink" class="btn btn-primary">Открыть в приложении</a>
-          <a :href="storeUrl" class="btn btn-secondary">Установить приложение</a>
+        <div class="flex flex-col items-stretch gap-2">
+          <a :href="deeplink" class="btn btn-primary w-full text-center">Открыть в приложении</a>
+          <a :href="storeUrl" class="btn btn-secondary w-full text-center">Установить приложение</a>
         </div>
       </section>
     </section>

@@ -1,5 +1,5 @@
 <template>
-  <LandingLayout :title="title">
+  <SharingLayout>
     <section class="landing-hero space-y-6">
       <header class="space-y-2">
         <h1 class="landing-hero__title">{{ title }}</h1>
@@ -32,13 +32,13 @@
         </div>
       </section>
     </section>
-  </LandingLayout>
+  </SharingLayout>
 </template>
 
 <script setup>
 import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
-import LandingLayout from '@/Layouts/LandingLayout.vue';
+import SharingLayout from '@/Layouts/SharingLayout.vue';
 
 const page = usePage();
 const props = page.props;

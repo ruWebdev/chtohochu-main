@@ -1,5 +1,5 @@
 <template>
-    <LandingLayout :title="pageTitle">
+    <SharingLayout>
         <section class="landing-hero space-y-6">
             <!-- Ошибочное состояние -->
             <div v-if="status !== 'ok'" class="space-y-3">
@@ -55,13 +55,13 @@
                 </div>
             </div>
         </section>
-    </LandingLayout>
+    </SharingLayout>
 </template>
 
 <script setup>
 import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
-import LandingLayout from '@/Layouts/LandingLayout.vue';
+import SharingLayout from '@/Layouts/SharingLayout.vue';
 
 const page = usePage();
 const props = page.props;

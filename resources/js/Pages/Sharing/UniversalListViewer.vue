@@ -1,57 +1,75 @@
 <template>
     <SharingLayout>
-        <section class="landing-hero space-y-6">
+        <section class="space-y-6">
             <!-- Ошибочное состояние -->
-            <div v-if="status !== 'ok'" class="space-y-3">
-                <h1 class="landing-hero__title">{{ errorTitle }}</h1>
-                <p class="landing-hero__subtitle">{{ errorText }}</p>
+            <div v-if="status !== 'ok'" class="space-y-3 text-center">
+                <h1 class="text-2xl font-semibold text-gray-900">{{ errorTitle }}</h1>
+                <p class="text-sm text-gray-600">{{ errorText }}</p>
             </div>
 
             <!-- Основное содержимое списка -->
-            <div v-else class="space-y-4">
+            <div v-else class="space-y-5">
                 <!-- Заголовок списка -->
-                <header class="space-y-2">
+                <header class="bg-white rounded-2xl shadow-sm px-4 py-4 space-y-1">
+                    <p class="text-xs font-semibold text-[#f97316] uppercase tracking-wide">{{ listTypeLabel }}</p>
                     <h1 class="text-2xl font-semibold text-gray-900 break-words">{{ headerTitle }}</h1>
-                    <p class="text-sm text-gray-500">
-                        {{ listTypeLabel }} · {{ ownerNameLabel }}
-                    </p>
+                    <p class="text-sm text-gray-500">{{ ownerNameLabel }}</p>
                 </header>
 
                 <!-- Элементы списка желаний -->
-                <ul v-if="isWishlist" class="space-y-2 max-h-[60vh] overflow-y-auto">
+                <ul v-if="isWishlist" class="space-y-3">
                     <li v-for="wish in wishlist.wishes_preview" :key="wish.id"
-                        class="bg-white rounded-lg shadow-sm px-4 py-3 text-left">
-                        <span class="text-gray-900 font-medium">{{ wish.name }}</span>
+                        class="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center gap-3">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-[#f97316] font-semibold">
+                            {{ wish.name?.charAt(0) || '•' }}
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-base font-semibold text-gray-900">{{ wish.name }}</p>
+                        </div>
                     </li>
                 </ul>
 
                 <!-- Элементы списка покупок -->
-                <ul v-else-if="isShoppingList" class="space-y-2 max-h-[60vh] overflow-y-auto">
+                <ul v-else-if="isShoppingList" class="space-y-3">
                     <li v-for="item in shoppingList.items_preview" :key="item.id"
-                        class="bg-white rounded-lg shadow-sm px-4 py-3 flex items-center justify-between">
-                        <span class="font-medium"
-                            :class="item.is_purchased ? 'text-gray-400 line-through' : 'text-gray-900'">
-                            {{ item.name }}
-                        </span>
+                        class="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">
+                                <span class="text-sm font-semibold"
+                                    :class="item.is_purchased ? 'text-gray-400' : 'text-[#f97316]'">
+                                    ✓
+                                </span>
+                            </div>
+                            <p class="text-base font-semibold"
+                                :class="item.is_purchased ? 'text-gray-400 line-through' : 'text-gray-900'">
+                                {{ item.name }}
+                            </p>
+                        </div>
                     </li>
                 </ul>
 
                 <!-- Разовые желания (если шарится одно желание) -->
-                <div v-else-if="isWish" class="bg-white rounded-lg shadow-sm px-4 py-4 text-left space-y-2">
+                <div v-else-if="isWish" class="bg-white rounded-2xl shadow-sm px-4 py-4 space-y-2">
                     <h2 class="text-lg font-semibold text-gray-900">{{ wish.name }}</h2>
                     <p v-if="wish.description" class="text-gray-600 text-sm">{{ wish.description }}</p>
                 </div>
             </div>
 
             <!-- CTA-блок внизу -->
-            <div class="mt-4 pt-4 border-t border-gray-200 space-y-3">
-                <p class="text-sm text-gray-600">
-                    Установите приложение «Что Хочу», чтобы редактировать списки, отмечать покупки и
-                    приглашать друзей.
+            <div class="mt-4 space-y-3 bg-white rounded-2xl shadow-sm px-4 py-4">
+                <p class="text-sm text-gray-700">
+                    Установите приложение «Что Хочу», чтобы редактировать списки, отмечать покупки и приглашать друзей.
                 </p>
                 <div class="flex flex-col items-stretch gap-2">
-                    <a :href="deeplink" class="btn btn-primary w-full text-center">Открыть в приложении</a>
-                    <a :href="storeUrl" class="btn btn-secondary w-full text-center">Установить приложение</a>
+                    <a :href="deeplink"
+                        class="w-full h-12 rounded-full bg-[#f97316] text-white font-semibold flex items-center justify-center">
+                        Открыть в приложении
+                    </a>
+                    <a :href="storeUrl"
+                        class="w-full h-12 rounded-full border border-[#f97316] text-[#f97316] font-semibold flex items-center justify-center bg-white">
+                        Установить приложение
+                    </a>
                 </div>
             </div>
         </section>

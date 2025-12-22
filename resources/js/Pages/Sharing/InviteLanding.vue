@@ -1,4 +1,6 @@
 <template>
+
+  <Head title="Welcome" />
   <SharingLayout>
     <section class="landing-hero space-y-6">
       <header class="space-y-2">

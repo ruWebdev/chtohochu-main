@@ -1,4 +1,6 @@
 <template>
+
+    <Head title="Welcome" />
     <SharingLayout>
         <section class="space-y-6">
             <!-- Ошибочное состояние -->

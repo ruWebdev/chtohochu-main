@@ -1,6 +1,6 @@
 <template>
 
-  <Head title="Welcome" />
+  <Head :title="title" />
   <SharingLayout>
     <section class="landing-hero space-y-6">
       <header class="space-y-2">

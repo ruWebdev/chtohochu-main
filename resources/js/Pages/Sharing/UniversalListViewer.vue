@@ -1,6 +1,6 @@
 <template>
 
-    <Head title="Welcome" />
+    <Head :title="pageTitle" />
     <SharingLayout>
         <section class="space-y-6">
             <!-- Ошибочное состояние -->

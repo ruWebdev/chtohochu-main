@@ -226,8 +226,9 @@ class Wish extends Model
     public function getFullImageUrls(): array
     {
         $images = $this->images ?? [];
+        $disk = Storage::disk('public');
 
-        return array_map(function ($path) {
+        return array_map(function ($path) use ($disk) {
             if (empty($path)) {
                 return null;
             }
@@ -235,7 +236,27 @@ class Wish extends Model
             if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
                 return $path;
             }
-            return Storage::disk('public')->url($path);
+            return $disk->url($path);
         }, $images);
+    }
+
+    /**
+     * Получает массив URL превью (thumbnail ~200px) из вложений.
+     * При отсутствии вложений возвращает пустой массив.
+     */
+    public function getThumbnailImageUrls(): array
+    {
+        $attachments = $this->relationLoaded('attachments')
+            ? $this->attachments
+            : $this->attachments()->where('file_type', 'like', 'image/%')->orderBy('created_at')->get();
+
+        $disk = Storage::disk('public');
+
+        return $attachments
+            ->pluck('thumbnail_url')
+            ->filter()
+            ->map(fn($path) => $disk->url($path))
+            ->values()
+            ->all();
     }
 }

@@ -15,7 +15,7 @@ class WishImageController extends Controller
 {
     /**
      * Загрузка и обработка изображения для желания.
-     * Генерирует три webp-версии: full (1200px), preview (300px), thumbnail (80px).
+     * Генерирует две webp-версии: full (1200px) и thumbnail/preview (200px).
      */
     public function store(UploadWishImageRequest $request, Wish $wish)
     {
@@ -28,19 +28,16 @@ class WishImageController extends Controller
 
         $basePath = 'wish-images/' . $wish->id;
 
-        // Генерация трёх размеров (по длинной стороне)
+        // Генерация двух размеров (по длинной стороне): 1200px и 200px
         // Важно: scaleDown мутирует объект, поэтому клонируем перед каждым ресайзом
         $full = (clone $image)->scaleDown(1200, 1200);
-        $preview = (clone $image)->scaleDown(300, 300);
-        $thumb = (clone $image)->scaleDown(80, 80);
+        $thumb = (clone $image)->scaleDown(200, 200);
 
         $unique = uniqid('img_', true);
         $fullPath = $basePath . '/' . $unique . '_full.webp';
-        $previewPath = $basePath . '/' . $unique . '_preview.webp';
         $thumbPath = $basePath . '/' . $unique . '_thumb.webp';
 
         Storage::disk('public')->put($fullPath, (string) $full->toWebp(80));
-        Storage::disk('public')->put($previewPath, (string) $preview->toWebp(80));
         Storage::disk('public')->put($thumbPath, (string) $thumb->toWebp(80));
 
         // Создаём запись вложения
@@ -48,22 +45,23 @@ class WishImageController extends Controller
             'wish_id' => $wish->id,
             'file_name' => $file->getClientOriginalName(),
             'file_url' => $fullPath,
-            'preview_url' => $previewPath,
+            // Для совместимости preview указываем на thumbnail (200px)
+            'preview_url' => $thumbPath,
             'thumbnail_url' => $thumbPath,
             'file_type' => $file->getClientMimeType(),
             'file_size' => $file->getSize(),
         ]);
 
-        // Обновляем поле images в желании (массив превью-URL)
-        $previewUrls = $wish->attachments()
+        // Обновляем поле images в желании (массив full-URL в файловом хранилище)
+        $fullUrls = $wish->attachments()
             ->where('file_type', 'like', 'image/%')
             ->orderBy('created_at')
-            ->pluck('preview_url')
+            ->pluck('file_url')
             ->filter()
             ->values()
             ->all();
 
-        $wish->images = $previewUrls;
+        $wish->images = $fullUrls;
         $wish->save();
 
         $wish->load(['owner', 'claimers.user', 'comments', 'likes', 'history', 'attachments']);
@@ -107,16 +105,16 @@ class WishImageController extends Controller
 
         $attachment->delete();
 
-        // Пересобираем массив preview-URL для поля images
-        $previewUrls = $wish->attachments()
+        // Пересобираем массив full-URL для поля images
+        $fullUrls = $wish->attachments()
             ->where('file_type', 'like', 'image/%')
             ->orderBy('created_at')
-            ->pluck('preview_url')
+            ->pluck('file_url')
             ->filter()
             ->values()
             ->all();
 
-        $wish->images = $previewUrls;
+        $wish->images = $fullUrls;
         $wish->save();
 
         $wish->load(['owner', 'claimers.user', 'comments', 'likes', 'history', 'attachments']);

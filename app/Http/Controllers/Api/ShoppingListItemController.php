@@ -144,18 +144,17 @@ class ShoppingListItemController extends Controller
             Storage::disk('public')->delete($pathsToDelete);
         }
 
-        // Генерация трёх размеров (по длинной стороне)
+        // Генерация двух размеров (по длинной стороне)
         // Важно: scaleDown мутирует объект, поэтому клонируем перед каждым ресайзом
         $full = (clone $image)->scaleDown(1200, 1200);
-        $preview = (clone $image)->scaleDown(300, 300);
-        $thumb = (clone $image)->scaleDown(80, 80);
+        $thumb = (clone $image)->scaleDown(200, 200);
 
         $fullPath = $basePath . '/full.webp';
         $previewPath = $basePath . '/preview.webp';
         $thumbPath = $basePath . '/thumb.webp';
 
         Storage::disk('public')->put($fullPath, (string) $full->toWebp(80));
-        Storage::disk('public')->put($previewPath, (string) $preview->toWebp(80));
+        Storage::disk('public')->put($previewPath, (string) $thumb->toWebp(80));
         Storage::disk('public')->put($thumbPath, (string) $thumb->toWebp(80));
 
         $item->image_full_url = $fullPath;

@@ -33,6 +33,7 @@ class WishResource extends JsonResource
             'description' => $this->description,
             'visibility' => $this->visibility,
             'images' => $this->getFullImageUrls(),
+            'thumbnails' => $this->getThumbnailImageUrls(),
             'link' => $this->url,
             'necessity' => $this->necessity,
             'priority' => $this->priority,

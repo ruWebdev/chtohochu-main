@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api'])
+    ->prefix('v1')
     ->group(function () {
         // Health check
         Route::get('/health', fn () => response()->json(['status' => 'ok']));

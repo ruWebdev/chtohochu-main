@@ -160,7 +160,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS -H 'Host: api.chtohochu.test' http://localhost/api/v1/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

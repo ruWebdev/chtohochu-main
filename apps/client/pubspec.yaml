@@ -1,0 +1,72 @@
+name: chtohochu
+description: "ЧтоХочу — клиентское приложение"
+publish_to: 'none'
+
+version: 2.0.0+1
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management & DI
+  flutter_riverpod: ^3.0.0
+
+  # Navigation
+  go_router: ^17.3.0
+
+  # Network
+  dio: ^5.7.0
+  retrofit: ^4.9.0
+  json_annotation: ^4.9.0
+
+  # Models / Code Generation
+  freezed_annotation: ^3.0.0
+
+  # Local Storage
+  flutter_secure_storage: ^10.3.1
+  shared_preferences: ^2.3.3
+
+  # Database (Drift)
+  drift: ^2.34.0
+  drift_flutter: ^0.3.0
+
+  # UI
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.1.0
+  flutter_feather_icons:
+    git:
+      url: https://github.com/garylkz/flutter_feather_icons.git
+      ref: master
+
+  # Utils
+  url_launcher: ^6.3.1
+
+  # OAuth WebView
+  webview_flutter: ^4.10.0
+  modal_bottom_sheet: ^3.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.13
+  drift_dev: ^2.34.0
+  freezed: ^3.0.0
+  json_serializable: ^6.8.0
+  retrofit_generator: ^10.0.0
+  riverpod_generator: ^4.0.0
+  riverpod_lint: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+     - assets/fon.jpg
+     - assets/images/noise.png
+     - assets/images/vk.png
+     - assets/images/yandex.png

@@ -1,0 +1,67 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Dart / Flutter
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/generated_plugin_registrant.dart
+**/*.freezed.dart
+**/*.g.dart
+**/*.gr.dart
+**/coverage/
+apps/client/.idea/
+
+# Generated Flutter files (regenerate with build_runner)
+apps/client/lib/**/*.g.dart
+apps/client/lib/**/*.freezed.dart
+
+# Node / Nuxt
+**/node_modules/
+**/.nuxt/
+**/.output/
+**/.nitro/
+**/.cache/
+**/dist/
+
+# PHP / Laravel
+backend/api/vendor/
+backend/api/.env
+backend/api/.env.backup
+backend/api/storage/logs/*.log
+backend/api/storage/framework/cache/data/*
+backend/api/storage/framework/sessions/*
+backend/api/storage/framework/views/*
+backend/api/storage/app/private/*
+backend/api/.phpunit.result.cache
+
+# Docker
+infrastructure/docker/volumes/
+infrastructure/docker/.env
+
+# Secrets — never commit
+.env
+.env.local
+.env.production
+.env.staging
+*.pem
+*.key
+firebase-key.json
+oauth-*.json
+
+# Misc
+*.log
+*.tmp

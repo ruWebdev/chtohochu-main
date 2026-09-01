@@ -1,0 +1,27 @@
+# =============================================================================
+# ЧтоХочу — Traefik v3 dynamic configuration
+# =============================================================================
+# TLS configuration with local mkcert certificates.
+# Routers for api.chtohochu.test and WebSocket (wss) are defined via Docker
+# labels in docker-compose.yml. This file handles TLS cert references.
+# =============================================================================
+
+tls:
+  certificates:
+    - certFile: /certs/chtohochu.test.pem
+      keyFile: /certs/chtohochu.test-key.pem
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/chtohochu.test.pem
+        keyFile: /certs/chtohochu.test-key.pem
+
+# ---------------------------------------------------------------------------
+# HTTP → HTTPS redirect middleware (fallback for non-label routes)
+# ---------------------------------------------------------------------------
+http:
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true

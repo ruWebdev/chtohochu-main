@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+
+    <!-- SharedPreferences -->
+    <include domain="sharedpref" path="." />
+
+    <!-- Базы данных -->
+    <include domain="database" path="." />
+
+    <!-- Файлы приложения -->
+    <include domain="file" path="." />
+
+    <!-- Исключаем внутренний кэш -->
+    <exclude domain="file" path="cache/" />
+
+    <!-- Исключаем временные файлы -->
+    <exclude domain="file" path="tmp/" />
+
+    <!-- НЕ добавляем domain="external", оно не нужно и вызывает Lint error -->
+
+</full-backup-content>

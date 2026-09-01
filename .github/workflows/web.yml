@@ -1,0 +1,34 @@
+name: Web CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/public-web/**'
+      - 'apps/seller/**'
+      - 'apps/admin/**'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'apps/public-web/**'
+      - 'apps/seller/**'
+      - 'apps/admin/**'
+      - '.github/workflows/web.yml'
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [public-web, seller, admin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install
+        working-directory: apps/${{ matrix.app }}
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: apps/${{ matrix.app }}

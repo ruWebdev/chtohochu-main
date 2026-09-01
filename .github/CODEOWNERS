@@ -1,0 +1,20 @@
+# Default code owners — update with actual GitHub usernames
+*       @ruWebdev
+
+# Backend
+backend/api/         @ruWebdev
+
+# Flutter client
+apps/client/         @ruWebdev
+
+# Web applications
+apps/public-web/     @ruWebdev
+apps/seller/         @ruWebdev
+apps/admin/          @ruWebdev
+
+# Infrastructure
+infrastructure/      @ruWebdev
+
+# Documentation
+docs/                @ruWebdev
+AGENTS.md            @ruWebdev

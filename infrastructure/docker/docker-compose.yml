@@ -1,0 +1,320 @@
+# =============================================================================
+# ЧтоХочу — Local Development Docker Compose
+# =============================================================================
+# Services: traefik, postgres, redis, app (Laravel), queue-worker, scheduler,
+#           reverb (WebSocket), mailpit (mail catcher)
+#
+# The Nuxt apps (public-web, seller, admin) and Flutter web run on the host
+# directly. Traefik only routes api.chtohochu.test to the Laravel container and
+# the WebSocket path to the Reverb container.
+#
+# Usage:
+#   cp infrastructure/docker/.env.example infrastructure/docker/.env
+#   docker compose -f infrastructure/docker/docker-compose.yml up -d
+# =============================================================================
+
+name: chtohochu
+
+networks:
+  chtohochu:
+    name: chtohochu
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: chtohochu_postgres_data
+  redis_data:
+    name: chtohochu_redis_data
+  traefik_certs:
+    name: chtohochu_traefik_certs
+
+services:
+  # ---------------------------------------------------------------------------
+  # Traefik — reverse proxy with HTTPS (mkcert local CA)
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik_certs:/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - chtohochu
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — primary database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chtohochu}
+      POSTGRES_USER: ${POSTGRES_USER:-chtohochu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chtohochu}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - chtohochu
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chtohochu} -d ${POSTGRES_DB:-chtohochu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — cache, queues, Reverb pub/sub
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-chtohochu}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - chtohochu
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-chtohochu}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Mailpit — local mail catcher (replaces Mailhog)
+  # ---------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "127.0.0.1:8025:8025"
+    networks:
+      - chtohochu
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # app — Laravel API (PHP-FPM + Nginx)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: ../../backend/api
+      dockerfile: ../../infrastructure/docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: https://api.chtohochu.test
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-chtohochu}
+      DB_USERNAME: ${POSTGRES_USER:-chtohochu}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-chtohochu}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chtohochu}
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      REVERB_APP_ID: ${REVERB_APP_ID:-chtohochu-local}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-local-app-key}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-local-app-secret}
+      REVERB_HOST: api.chtohochu.test
+      REVERB_PORT: "443"
+      REVERB_SCHEME: wss
+      REVERB_SERVER_HOST: reverb
+      REVERB_SERVER_PORT: "8080"
+    volumes:
+      - ../../backend/api:/var/www/html
+    networks:
+      - chtohochu
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/health || curl -fsS http://localhost/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=chtohochu
+      # API router — api.chtohochu.test → app:80
+      - traefik.http.routers.api.rule=Host(`api.chtohochu.test`)
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls=true
+      - traefik.http.routers.api.service=api-svc
+      - traefik.http.services.api-svc.loadbalancer.server.port=80
+      # HTTP → HTTPS redirect for api.chtohochu.test
+      - traefik.http.routers.api-http.rule=Host(`api.chtohochu.test`)
+      - traefik.http.routers.api-http.entrypoints=web
+      - traefik.http.routers.api-http.middlewares=redirect-to-https@docker
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+
+  # ---------------------------------------------------------------------------
+  # queue-worker — Laravel queue:work
+  # ---------------------------------------------------------------------------
+  queue-worker:
+    build:
+      context: ../../backend/api
+      dockerfile: ../../infrastructure/docker/Dockerfile
+    restart: unless-stopped
+    command: php artisan queue:work redis --tries=3 --max-time=3600
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-chtohochu}
+      DB_USERNAME: ${POSTGRES_USER:-chtohochu}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-chtohochu}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chtohochu}
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: ${REVERB_APP_ID:-chtohochu-local}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-local-app-key}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-local-app-secret}
+      REVERB_SERVER_HOST: reverb
+      REVERB_SERVER_PORT: "8080"
+    volumes:
+      - ../../backend/api:/var/www/html
+    networks:
+      - chtohochu
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # scheduler — Laravel scheduler (cron-style loop)
+  # ---------------------------------------------------------------------------
+  scheduler:
+    build:
+      context: ../../backend/api
+      dockerfile: ../../infrastructure/docker/Dockerfile
+    restart: unless-stopped
+    command: >
+      sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-chtohochu}
+      DB_USERNAME: ${POSTGRES_USER:-chtohochu}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-chtohochu}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chtohochu}
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: ${REVERB_APP_ID:-chtohochu-local}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-local-app-key}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-local-app-secret}
+      REVERB_SERVER_HOST: reverb
+      REVERB_SERVER_PORT: "8080"
+    volumes:
+      - ../../backend/api:/var/www/html
+    networks:
+      - chtohochu
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # reverb — Laravel Reverb WebSocket server
+  # ---------------------------------------------------------------------------
+  reverb:
+    build:
+      context: ../../backend/api
+      dockerfile: ../../infrastructure/docker/Dockerfile
+    restart: unless-stopped
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-chtohochu}
+      DB_USERNAME: ${POSTGRES_USER:-chtohochu}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-chtohochu}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chtohochu}
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_ID: ${REVERB_APP_ID:-chtohochu-local}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-local-app-key}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-local-app-secret}
+      REVERB_ALLOWED_ORIGINS: "https://api.chtohochu.test,https://www.chtohochu.test,https://app.chtohochu.test,https://seller.chtohochu.test,https://admin.chtohochu.test"
+    volumes:
+      - ../../backend/api:/var/www/html
+    networks:
+      - chtohochu
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php artisan reverb:check || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=chtohochu
+      # WebSocket router — wss://api.chtohochu.test/app/ → reverb:8080
+      - traefik.http.routers.ws.rule=Host(`api.chtohochu.test`) && PathPrefix(`/app/`)
+      - traefik.http.routers.ws.entrypoints=websecure
+      - traefik.http.routers.ws.tls=true
+      - traefik.http.routers.ws.service=ws-svc
+      # WebSocket support
+      - traefik.http.services.ws-svc.loadbalancer.server.port=8080
+      - traefik.http.routers.ws.middlewares=ws-headers@docker
+      - traefik.http.middlewares.ws-headers.headers.customrequestheaders.Connection=Upgrade
+      - traefik.http.middlewares.ws-headers.headers.customrequestheaders.Upgrade=http

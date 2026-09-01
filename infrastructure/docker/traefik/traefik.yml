@@ -1,0 +1,44 @@
+# =============================================================================
+# ЧтоХочу — Traefik v3 static configuration
+# =============================================================================
+# EntryPoints: web (80, redirect → websecure), websecure (443)
+# Dashboard:   http://localhost:8080 (bound to 127.0.0.1 in compose)
+# TLS:         local certs mounted from /certs (generated via mkcert)
+# Providers:   Docker (labels) + File (dynamic.yml)
+# =============================================================================
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+  traefik:
+    address: ":8080"
+
+api:
+  dashboard: true
+  insecure: true
+
+ping:
+  entryPoint: traefik
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: chtohochu
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true

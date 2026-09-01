@@ -1,0 +1,88 @@
+name: Deploy Laravel 12 Project with Backup
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy to server
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+
+          echo "=== Checking server environment ==="
+          command -v php >/dev/null 2>&1 || { echo >&2 "PHP not found! Aborting."; exit 1; }
+          command -v composer >/dev/null 2>&1 || { echo >&2 "Composer not found! Aborting."; exit 1; }
+          command -v mysql >/dev/null 2>&1 || { echo >&2 "MySQL client not found! Aborting."; exit 1; }
+
+          # Создаем папку для резервных копий, если не существует
+          mkdir -p ~/db_backups
+
+          cd ${{ secrets.PROJECT_PATH_MAIN }}
+
+          echo "=== Pull latest code ==="
+          git fetch --all
+          git reset --hard origin/main
+
+          echo "=== Prevent stale package caches before any Artisan run ==="
+          # Remove stale Laravel package/service manifests that may reference dev-only providers (e.g. Collision)
+          rm -f bootstrap/cache/packages.php bootstrap/cache/services.php || true
+
+          echo "=== Ensure Pail not auto-discovered (prod) ==="
+          # Set dont-discover to a JSON array, not a string; avoid PackageManifest in_array() type error
+          composer config --json extra.laravel.dont-discover '["laravel/pail"]' --no-plugins || true
+
+          echo "=== Install PHP dependencies ==="
+          composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+          echo "=== Refresh package discovery and clear caches (avoid stale dev providers) ==="
+          # Now that vendor is installed without dev packages, rebuild package discovery
+          php artisan package:discover --ansi
+          # Clear and rebuild caches cleanly
+          php artisan optimize:clear
+
+          echo "=== Backup database ==="
+          BACKUP_FILE="backup_$(date +'%Y%m%d_%H%M%S').sql"
+          mysqldump -u${{ secrets.DB_USER }} -p${{ secrets.DB_PASSWORD }} ${{ secrets.DB_NAME }} > ~/db_backups/$BACKUP_FILE
+          echo "Backup saved to ~/db_backups/$BACKUP_FILE"
+
+          echo "=== Run database migrations ==="
+          if ! php artisan migrate --force; then
+            echo "Migration failed! Check Laravel logs."
+            exit 1
+          fi
+
+          echo "=== Clear and cache configuration, routes, views ==="
+          php artisan config:clear
+          php artisan config:cache
+          php artisan route:clear
+          php artisan route:cache || echo "Warning: Route cache failed, check route names!"
+          php artisan view:clear
+          php artisan view:cache
+          php artisan optimize
+
+          echo "=== Set file permissions ==="
+          sudo chown -R github-runner:www-data ${{ secrets.PROJECT_PATH_MAIN }}
+          sudo find ${{ secrets.PROJECT_PATH_MAIN }}/storage -type d -exec chmod 775 {} \;
+          sudo find ${{ secrets.PROJECT_PATH_MAIN }}/storage -type f -exec chmod 664 {} \;
+          sudo find ${{ secrets.PROJECT_PATH_MAIN }}/bootstrap/cache -type d -exec chmod 775 {} \;
+          sudo find ${{ secrets.PROJECT_PATH_MAIN }}/bootstrap/cache -type f -exec chmod 664 {} \;
+
+          echo "=== Reload PHP-FPM (optional) ==="
+          sudo systemctl reload php8.4-fpm || true
+
+          echo "=== Deploy finished successfully ==="
+        EOF

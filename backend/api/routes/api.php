@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\SocialAuthController;
 Route::domain(env('APP_DOMAIN_API'))
     ->middleware(['api'])
     ->group(function () {
+        // Health check
+        Route::get('/health', fn () => response()->json(['status' => 'ok']));
+
         // Аутентификация (Sanctum)
         Route::post('/auth/register', [AuthController::class, 'register'])->name('api.auth.register');
         Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])->name('api.auth.username.check');

@@ -25,8 +25,6 @@ volumes:
     name: chtohochu_postgres_data
   redis_data:
     name: chtohochu_redis_data
-  traefik_certs:
-    name: chtohochu_traefik_certs
 
 services:
   # ---------------------------------------------------------------------------
@@ -42,8 +40,7 @@ services:
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - traefik_certs:/certs:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/certs:/certs:ro
     networks:
       - chtohochu
     healthcheck:
@@ -121,8 +118,8 @@ services:
   # ---------------------------------------------------------------------------
   app:
     build:
-      context: ../../backend/api
-      dockerfile: ../../infrastructure/docker/Dockerfile
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
     restart: unless-stopped
     environment:
       APP_ENV: local
@@ -163,33 +160,19 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost/health || curl -fsS http://localhost/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=chtohochu
-      # API router — api.chtohochu.test → app:80
-      - traefik.http.routers.api.rule=Host(`api.chtohochu.test`)
-      - traefik.http.routers.api.entrypoints=websecure
-      - traefik.http.routers.api.tls=true
-      - traefik.http.routers.api.service=api-svc
-      - traefik.http.services.api-svc.loadbalancer.server.port=80
-      # HTTP → HTTPS redirect for api.chtohochu.test
-      - traefik.http.routers.api-http.rule=Host(`api.chtohochu.test`)
-      - traefik.http.routers.api-http.entrypoints=web
-      - traefik.http.routers.api-http.middlewares=redirect-to-https@docker
-      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
 
   # ---------------------------------------------------------------------------
   # queue-worker — Laravel queue:work
   # ---------------------------------------------------------------------------
   queue-worker:
     build:
-      context: ../../backend/api
-      dockerfile: ../../infrastructure/docker/Dockerfile
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
     restart: unless-stopped
     command: php artisan queue:work redis --tries=3 --max-time=3600
     environment:
@@ -228,8 +211,8 @@ services:
   # ---------------------------------------------------------------------------
   scheduler:
     build:
-      context: ../../backend/api
-      dockerfile: ../../infrastructure/docker/Dockerfile
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
     restart: unless-stopped
     command: >
       sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
@@ -269,8 +252,8 @@ services:
   # ---------------------------------------------------------------------------
   reverb:
     build:
-      context: ../../backend/api
-      dockerfile: ../../infrastructure/docker/Dockerfile
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile
     restart: unless-stopped
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
     environment:
@@ -300,21 +283,8 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "php artisan reverb:check || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ || exit 0"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=chtohochu
-      # WebSocket router — wss://api.chtohochu.test/app/ → reverb:8080
-      - traefik.http.routers.ws.rule=Host(`api.chtohochu.test`) && PathPrefix(`/app/`)
-      - traefik.http.routers.ws.entrypoints=websecure
-      - traefik.http.routers.ws.tls=true
-      - traefik.http.routers.ws.service=ws-svc
-      # WebSocket support
-      - traefik.http.services.ws-svc.loadbalancer.server.port=8080
-      - traefik.http.routers.ws.middlewares=ws-headers@docker
-      - traefik.http.middlewares.ws-headers.headers.customrequestheaders.Connection=Upgrade
-      - traefik.http.middlewares.ws-headers.headers.customrequestheaders.Upgrade=http

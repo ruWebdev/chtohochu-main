@@ -57,26 +57,27 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
 # ---------------------------------------------------------------------------
-# Nginx config
+# Nginx config + entrypoint
 # ---------------------------------------------------------------------------
 COPY infrastructure/docker/nginx.conf /etc/nginx/http.d/default.conf
-
-# ---------------------------------------------------------------------------
-# Entrypoint
-# ---------------------------------------------------------------------------
 COPY infrastructure/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # ---------------------------------------------------------------------------
+# Copy Laravel application code
+# ---------------------------------------------------------------------------
+COPY backend/api /var/www/html
+
+# ---------------------------------------------------------------------------
+# Install Composer dependencies
+# ---------------------------------------------------------------------------
+RUN composer install --no-interaction --optimize-autoloader \
+    || composer update --no-interaction --optimize-autoloader
+
+# ---------------------------------------------------------------------------
 # OPcache settings (development-friendly)
 # ---------------------------------------------------------------------------
-RUN echo "[opcache]\n\
-opcache.enable=1\n\
-opcache.enable_cli=1\n\
-opcache.memory_consumption=128\n\
-opcache.max_accelerated_files=10000\n\
-opcache.revalidate_freq=0\n\
-opcache.validate_timestamps=1\n" > /usr/local/etc/php/conf.d/opcache-recommended.ini
+RUN printf "[opcache]\nopcache.enable=1\nopcache.enable_cli=1\nopcache.memory_consumption=128\nopcache.max_accelerated_files=10000\nopcache.revalidate_freq=0\nopcache.validate_timestamps=1\n" > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
 # ---------------------------------------------------------------------------
 # Permissions for storage and bootstrap/cache

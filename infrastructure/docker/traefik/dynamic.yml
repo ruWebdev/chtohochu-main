@@ -2,8 +2,8 @@
 # ЧтоХочу — Traefik v3 dynamic configuration
 # =============================================================================
 # TLS configuration with local mkcert certificates.
-# Routers for api.chtohochu.test and WebSocket (wss) are defined via Docker
-# labels in docker-compose.yml. This file handles TLS cert references.
+# All routers are defined here (file-based) instead of Docker labels,
+# because the Docker provider has API version compatibility issues.
 # =============================================================================
 
 tls:
@@ -16,12 +16,62 @@ tls:
         certFile: /certs/chtohochu.test.pem
         keyFile: /certs/chtohochu.test-key.pem
 
-# ---------------------------------------------------------------------------
-# HTTP → HTTPS redirect middleware (fallback for non-label routes)
-# ---------------------------------------------------------------------------
 http:
+  # ---------------------------------------------------------------------------
+  # Middlewares
+  # ---------------------------------------------------------------------------
   middlewares:
     redirect-to-https:
       redirectScheme:
         scheme: https
         permanent: true
+    ws-headers:
+      headers:
+        customRequestHeaders:
+          Connection: Upgrade
+          Upgrade: http
+
+  # ---------------------------------------------------------------------------
+  # Routers
+  # ---------------------------------------------------------------------------
+  routers:
+    # API — api.chtohochu.test → app:80 (HTTPS)
+    api:
+      rule: "Host(`api.chtohochu.test`)"
+      entryPoints:
+        - websecure
+      service: api-svc
+      tls: {}
+
+    # API — HTTP → HTTPS redirect
+    api-http:
+      rule: "Host(`api.chtohochu.test`)"
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+      service: api-svc
+
+    # WebSocket — wss://api.chtohochu.test/app/ → reverb:8080
+    ws:
+      rule: "Host(`api.chtohochu.test`) && PathPrefix(`/app/`)"
+      entryPoints:
+        - websecure
+      service: ws-svc
+      middlewares:
+        - ws-headers
+      tls: {}
+
+  # ---------------------------------------------------------------------------
+  # Services
+  # ---------------------------------------------------------------------------
+  services:
+    api-svc:
+      loadBalancer:
+        servers:
+          - url: "http://app:80"
+
+    ws-svc:
+      loadBalancer:
+        servers:
+          - url: "http://reverb:8080"

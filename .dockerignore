@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+
+# Flutter
+apps/client/build
+apps/client/.dart_tool
+apps/client/.idea
+
+# Node
+**/node_modules
+**/.nuxt
+**/.output
+**/.nitro
+**/.cache
+
+# PHP
+backend/api/vendor
+backend/api/.env
+backend/api/.env.*
+
+# Docker
+infrastructure/docker/.env
+infrastructure/docker/volumes
+
+# Docs (not needed in image)
+docs
+
+# OS
+.DS_Store
+Thumbs.db

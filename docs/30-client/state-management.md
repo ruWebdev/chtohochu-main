@@ -243,7 +243,7 @@ The notifier does not know whether an update came from the user, a sync ACK, or 
 
 ### 11.1 Translate failures, do not throw raw
 
-Repository methods return `Result<T>` or throw translated `Failure` exceptions. Notifiers catch and produce error states. Raw Dio/Drift exceptions MUST NOT reach the notifier (repositories map them, per `docs/07-flutter/architecture.md` §13).
+Repository methods return `Result<T>` or throw translated `Failure` exceptions. Notifiers catch and produce error states. Raw Dio/Drift exceptions MUST NOT reach the notifier (repositories map them, per `docs/30-client/flutter-architecture.md` §13).
 
 ```dart
 try {

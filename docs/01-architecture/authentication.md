@@ -3,7 +3,7 @@
 > **Authority:** This document defines the authentication architecture for the ЧтоХочу backend.
 > It is normative for backend, mobile, and web implementations. Conflicts with code must be
 > resolved either by aligning the code to this document or by recording an ADR in
-> `docs/decisions/` that supersedes it.
+> `docs/adr/` that supersedes it.
 
 ## 1. Overview
 

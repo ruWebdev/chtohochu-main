@@ -59,12 +59,12 @@ cd chtohochu
 
 ```text
 /
-├── mobile/          # Flutter client (mobile + web)
-├── backend/         # Laravel API
-├── public-web/      # Nuxt 4 public website
-├── seller/          # Nuxt 4 seller cabinet
-├── admin/           # Nuxt 4 admin backoffice
-├── docker/          # Docker configuration
+├── apps/client/      # Flutter client (mobile + web)
+├── backend/api/       # Laravel API
+├── apps/public-web/   # Nuxt 4 public website
+├── apps/seller/       # Nuxt 4 seller cabinet
+├── apps/admin/        # Nuxt 4 admin backoffice
+├── infrastructure/docker/ # Docker configuration
 ├── docs/            # Documentation
 ├── AGENTS.md        # Engineering contract
 └── README.md
@@ -75,7 +75,7 @@ cd chtohochu
 ### 3.1 Without Docker
 
 ```bash
-cd backend
+cd backend/api
 cp .env.example .env
 composer install
 php artisan key:generate
@@ -83,7 +83,7 @@ php artisan key:generate
 
 ### 3.2 Environment variables
 
-Edit `backend/.env`:
+Edit `backend/api/.env`:
 
 ```env
 APP_NAME=ЧтоХочу
@@ -153,7 +153,7 @@ postgres=# GRANT ALL PRIVILEGES ON DATABASE chtohochu TO chtohochu;
 postgres=# \q
 
 # Run migrations
-cd backend
+cd backend/api
 php artisan migrate
 
 # Seed development data
@@ -192,21 +192,30 @@ composer audit                     # Check PHP dependency vulnerabilities
 ### 4.1 Mobile
 
 ```bash
-cd mobile
+cd apps/client
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
 
 ### 4.2 Environment configuration
 
-Create `mobile/lib/core/config/env/` with environment-specific config or use `--dart-define`:
+`API_BASE_URL` — хост API **без** префикса `/api/v1` (клиент добавляет
+`ApiConstants.apiPrefix` сам). Backend живёт за Traefik и принимает
+запросы только на домене `api.chtohochu.test` (domain routing) —
+`http://localhost:8000` не является рабочим адресом API.
+
+По умолчанию (без `--dart-define`): debug/profile — `https://api.chtohochu.test`,
+release — `https://api.chtohochu.ru`. Release-сборка отказывается
+стартовать с локальным/не-HTTPS адресом.
 
 ```bash
+# Хост-машина (api.chtohochu.test уже в /etc/hosts + mkcert CA)
+flutter run
+
+# Android emulator: api.chtohochu.test не резолвится на устройстве —
+# используйте adb reverse / host IP / проброс (см. local-https.md).
 flutter run \
-  --dart-define=API_BASE_URL=http://localhost:8000/api/v1 \
-  --dart-define=REVERB_HOST=localhost \
-  --dart-define=REVERB_PORT=8080 \
-  --dart-define=REVERB_SCHEME=http
+  --dart-define=API_BASE_URL=https://api.chtohochu.test
 ```
 
 ### 4.3 Code generation
@@ -245,24 +254,21 @@ flutter run -d <device-id>
 
 ```bash
 flutter run -d chrome \
-  --dart-define=API_BASE_URL=http://localhost:8000/api/v1 \
-  --dart-define=REVERB_HOST=localhost \
-  --dart-define=REVERB_PORT=8080 \
-  --dart-define=REVERB_SCHEME=http \
+  --dart-define=API_BASE_URL=https://api.chtohochu.test \
   --web-port=3000
 ```
 
 ## 5. Public Web (Nuxt 4) Setup
 
 ```bash
-cd public-web
+cd apps/public-web
 cp .env.example .env
 npm install
 ```
 
 ### Environment variables
 
-Edit `public-web/.env`:
+Edit `apps/public-web/.env`:
 
 ```env
 NUXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
@@ -279,7 +285,7 @@ npm run dev    # starts Nuxt dev server at http://localhost:3002
 ## 6. Seller Cabinet (Nuxt 4) Setup
 
 ```bash
-cd seller
+cd apps/seller
 cp .env.example .env
 npm install
 ```
@@ -299,7 +305,7 @@ npm run dev    # starts at http://localhost:3003
 ## 7. Admin Backoffice (Nuxt 4) Setup
 
 ```bash
-cd admin
+cd apps/admin
 cp .env.example .env
 npm install
 ```
@@ -325,7 +331,7 @@ Docker Compose provides all infrastructure services and applications in containe
 If you prefer to run applications natively but use Docker for PostgreSQL, Redis, etc.:
 
 ```bash
-cd docker
+cd infrastructure/docker
 docker compose -f docker-compose.infra.yml up -d
 ```
 
@@ -337,7 +343,7 @@ This starts:
 ### 8.2 Start everything
 
 ```bash
-cd docker
+cd infrastructure/docker
 cp .env.example .env   # configure if needed
 docker compose up -d
 ```
@@ -385,7 +391,7 @@ docker compose down -v
 ### 8.4 First-time Docker setup
 
 ```bash
-cd docker
+cd infrastructure/docker
 docker compose up -d
 
 # Wait for PostgreSQL to be ready, then:

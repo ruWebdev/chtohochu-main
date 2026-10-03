@@ -34,7 +34,7 @@ This document defines the hard boundaries between the five applications in the Ð
 | Must not | Rationale |
 |----------|-----------|
 | Import from `apps/public-web`, `apps/admin`, `apps/seller` | No cross-app source imports |
-| Import from `backend/` | Backend is PHP; Flutter is Dart. Communication is via API only |
+| Import from `backend/api/` | Backend is PHP; Flutter is Dart. Communication is via API only |
 | Implement business rules | Authorization, validation, and domain invariants are backend responsibilities |
 | Trust client-side permissions for security | Client may hide UI for UX, but backend enforces all authorization |
 | Access PostgreSQL directly | All data flows through the Laravel API |

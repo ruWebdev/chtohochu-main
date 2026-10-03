@@ -60,16 +60,17 @@ The repository is organized by concern into top-level directories:
 ```text
 /
 ├── apps/                # client applications
-│   ├── mobile/          # Flutter client (iOS, Android, web)
-│   ├── web-public/      # Nuxt public marketing site (SSR/SEO)
-│   ├── web-seller/      # Nuxt seller cabinet (SPA)
-│   └── web-admin/       # Nuxt admin panel (SPA)
+│   ├── client/           # Flutter client (iOS, Android, web)
+│   ├── public-web/       # Nuxt public marketing site (SSR/SEO)
+│   ├── seller/           # Nuxt seller cabinet (SPA)
+│   └── admin/            # Nuxt admin panel (SPA)
 │
 ├── backend/             # Laravel modular monolith
-│   ├── app/
-│   ├── routes/
-│   ├── database/
-│   └── tests/
+│   └── api/
+│       ├── app/
+│       ├── routes/
+│       ├── database/
+│       └── tests/
 │
 ├── packages/            # shared, publishable or internal packages
 │   ├── api-types/       # shared TS types generated from OpenAPI
@@ -80,12 +81,15 @@ The repository is organized by concern into top-level directories:
 │   ├── docker/
 │   └── ci/
 │
-├── docs/                # architecture, API, features, ADRs, dev guides
-│   ├── architecture/
-│   ├── api/
-│   ├── features/
-│   ├── decisions/
-│   └── development/
+├── docs/                # architecture, API, ADRs, dev guides
+│   ├── 00-project/
+│   ├── 01-architecture/
+│   ├── 10-development/
+│   ├── 20-backend/
+│   ├── 30-client/
+│   ├── 40-web/
+│   ├── 50-infrastructure/
+│   └── adr/
 │
 ├── AGENTS.md
 └── README.md
@@ -94,7 +98,7 @@ The repository is organized by concern into top-level directories:
 Rules:
 
 1. **One repository, one CI pipeline** (with per-app jobs that only run when the
-   relevant paths change). A change to `backend/` does not rebuild Flutter.
+   relevant paths change). A change to `backend/api/` does not rebuild Flutter.
 2. **Shared packages live in `packages/`** and are consumed by the apps that
    need them via workspace links (pnpm/Turbo workspaces for TS, path
    dependencies for Dart). They are not published to an external registry unless
@@ -102,11 +106,11 @@ Rules:
 3. **`AGENTS.md` and `docs/` live at the root** so the engineering contract and
    ADRs are visible from the repository root and apply to every app.
 4. **Cross-app changes are one pull request.** A feature that spans backend +
-   mobile + web-public is reviewed as a single atomic change.
+   client + public-web is reviewed as a single atomic change.
 5. **Branch protection and CODEOWNERS** are used to keep per-app ownership clear
    even inside the monorepo.
-6. The structure in AGENTS.md §6 (`mobile/`, `backend/`, `web/`, `docs/`,
-   `docker/`) is the earlier recommended layout. This ADR refines it to the
+6. The structure in AGENTS.md §6 (`apps/client/`, `backend/api/`, `docs/`,
+   `infrastructure/docker/`) is the earlier recommended layout. This ADR refines it to the
    `apps/` / `backend/` / `packages/` / `infrastructure/` / `docs/` layout to
    accommodate the three distinct Nuxt apps and shared packages. Where the two
    differ, this ADR supersedes AGENTS.md §6 per the precedence rule in §1.
@@ -122,16 +126,16 @@ Rules:
   generated once and consumed everywhere through `packages/`, so the clients
   cannot silently diverge from the backend.
 - Documentation and ADRs are co-located with the code they govern; a developer
-  reading `backend/app/Domain/ShoppingLists/` can find the matching feature spec
+  reading `backend/api/app/Domain/ShoppingLists/` can find the matching feature spec
   and ADRs without leaving the repo.
 - Local development environment is reproducible from one clone: `docker compose
   up` in `infrastructure/` brings up PostgreSQL, Redis, Reverb and the backend,
   and the apps can run against it.
-- Atomic history: `git log -- backend/app/Domain/ShoppingLists
-  apps/mobile/lib/features/shopping_lists` shows the full history of a feature
+- Atomic history: `git log -- backend/api/app/Domain/ShoppingLists
+  apps/client/lib/features/shopping_lists` shows the full history of a feature
   across stack boundaries.
-- CI can be path-aware: only run Flutter tests when `apps/mobile/` changes, only
-  run Laravel tests when `backend/` changes.
+- CI can be path-aware: only run Flutter tests when `apps/client/` changes, only
+  run Laravel tests when `backend/api/` changes.
 
 **Negative**
 
@@ -153,7 +157,7 @@ Rules:
 
 ### Polyrepo (one repository per app)
 
-Each app (mobile, web-public, web-seller, web-admin, backend) in its own Git
+Each app (client, public-web, seller, admin, backend/api) in its own Git
 repository, coordinated via published artifacts (npm packages, pub packages,
 API specs).
 

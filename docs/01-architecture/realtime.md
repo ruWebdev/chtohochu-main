@@ -77,7 +77,7 @@ Public channels (`public-`) are NOT used for application data. All application e
 
 ### 4.2 Channel naming conventions
 
-Channels are named by entity scope, not by feature module. See `docs/05-realtime/events.md` for the full convention.
+Channels are named by entity scope, not by feature module. See `docs/20-backend/realtime-events.md` for the full convention.
 
 ```text
 private-user.{userId}                 # personal notifications, friend events
@@ -222,7 +222,7 @@ The `since` cursor is the highest revision the client has seen for that entity s
 
 ### 8.2 What reconciliation is NOT
 
-- It is NOT a sync engine. It does not push local mutations; that is the sync queue (see `docs/07-flutter/offline-first.md`).
+- It is NOT a sync engine. It does not push local mutations; that is the sync queue (see `docs/30-client/offline-first.md`).
 - It is NOT a replacement for the sync queue. Reconnect reconciliation reads server state; the sync queue writes pending local mutations.
 - It is NOT a second source of truth. The result of reconciliation is that Drift matches PostgreSQL for the scopes fetched.
 
@@ -275,7 +275,7 @@ Repositories expose a single `applyRealtimeEvent` entry point. The realtime clie
 The backend is responsible for:
 
 1. Dispatching broadcast events only after a committed transaction.
-2. Filling the full event envelope (see `docs/05-realtime/events.md`).
+2. Filling the full event envelope (see `docs/20-backend/realtime-events.md`).
 3. Enforcing channel authorization on subscribe and on every delivery path.
 4. Supporting delta reads (`?since=<revision>`) for reconnect reconciliation.
 5. Ensuring events are idempotent to re-deliver (clients deduplicate, but the server should not fabricate distinct `event_id`s for the same logical change).

@@ -1,7 +1,7 @@
 # User Web (Flutter Web)
 
 > **Status:** Authoritative architecture document for the authenticated user web application.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Purpose
 
@@ -220,13 +220,13 @@ final router = GoRouter(
 
 ### MUST NOT
 
-* Import from `public-web/`, `seller/`, or `admin/` codebases (they are separate Nuxt apps).
+* Import from `apps/public-web/`, `apps/seller/`, or `apps/admin/` codebases (they are separate Nuxt apps).
 * Contain seller dashboard or admin backoffice functionality.
 * Bypass the repository layer or instantiate Dio directly in presentation.
 
 ### MUST
 
-* Share the mobile codebase (`mobile/lib/`).
+* Share the mobile codebase (`apps/client/lib/`).
 * Use the same API contract (`/api/v1/`) as mobile.
 * Use the same realtime (Reverb) contract as mobile.
 * Maintain the same offline/sync architecture where applicable.

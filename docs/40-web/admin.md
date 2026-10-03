@@ -1,7 +1,7 @@
 # Admin / Backoffice (Nuxt 4)
 
 > **Status:** Authoritative architecture document for the admin/backoffice application.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Purpose
 
@@ -81,7 +81,7 @@ The admin backoffice is the highest-privilege application in the system. It has 
 ## 5. Application Structure
 
 ```text
-admin/
+apps/admin/
 ├── nuxt.config.ts
 ├── package.json
 ├── app.vue

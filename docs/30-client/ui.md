@@ -259,7 +259,7 @@ Rules:
 - Placeholders use ICU message syntax (`{name}`, plurals).
 - Do not concatenate localized fragments to form sentences — different locales reorder words. Use a single message with placeholders.
 - Locale selection: user preference (SharedPreferences) → device locale → fallback (ru).
-- Notification text is localized server-side (see `docs/06-notifications/architecture.md`); the client renders the provided text for FCM banners and uses `AppLocalizations` for in-app UI.
+- Notification text is localized server-side (see `docs/20-backend/notifications.md`); the client renders the provided text for FCM banners and uses `AppLocalizations` for in-app UI.
 
 ### 9.3 Non-translatable content
 

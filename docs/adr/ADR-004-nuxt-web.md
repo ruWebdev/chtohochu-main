@@ -34,10 +34,10 @@ the cabinets.
 Use **Nuxt 4** with **Vue 3** and **TypeScript** for all three web apps, each
 configured for its rendering needs:
 
-- `apps/web-public/` — **SSR** (or hybrid/SSG where pages are static) for SEO
+- `apps/public-web/` — **SSR** (or hybrid/SSG where pages are static) for SEO
   and fast first paint on public content.
-- `apps/web-seller/` — **SPA** mode, fully client-rendered behind auth.
-- `apps/web-admin/` — **SPA** mode, fully client-rendered behind auth.
+- `apps/seller/` — **SPA** mode, fully client-rendered behind auth.
+- `apps/admin/` — **SPA** mode, fully client-rendered behind auth.
 
 Shared stack across all three (per AGENTS.md §35):
 

@@ -168,7 +168,7 @@ Rules:
 - Use foreign keys with `ON DELETE CASCADE` where the child has no meaning without the parent (e.g. items when a list is deleted).
 - Use unique constraints where the server enforces uniqueness (e.g. `(list_id, name)` if the server does).
 - Index foreign-key columns and frequently-filtered columns (`list_id`, `wishlist_id`, `user_id`).
-- Revisions are per-entity integers; the local DB stores the last-known server revision to support conflict detection (see `docs/07-flutter/offline-first.md`).
+- Revisions are per-entity integers; the local DB stores the last-known server revision to support conflict detection (see `docs/30-client/offline-first.md`).
 
 ---
 

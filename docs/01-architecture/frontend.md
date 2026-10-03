@@ -11,7 +11,7 @@ This document covers the frontend architecture across both ecosystems: the Flutt
 Flutter uses **feature-first architecture**. Each feature is a self-contained module with its own data, domain (optional), and presentation layers. Cross-feature infrastructure lives in `core/`. Shared UI components live in `shared/ui/`.
 
 ```
-mobile/lib/
+apps/client/lib/
 
 ├── app/                           # App shell
 │   ├── app.dart                   # MaterialApp configuration
@@ -77,7 +77,7 @@ Repository
 Data sources (remote/local)
 ```
 
-> **Note:** The prototype used BLoC + GetIt — this is disposable prototype code, not the target architecture. Riverpod 3 is the mandated state management and DI system (per AGENTS.md). See `docs/decisions/` for the ADR.
+> **Note:** The prototype used BLoC + GetIt — this is disposable prototype code, not the target architecture. Riverpod 3 is the mandated state management and DI system (per AGENTS.md). See `docs/adr/` for the ADR.
 
 #### 2.2 Data layer
 

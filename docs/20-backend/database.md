@@ -173,7 +173,7 @@ Backend schema is managed by Laravel migrations in `backend/api/database/migrati
 ### 5.3 Drift migrations
 
 Mobile schema is managed by Drift's migration system in
-`mobile/lib/core/database/migrations/`. Drift schema changes are versioned independently of
+`apps/client/lib/core/database/migrations/`. Drift schema changes are versioned independently of
 Laravel migrations because the mobile client ships on its own schedule and must tolerate
 older server schemas.
 

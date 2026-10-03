@@ -257,11 +257,18 @@ Push / PR
 
 ```text
 1. Bump version number (pubspec.yaml + build.gradle)
-2. Build signed APK/IPA in CI
+2. Build signed AAB/IPA in CI (Android: upload keystore via key.properties — see ADR-013)
 3. Upload to Google Play Console (internal track → production)
 4. Upload to App Store Connect (TestFlight → App Store)
 5. Submit for store review
 ```
+
+Android release bundles are signed with the upload keystore
+(`apps/client/android/app/chtohochu-upload.jks`, alias `chtohochu`) configured
+through `apps/client/android/key.properties`. Google Play App Signing re-signs
+delivered APKs with its own key; the upload key only authenticates uploaded
+bundles. The keystore and `key.properties` are git-ignored and must be provided
+to CI via secrets. See ADR-013 for the full signing scheme.
 
 ### 4.6 Zero-downtime deployments
 

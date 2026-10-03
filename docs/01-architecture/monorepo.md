@@ -99,18 +99,14 @@ ChtoHochu/
 │   └── nginx/                     # Nginx/Traefik configuration
 │
 ├── docs/                          # All project documentation
-│   ├── 00-product/                # Product vision, scope, terminology
-│   ├── 01-architecture/           # Architecture overview, boundaries
-│   ├── 02-authentication/         # Auth flows and contracts
-│   ├── 03-api/                    # API contracts and conventions
-│   ├── 04-database/               # Schema and migration docs
-│   ├── 05-realtime/               # WebSocket event contracts
-│   ├── 06-notifications/          # Push and in-app notification docs
-│   ├── 07-flutter/                # Flutter-specific architecture
-│   ├── 08-web/                    # Web-specific architecture
-│   ├── 09-security/               # Security policies
+│   ├── 00-project/                # Product vision, scope, terminology
+│   ├── 01-architecture/           # Architecture overview, boundaries, auth, security
 │   ├── 10-development/            # Dev setup, CI/CD, conventions
-│   └── decisions/                 # Architecture Decision Records (ADRs)
+│   ├── 20-backend/                # API, database, realtime, notifications
+│   ├── 30-client/                 # Flutter architecture, state, offline, UI
+│   ├── 40-web/                    # Public-web, seller, admin, user-web
+│   ├── 50-infrastructure/         # Local development, deployment
+│   └── adr/                       # Architecture Decision Records (ADRs)
 │
 ├── AGENTS.md                      # Engineering contract (authoritative)
 └── README.md                      # Project overview
@@ -244,18 +240,14 @@ Documentation is organized in numbered directories by domain, not by app:
 
 | Directory | Content |
 |-----------|---------|
-| `00-product/` | Product vision, terminology, scope, screen inventory |
-| `01-architecture/` | System overview, monorepo, boundaries, frontend, backend |
-| `02-authentication/` | Auth flows, token management, OAuth |
-| `03-api/` | API contracts, conventions, OpenAPI |
-| `04-database/` | Schema design, migration policies |
-| `05-realtime/` | WebSocket event contracts, channel authorization |
-| `06-notifications/` | Push, in-app, email notification docs |
-| `07-flutter/` | Flutter-specific patterns, sync, offline |
-| `08-web/` | Nuxt-specific patterns, SSR, cabinet |
-| `09-security/` | Security policies, threat models |
+| `00-project/` | Product vision, terminology, scope, screen inventory |
+| `01-architecture/` | System overview, monorepo, boundaries, frontend, backend, auth, security |
 | `10-development/` | Dev setup, CI/CD, coding conventions |
-| `decisions/` | Architecture Decision Records (ADRs) |
+| `20-backend/` | API contracts, database, realtime, notifications, OAuth |
+| `30-client/` | Flutter architecture, state management, offline, UI |
+| `40-web/` | Public-web, seller, admin, user-web, web architecture |
+| `50-infrastructure/` | Local development, deployment |
+| `adr/` | Architecture Decision Records (ADRs) |
 
 > **Rule:** Documentation is organized by concern, not by app. A feature that spans Flutter, web, and backend is documented in the relevant domain directory, not split across app directories.
 

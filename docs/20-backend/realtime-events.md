@@ -50,7 +50,7 @@ A `payload` is one of:
 { "refetch": "shopping_list_item", "id": "f3c1a2e4-..." }
 ```
 
-The client treats a refetch instruction as a trigger to `GET /api/v1/<entity>/{id}` and reconcile. Refetch instructions MUST NOT be the only way to learn about a change; they are an optimization for payload size, and reconnect reconciliation (see `docs/05-realtime/architecture.md` §8) closes any gap if a refetch fails.
+The client treats a refetch instruction as a trigger to `GET /api/v1/<entity>/{id}` and reconcile. Refetch instructions MUST NOT be the only way to learn about a change; they are an optimization for payload size, and reconnect reconciliation (see `docs/20-backend/realtime.md` §8) closes any gap if a refetch fails.
 
 ### 2.3 Field rules
 
@@ -137,7 +137,7 @@ Notification events drive the in-app notification center and badges.
 | `notification.read` | `notification` | `{ "read_at": "..." }` | `private-user.{userId}` |
 | `notification.deleted` | `notification` | `{ "deleted": true }` | `private-user.{userId}` |
 
-A `notification.created` realtime event and an FCM push notification are independent delivery paths for the same logical notification. See `docs/06-notifications/architecture.md`. The realtime event is the in-app delivery; the push is the out-of-app nudge. Either may arrive without the other.
+A `notification.created` realtime event and an FCM push notification are independent delivery paths for the same logical notification. See `docs/20-backend/notifications.md`. The realtime event is the in-app delivery; the push is the out-of-app nudge. Either may arrive without the other.
 
 ---
 

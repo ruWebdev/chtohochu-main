@@ -45,7 +45,7 @@ Each application is packaged as a Docker image.
 ### 2.2 Docker Compose (production)
 
 ```yaml
-# docker/docker-compose.prod.yml
+# infrastructure/docker/docker-compose.prod.yml
 services:
   backend:
     image: chtohochu/backend:${TAG}
@@ -165,7 +165,7 @@ volumes:
 ### 2.3 Image build
 
 ```dockerfile
-# backend/Dockerfile
+# backend/api/Dockerfile
 FROM php:8.4-fpm-alpine AS base
 
 RUN apk add --no-cache \
@@ -335,7 +335,7 @@ server {
 ### 3.2 Traefik (alternative)
 
 ```yaml
-# docker/traefik.yml
+# infrastructure/docker/traefik.yml
 traefik:
   image: traefik:v3
   command:

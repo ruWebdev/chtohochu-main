@@ -234,6 +234,8 @@ Domain → (nothing framework-specific)
 * Material 3 with centralized design system (`app/theme/`).
 * All user-facing strings MUST be localized.
 * Generated code MUST NOT be edited manually.
+* Android `applicationId` is `com.nd.chtohochu` (matches the Google Play package). The Gradle `namespace` (`ru.nd.chtohochu`) is separate and MUST NOT be treated as the store identity.
+* Release builds MUST be signed with the dedicated upload keystore (`apps/client/android/app/chtohochu-upload.jks`, alias `chtohochu`) via `key.properties`. NEVER sign `release` with the debug keystore. Keystore and `key.properties` are git-ignored; back them up outside the repository. See ADR-013.
 * Do NOT introduce `flutter_bloc`, `equatable`, `get_it`, or `injectable` without an approved ADR.
 * Do NOT perform a mechanical BLoC → Riverpod migration. The prototype is disposable.
 

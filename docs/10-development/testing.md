@@ -1,7 +1,7 @@
 # Testing Strategy
 
 > **Status:** Authoritative testing strategy document.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Principles
 

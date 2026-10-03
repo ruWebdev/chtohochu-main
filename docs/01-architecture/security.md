@@ -2,7 +2,7 @@
 
 > **Status:** Authoritative security architecture document.
 > All security rules are **backend-enforced**. Client-side checks are UX only and must never be the sole enforcement mechanism.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Core Principle
 

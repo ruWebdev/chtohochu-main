@@ -12,7 +12,7 @@ The prototype was a Flutter + Laravel application with business features (wishli
 
 ### Flutter prototype (`/home/nikolay/projects/old/chtohochu/flutter-frontend/`)
 
-All `presentation/pages/*.dart` screens under `lib/features/` were inspected and catalogued in `docs/00-product/screen-inventory.md`. The inspection covered:
+All `presentation/pages/*.dart` screens under `lib/features/` were inspected and catalogued in `docs/00-project/screen-inventory.md`. The inspection covered:
 
 - **Auth screens:** SignInPage, SignUpPage, OAuthPage (VK/Yandex)
 - **Onboarding:** OnboardingPage (pre-auth), PostAuthOnboardingPage (3-step wizard)
@@ -51,10 +51,10 @@ The prototype implementation used BLoC + GetIt + Equatable, conflicting with the
 
 The following product/UX knowledge was preserved as documentation, NOT as code:
 
-1. **Screen inventory** (`docs/00-product/screen-inventory.md`) — every prototype screen, its purpose, navigation, states, UI elements, and product behaviour.
-2. **Product vision** (`docs/00-product/vision.md`) — what the product is, value proposition, target audience, primary use cases.
-3. **Domain terminology** (`docs/00-product/terminology.md`) — glossary of 18 domain terms.
-4. **Product scope** (`docs/00-product/product-scope.md`) — in-scope and out-of-scope domains.
+1. **Screen inventory** (`docs/00-project/screen-inventory.md`) — every prototype screen, its purpose, navigation, states, UI elements, and product behaviour.
+2. **Product vision** (`docs/00-project/vision.md`) — what the product is, value proposition, target audience, primary use cases.
+3. **Domain terminology** (`docs/00-project/terminology.md`) — glossary of 18 domain terms.
+4. **Product scope** (`docs/00-project/product-scope.md`) — in-scope and out-of-scope domains.
 5. **UX patterns** — documented in the screen inventory:
    - SharePreviewPage as unified deep-link entry
    - Role-based permission gating
@@ -208,18 +208,14 @@ The following placeholder screens were retained as navigation structure:
 ├── backend/
 │   └── api/                     # Laravel (auth-only)
 ├── docs/                        # Architecture documentation
-│   ├── 00-product/              # Vision, terminology, scope, screen inventory
-│   ├── 01-architecture/         # Overview, monorepo, boundaries, frontend, backend
-│   ├── 02-authentication/       # Auth, authorization, OAuth
-│   ├── 03-api/                  # Conventions, errors, versioning
-│   ├── 04-database/             # Architecture, conventions
-│   ├── 05-realtime/             # Architecture, events
-│   ├── 06-notifications/        # Architecture
-│   ├── 07-flutter/              # Architecture, state-management, local-data, offline-first, ui
-│   ├── 08-web/                  # Public-web, user-web, seller, admin
-│   ├── 09-security/             # Architecture
+│   ├── 00-project/              # Vision, terminology, scope, screen inventory
+│   ├── 01-architecture/         # Overview, monorepo, boundaries, frontend, backend, auth, security
 │   ├── 10-development/          # Setup, workflow, testing, deployment, prototype-reset
-│   └── decisions/               # ADR-001 through ADR-006
+│   ├── 20-backend/              # API, database, realtime, notifications, OAuth
+│   ├── 30-client/               # Flutter architecture, state-management, local-storage, offline-first, ui
+│   ├── 40-web/                  # Public-web, user-web, seller, admin
+│   ├── 50-infrastructure/       # Local development, deployment
+│   └── adr/                     # ADR-001 through ADR-013
 ├── infrastructure/              # (README pending)
 └── packages/                    # (README pending)
 ```

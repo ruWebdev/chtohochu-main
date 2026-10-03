@@ -252,7 +252,7 @@ Invalid tokens (FCM responds with unregistered) are pruned by the worker after a
 
 - The in-app notification center reads from the `notifications` table.
 - `read_at` is set when the user opens the notification (or marks all read).
-- The unread count is exposed via `GET /api/v1/notifications/unread-count` and updated in realtime via `notification.read` / `notification.created` events (see `docs/05-realtime/events.md`).
+- The unread count is exposed via `GET /api/v1/notifications/unread-count` and updated in realtime via `notification.read` / `notification.created` events (see `docs/20-backend/realtime-events.md`).
 - The app badge count mirrors the unread count for the current user. Badge updates are best-effort; the source of truth is the backend `notifications` table.
 
 ---
@@ -268,7 +268,7 @@ Email templates are localized per-recipient.
 ## 11. What Notifications Are Not
 
 - Not a sync mechanism. Lost notifications do not corrupt state.
-- Not a realtime channel. Realtime WebSocket events are a separate transport (see `docs/05-realtime/`). A `notification.created` realtime event may accompany a notification, but the notification system does not depend on the WebSocket.
+- Not a realtime channel. Realtime WebSocket events are a separate transport (see `docs/20-backend/`). A `notification.created` realtime event may accompany a notification, but the notification system does not depend on the WebSocket.
 - Not a security boundary. Notifications are informational; authorization is enforced when the user opens the referenced entity.
 - Not a place to duplicate domain state. Notifications reference entities by ID; they do not store authoritative copies.
 

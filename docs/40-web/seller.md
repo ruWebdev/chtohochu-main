@@ -1,7 +1,7 @@
 # Seller Cabinet (Nuxt 4)
 
 > **Status:** Authoritative architecture document for the seller cabinet application.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Purpose
 
@@ -59,7 +59,7 @@ export default defineNuxtConfig({
 ## 4. Application Structure
 
 ```text
-seller/
+apps/seller/
 ├── nuxt.config.ts
 ├── package.json
 ├── app.vue
@@ -261,7 +261,7 @@ export default defineNuxtRouteMiddleware((to) => {
 ### MUST NOT
 
 * Contain admin functionality (user management, platform moderation, seller approval, audit logs).
-* Import from `public-web/`, `admin/`, or `client/` (Flutter) codebases.
+* Import from `apps/public-web/`, `apps/admin/`, or `apps/client/` (Flutter) codebases.
 * Perform authorization decisions client-side — all enforcement is backend.
 * Trust client-side role checks as security.
 * Access user-facing features (wishlists, friends, shopping lists) — those belong to the user web.

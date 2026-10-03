@@ -230,7 +230,7 @@ ShoppingListRepository shoppingListRepository(ShoppingListRepositoryRef ref) {
 
 - Expose abstract types from providers when the consumer should not know the implementation (`ShoppingListRepository`, not `ShoppingListRepositoryImpl`).
 - Use `Provider` for stateless services (Dio, `AppDatabase`, repositories, APIs).
-- Use `NotifierProvider` / `AsyncNotifierProvider` / `StreamNotifierProvider` for stateful components (see `docs/07-flutter/state-management.md`).
+- Use `NotifierProvider` / `AsyncNotifierProvider` / `StreamNotifierProvider` for stateful components (see `docs/30-client/state-management.md`).
 - Do not store business state in a `Provider`. Business state lives in notifiers and Drift, not in a plain provider.
 - Do not scatter provider lookups inside domain logic. Domain classes receive dependencies via constructors; providers construct them.
 
@@ -255,7 +255,7 @@ Dio (single configured instance from a provider)
 - Retrofit generates the implementation (`*.g.dart`). Generated code is not edited.
 - Raw Dio/Retrofit exceptions MUST NOT reach presentation. Repositories translate them into domain `Failure` types (see `core/errors/`).
 
-See `docs/03-api/` for the REST contract and `docs/07-flutter/offline-first.md` for idempotency keys.
+See `docs/20-backend/` for the REST contract and `docs/30-client/offline-first.md` for idempotency keys.
 
 ---
 
@@ -284,7 +284,7 @@ The page reads its providers via `ref.watch`; providers are autoDisposed when th
 
 ## 9. Local Persistence (Drift)
 
-Drift is the relational local persistence layer for offline-capable domains. See `docs/07-flutter/local-data.md` for the full treatment.
+Drift is the relational local persistence layer for offline-capable domains. See `docs/30-client/local-storage.md` for the full treatment.
 
 ```text
 core/database/
@@ -302,7 +302,7 @@ core/database/
 
 ## 10. Realtime
 
-The realtime client lives in `core/realtime/`. It manages the WebSocket connection, subscriptions, dedup, and routing of events to repositories. See `docs/05-realtime/architecture.md`.
+The realtime client lives in `core/realtime/`. It manages the WebSocket connection, subscriptions, dedup, and routing of events to repositories. See `docs/20-backend/realtime.md`.
 
 - Notifiers do not subscribe to WebSocket channels directly.
 - Repositories expose `applyRealtimeEvent(event)`; the realtime client routes by `entity_type` to the right repository.
@@ -312,7 +312,7 @@ The realtime client lives in `core/realtime/`. It manages the WebSocket connecti
 
 ## 11. Sync
 
-The sync queue and worker live in `core/sync/`. They handle pending mutations, retries, and conflict reconciliation. See `docs/07-flutter/offline-first.md`.
+The sync queue and worker live in `core/sync/`. They handle pending mutations, retries, and conflict reconciliation. See `docs/30-client/offline-first.md`.
 
 - Notifiers enqueue mutations via repositories; repositories write to Drift + sync queue in a single local transaction.
 - The sync worker drains the queue against the REST API with idempotency keys.
@@ -419,9 +419,9 @@ See `docs/10-development/testing.md`.
 
 ## 17. Related Documents
 
-- `docs/07-flutter/state-management.md` — Riverpod provider design, state types, testing.
-- `docs/07-flutter/local-data.md` — Drift, secure storage.
-- `docs/07-flutter/offline-first.md` — sync queue, operation_id, conflict resolution.
-- `docs/07-flutter/ui.md` — Material 3, design system, localization.
-- `docs/05-realtime/` — realtime transport and event contract.
-- `docs/03-api/` — REST contract consumed by Retrofit.
+- `docs/30-client/state-management.md` — Riverpod provider design, state types, testing.
+- `docs/30-client/local-storage.md` — Drift, secure storage.
+- `docs/30-client/offline-first.md` — sync queue, operation_id, conflict resolution.
+- `docs/30-client/ui.md` — Material 3, design system, localization.
+- `docs/20-backend/` — realtime transport and event contract.
+- `docs/20-backend/` — REST contract consumed by Retrofit.

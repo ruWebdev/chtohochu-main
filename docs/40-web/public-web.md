@@ -1,7 +1,7 @@
 # Public Web (Nuxt 4)
 
 > **Status:** Authoritative architecture document for the public web application.
-> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/decisions/`.
+> Conflicts with `AGENTS.md` must be resolved via an ADR in `docs/adr/`.
 
 ## 1. Purpose
 
@@ -125,7 +125,7 @@ The public web is a **distinct application context**. It must not become an auth
 
 ### MUST NOT
 
-* Import from `client/` (Flutter), `seller/`, or `admin/` codebases.
+* Import from `apps/client/` (Flutter), `apps/seller/`, or `apps/admin/` codebases.
 * Store or manage authentication tokens.
 * Render authenticated user-cabinet functionality.
 * Implement seller or admin features.

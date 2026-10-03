@@ -242,7 +242,7 @@ Conflicts block further mutations on that entity until resolved. The UI presents
 
 ## 8. Reconnect Reconciliation
 
-Reconnect reconciliation closes gaps in incoming server state after a WebSocket disconnect. It is separate from the sync queue (which handles outgoing mutations). See `docs/05-realtime/architecture.md` §8.
+Reconnect reconciliation closes gaps in incoming server state after a WebSocket disconnect. It is separate from the sync queue (which handles outgoing mutations). See `docs/20-backend/realtime.md` §8.
 
 ```text
 WebSocket reconnects
@@ -300,7 +300,7 @@ A mutation must survive:
 - [x] retry → idempotency key prevents duplicate effects.
 - [x] WebSocket disconnect → sync queue is independent of WebSocket; REST mutations proceed.
 - [x] conflict → revision detection + per-entity policy + user resolution.
-- [x] duplicate realtime event → dedup + revision guard (see `docs/05-realtime/`).
+- [x] duplicate realtime event → dedup + revision guard (see `docs/20-backend/`).
 
 ---
 

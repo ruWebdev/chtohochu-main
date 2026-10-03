@@ -36,19 +36,13 @@ dependencies:
   drift_flutter: ^0.3.0
 
   # UI
-  cupertino_icons: ^1.0.8
   google_fonts: ^6.1.0
-  flutter_feather_icons:
-    git:
-      url: https://github.com/garylkz/flutter_feather_icons.git
-      ref: master
+  phosphoricons_flutter: ^1.0.0
 
   # Utils
-  url_launcher: ^6.3.1
-
-  # OAuth WebView
-  webview_flutter: ^4.10.0
-  modal_bottom_sheet: ^3.0.0
+  uuid: ^4.6.0
+  sqlite3_flutter_libs: ^0.6.0+eol
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +58,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
 
   assets:
      - assets/fon.jpg

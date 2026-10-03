@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Cleartext HTTP только в debug-сборках: локальный dev API
+         (http://…:8000) без TLS. Release собирается без этого манифеста. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

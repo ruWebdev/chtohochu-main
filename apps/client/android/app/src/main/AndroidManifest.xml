@@ -31,7 +31,9 @@
             android:name="flutterEmbedding"
             android:value="2" />
 </application>
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Обязательно в main: debug/profile-манифесты в release-сборку
+         не попадают — без этого release APK вообще не имеет сети. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
          https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.

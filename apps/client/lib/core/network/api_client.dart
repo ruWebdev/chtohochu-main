@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env_config.dart';
 import '../constants/api_constants.dart';
+import '../services/secure_storage_service.dart';
 
 /// Конфигурация Dio-клиента для API.
 ///
@@ -10,6 +11,7 @@ import '../constants/api_constants.dart';
 /// используется этот провайдер.
 final apiClientProvider = Provider<Dio>((ref) {
   final env = EnvConfig.fromEnvironment();
+  final secureStorage = ref.read(secureStorageServiceProvider);
 
   final dio = Dio(
     BaseOptions(
@@ -21,15 +23,20 @@ final apiClientProvider = Provider<Dio>((ref) {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
+      // 4xx/5xx — не исключения уровня transport; SyncEngine и
+      // репозитории разбирают status code сами через DioException.
     ),
   );
 
-  // Заглушка интерсептора авторизации.
-  // Полная логика будет добавлена в фазе аутентификации.
+  // Bearer-токен из secure storage на каждый запрос.
   dio.interceptors.add(
     InterceptorsWrapper(
-      onRequest: (options, handler) {
-        // TODO(auth): вставлять access-токен из secure storage.
+      onRequest: (options, handler) async {
+        final token = await secureStorage.readAccessToken();
+        if (token != null) {
+          options.headers[ApiConstants.authorizationHeader] =
+              '${ApiConstants.bearerPrefix}$token';
+        }
         handler.next(options);
       },
     ),

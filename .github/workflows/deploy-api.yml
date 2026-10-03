@@ -1,0 +1,100 @@
+# =============================================================================
+# ЧтоХочу — Build & deploy the Laravel API to the production server
+# =============================================================================
+# Build:   GHCR image ghcr.io/ruwebdev/chtohochu-api:<sha> (+ :latest)
+# Deploy:  SSH → /srv/chtohochu → docker compose pull && up -d
+#          The compose project `chtohochu-api` is fully isolated from other
+#          stacks on the host (own network/volumes/labels).
+#
+# Required configuration (repo Settings → Secrets and variables → Actions):
+#   secrets.DEPLOY_SSH_KEY   — private key for the deploy user
+#   secrets.SSH_KNOWN_HOSTS  — `ssh-keyscan 185.105.109.61` output
+#   vars.DEPLOY_HOST         — 185.105.109.61
+#   vars.DEPLOY_USER         — deploy
+# =============================================================================
+
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/**'
+      - 'infrastructure/docker/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/ruwebdev/chtohochu-api
+
+jobs:
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      TAG: ${{ github.sha }}
+    steps:
+      - name: Deploy stack on server
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /srv/chtohochu \
+             && TAG=$TAG docker compose pull \
+             && TAG=$TAG docker compose up -d \
+             && docker compose ps"
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://api.chtohochu.ru/up || true)
+            if [ "$code" = "200" ]; then
+              echo "API healthy (attempt $i)"
+              exit 0
+            fi
+            echo "attempt $i: HTTP $code, retrying..."
+            sleep 10
+          done
+          echo "Health check failed"
+          exit 1

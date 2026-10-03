@@ -1,0 +1,241 @@
+# =============================================================================
+# ЧтоХочу — Production Docker Compose (API only)
+# =============================================================================
+# Target host: 185.105.109.61 (2 vCPU / 3.8 GB RAM, shared with anonapp).
+# Deploy location on server: /srv/chtohochu/compose.yaml + .env
+#
+# One image (ghcr.io/ruwebdev/chtohochu-api) serves app, queue, scheduler and
+# reverb via different commands — same pattern as the anonapp stack.
+#
+# Traefik is EXTERNAL (already running on the host, docker network `proxy`,
+# certresolver `letsencrypt`, entrypoint `websecure`). No ports are published.
+#
+# Usage on server:
+#   docker compose pull
+#   docker compose up -d
+# =============================================================================
+
+name: chtohochu-api
+
+networks:
+  proxy:
+    external: true
+  internal:
+    name: chtohochu_internal
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: chtohochu_postgres_data
+  redis_data:
+    name: chtohochu_redis_data
+  storage_data:
+    name: chtohochu_storage_data
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-laravel-env: &laravel-env
+  APP_ENV: production
+  APP_DEBUG: "false"
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  CACHE_STORE: redis
+  BROADCAST_CONNECTION: reverb
+  REVERB_SERVER_HOST: reverb
+  REVERB_SERVER_PORT: "8080"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — primary database (internal network only)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+      - -c
+      - wal_buffers=4MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - checkpoint_completion_target=0.9
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — cache, queues, Reverb pub/sub (internal network only)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 192m
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --appendonly
+      - "yes"
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # app — Laravel API (Nginx + PHP-FPM), runs migrations on start
+  # ---------------------------------------------------------------------------
+  app:
+    image: ghcr.io/ruwebdev/chtohochu-api:${TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 384m
+    env_file: .env
+    environment:
+      <<: *laravel-env
+      RUN_MIGRATIONS: "1"
+    volumes:
+      - storage_data:/var/www/html/storage
+    networks:
+      - proxy
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.chtohochu-api.rule=Host(`api.chtohochu.ru`)
+      - traefik.http.routers.chtohochu-api.entrypoints=websecure
+      - traefik.http.routers.chtohochu-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.chtohochu-api.service=chtohochu-api
+      - traefik.http.routers.chtohochu-api.priority=50
+      - traefik.http.services.chtohochu-api.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # queue — Laravel queue worker
+  # ---------------------------------------------------------------------------
+  queue:
+    image: ghcr.io/ruwebdev/chtohochu-api:${TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 192m
+    command: php artisan queue:work --sleep=3 --tries=3 --timeout=90 --queue=high,default
+    env_file: .env
+    environment:
+      <<: *laravel-env
+    volumes:
+      - storage_data:/var/www/html/storage
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # scheduler — Laravel scheduler loop
+  # ---------------------------------------------------------------------------
+  scheduler:
+    image: ghcr.io/ruwebdev/chtohochu-api:${TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 96m
+    command: php artisan schedule:work
+    env_file: .env
+    environment:
+      <<: *laravel-env
+    volumes:
+      - storage_data:/var/www/html/storage
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # reverb — Laravel Reverb WebSocket server
+  # Traefik routes api.chtohochu.ru/app/* here (higher priority than API).
+  # ---------------------------------------------------------------------------
+  reverb:
+    image: ghcr.io/ruwebdev/chtohochu-api:${TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 128m
+    command: php artisan reverb:start --host=0.0.0.0 --port=8080
+    env_file: .env
+    environment:
+      <<: *laravel-env
+    networks:
+      - proxy
+      - internal
+    depends_on:
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.chtohochu-ws.rule=Host(`api.chtohochu.ru`) && PathPrefix(`/app`)
+      - traefik.http.routers.chtohochu-ws.entrypoints=websecure
+      - traefik.http.routers.chtohochu-ws.tls.certresolver=letsencrypt
+      - traefik.http.routers.chtohochu-ws.service=chtohochu-ws
+      - traefik.http.routers.chtohochu-ws.priority=100
+      - traefik.http.services.chtohochu-ws.loadbalancer.server.port=8080
+    healthcheck:
+      disable: true
+    logging: *default-logging

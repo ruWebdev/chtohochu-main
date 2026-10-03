@@ -34,9 +34,9 @@ services:
     image: traefik:v3.2
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
       - "443:443"
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro

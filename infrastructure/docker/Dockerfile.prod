@@ -1,0 +1,95 @@
+# =============================================================================
+# ЧтоХочу — Laravel API production image
+# =============================================================================
+# Base: PHP 8.4 FPM Alpine (per docs/50-infrastructure/deployment.md §2.1)
+# Single image reused for: app (nginx+php-fpm), queue, scheduler, reverb.
+# Built by CI and pushed to ghcr.io/ruwebdev/chtohochu-api:<tag>.
+#
+# Build context MUST be the repository root:
+#   docker build -f infrastructure/docker/Dockerfile.prod -t <image> .
+# =============================================================================
+
+FROM php:8.4-fpm-alpine
+
+# ---------------------------------------------------------------------------
+# System dependencies + PHP extensions
+# ---------------------------------------------------------------------------
+RUN apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        postgresql-dev \
+        libpng-dev \
+        libjpeg-turbo-dev \
+        freetype-dev \
+        libzip-dev \
+        oniguruma-dev \
+        icu-dev \
+    && apk add --no-cache \
+        nginx \
+        curl \
+        postgresql-libs \
+        libpng \
+        libjpeg-turbo \
+        freetype \
+        libzip \
+        icu-libs \
+        libintl \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_pgsql \
+        pgsql \
+        bcmath \
+        gd \
+        zip \
+        intl \
+        opcache \
+        pcntl \
+    && pecl install redis && docker-php-ext-enable redis \
+    && apk del .build-deps \
+    && rm -rf /var/cache/apk/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+# ---------------------------------------------------------------------------
+# Application code + production dependencies
+# ---------------------------------------------------------------------------
+COPY backend/api /var/www/html
+
+RUN composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist \
+    && composer clear-cache
+
+# ---------------------------------------------------------------------------
+# Production OPcache (no timestamp revalidation — code is immutable per image)
+# ---------------------------------------------------------------------------
+RUN printf "[opcache]\n\
+opcache.enable=1\n\
+opcache.enable_cli=0\n\
+opcache.memory_consumption=128\n\
+opcache.interned_strings_buffer=16\n\
+opcache.max_accelerated_files=20000\n\
+opcache.validate_timestamps=0\n\
+" > /usr/local/etc/php/conf.d/opcache-recommended.ini
+
+# ---------------------------------------------------------------------------
+# Nginx + entrypoint
+# ---------------------------------------------------------------------------
+COPY infrastructure/docker/nginx.conf /etc/nginx/http.d/default.conf
+COPY infrastructure/docker/entrypoint.prod.sh /usr/local/bin/entrypoint.prod.sh
+RUN chmod +x /usr/local/bin/entrypoint.prod.sh
+
+# ---------------------------------------------------------------------------
+# Storage skeleton + permissions
+# ---------------------------------------------------------------------------
+RUN mkdir -p storage/logs storage/framework/cache/data storage/framework/sessions \
+        storage/framework/views storage/app/public storage/app/private bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+ENV APP_ENV=production \
+    APP_DEBUG=false
+
+EXPOSE 80
+
+ENTRYPOINT ["entrypoint.prod.sh"]
+CMD ["start"]

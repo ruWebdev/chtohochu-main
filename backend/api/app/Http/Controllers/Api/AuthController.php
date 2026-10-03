@@ -2,80 +2,101 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Actions\Auth\RegisterUserAction;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\LoginRequest;
-use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Requests\Api\LoginRequest;
+use App\Http\Requests\Api\RegisterRequest;
+use App\Http\Resources\UserResource;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
-    public function register(RegisterRequest $request, RegisterUserAction $action)
+    /**
+     * Регистрация: email/password (+optional name/username).
+     * Создаёт Sanctum token, отдаёт user + token. 201.
+     */
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $user = $action->execute($request->validated());
+        $user = DB::transaction(function () use ($request) {
+            $user = new User($request->only(['name', 'username', 'email']));
+            $user->password = $request->string('password')->toString();
+            $user->save();
 
-        $token = $user->createToken('auth')->plainTextToken;
+            return $user;
+        });
+
+        $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
-            'token' => $token,
+            'data' => [
+                'token' => $token,
+                'user' => (new UserResource($user))->toArray($request),
+            ],
         ], 201);
     }
 
-    public function login(LoginRequest $request)
+    /**
+     * Вход: проверка credentials, выдача Sanctum token. 200.
+     * Неверные credentials — 401 без раскрытия, существует ли email.
+     */
+    public function login(LoginRequest $request): JsonResponse
     {
-        $request->ensureIsNotRateLimited();
+        $user = User::where('email', $request->string('email')->toString())->first();
 
-        if (! Auth::attempt($request->only('email', 'password'))) {
-            return response()->json([
-                'message' => trans('auth.failed'),
-            ], 422);
+        if (! $user || ! Hash::check($request->string('password')->toString(), (string) $user->password)) {
+            return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
-        $user = $request->user();
-        $token = $user->createToken('auth')->plainTextToken;
+        $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
-            'token' => $token,
+            'data' => [
+                'token' => $token,
+                'user' => (new UserResource($user))->toArray($request),
+            ],
         ]);
     }
 
-    public function checkUsername(Request $request)
+    /**
+     * Проверка доступности username (регистрация на клиенте).
+     */
+    public function checkUsername(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'username' => ['required', 'string', 'min:6', 'max:20', 'regex:/^[a-z0-9_]+$/'],
+            'username' => [
+                'required',
+                'string',
+                'regex:/^[a-z0-9_.]{3,20}$/',
+                Rule::unique('users', 'username'),
+            ],
         ]);
-
-        $username = strtolower($validated['username']);
-
-        $exists = User::query()
-            ->where('username', $username)
-            ->exists();
 
         return response()->json([
-            'available' => ! $exists,
+            'data' => ['available' => true, 'username' => $validated['username']],
         ]);
     }
 
-    public function me(Request $request)
+    /**
+     * Отзыв текущего Sanctum token (не всех). 204.
+     */
+    public function logout(Request $request): JsonResponse
     {
-        return response()->json([
-            'user' => $request->user(),
-        ]);
+        $request->user()->currentAccessToken()?->delete();
+
+        return response()->json(null, 204);
     }
 
-    public function logout(Request $request)
+    /**
+     * Отзыв всех Sanctum tokens пользователя. 204.
+     */
+    public function logoutAll(Request $request): JsonResponse
     {
-        $request->user()?->currentAccessToken()?->delete();
-        return response()->json(['message' => __('auth.logged_out')]);
-    }
+        $request->user()->tokens()->delete();
 
-    public function logoutAll(Request $request)
-    {
-        $request->user()?->tokens()->delete();
-        return response()->json(['message' => __('auth.logged_out_all')]);
+        return response()->json(null, 204);
     }
 }

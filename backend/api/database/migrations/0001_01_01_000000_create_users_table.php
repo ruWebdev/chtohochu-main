@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -13,16 +14,22 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('name');
+            $table->string('name')->nullable();
             $table->string('username')->nullable()->unique();
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+            $table->string('password')->nullable();
+            $table->string('avatar_url')->nullable();
             $table->string('vk_id')->nullable()->unique();
             $table->string('yandex_id')->nullable()->unique();
             $table->rememberToken();
             $table->timestamps();
         });
+
+        // Формат username на уровне БД: ^[a-z0-9_.]{3,20}$
+        DB::statement(
+            "ALTER TABLE users ADD CONSTRAINT users_username_format CHECK (username ~ '^[a-z0-9_.]{3,20}$')"
+        );
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();

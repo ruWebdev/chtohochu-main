@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -35,7 +35,7 @@ class SocialAuthController extends Controller
 
         $providerId = $vkProfile['id'] ?? null;
         $email = $vkProfile['email'] ?? null;
-        $name = trim(($vkProfile['first_name'] ?? '') . ' ' . ($vkProfile['last_name'] ?? ''));
+        $name = trim(($vkProfile['first_name'] ?? '').' '.($vkProfile['last_name'] ?? ''));
         $vkDomain = $vkProfile['domain'] ?? null;
 
         if (! $providerId) {
@@ -50,7 +50,7 @@ class SocialAuthController extends Controller
 
         $user = User::query()
             ->where('vk_id', $providerId)
-            ->when($email, fn($q) => $q->orWhere('email', $email))
+            ->when($email, fn ($q) => $q->orWhere('email', $email))
             ->first();
 
         $user = DB::transaction(function () use ($user, $providerId, $email, $name, $vkDomain) {
@@ -58,7 +58,7 @@ class SocialAuthController extends Controller
                 $emailForCreate = $email;
 
                 if (! $emailForCreate) {
-                    $emailForCreate = 'vk_' . $providerId . '@vk.local';
+                    $emailForCreate = 'vk_'.$providerId.'@vk.local';
                 }
 
                 $username = $this->generateUniqueUsername($this->normalizeUsernameBase($vkDomain ?: $emailForCreate));
@@ -79,7 +79,7 @@ class SocialAuthController extends Controller
             ]))->save();
 
             if (! $user->username) {
-                $username = $this->generateUniqueUsername($this->normalizeUsernameBase($vkDomain ?: ($email ?: 'vk_' . $providerId)));
+                $username = $this->generateUniqueUsername($this->normalizeUsernameBase($vkDomain ?: ($email ?: 'vk_'.$providerId)));
                 $user->forceFill(['username' => $username])->save();
             }
 
@@ -108,7 +108,7 @@ class SocialAuthController extends Controller
         try {
             $socialUser = Socialite::driver('yandex')->userFromToken($accessToken);
         } catch (\Throwable $e) {
-            Log::error('Yandex Auth Failed: ' . $e->getMessage());
+            Log::error('Yandex Auth Failed: '.$e->getMessage());
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'Яндекс'])],
             ]);
@@ -127,7 +127,7 @@ class SocialAuthController extends Controller
 
         $user = User::query()
             ->where('yandex_id', $providerId)
-            ->when($email, fn($q) => $q->orWhere('email', $email))
+            ->when($email, fn ($q) => $q->orWhere('email', $email))
             ->first();
 
         $user = DB::transaction(function () use ($user, $providerId, $email, $name, $yandexLogin) {
@@ -135,7 +135,7 @@ class SocialAuthController extends Controller
                 $emailForCreate = $email;
 
                 if (! $emailForCreate) {
-                    $emailForCreate = 'yandex_' . $providerId . '@yandex.local';
+                    $emailForCreate = 'yandex_'.$providerId.'@yandex.local';
                 }
 
                 $usernameBase = $this->normalizeUsernameBase($yandexLogin ?: $emailForCreate);
@@ -157,7 +157,7 @@ class SocialAuthController extends Controller
             ]))->save();
 
             if (! $user->username) {
-                $usernameBase = $this->normalizeUsernameBase($yandexLogin ?: ($email ?: 'yandex_' . $providerId));
+                $usernameBase = $this->normalizeUsernameBase($yandexLogin ?: ($email ?: 'yandex_'.$providerId));
                 $username = $this->generateUniqueUsername($usernameBase);
                 $user->forceFill(['username' => $username])->save();
             }
@@ -231,7 +231,7 @@ class SocialAuthController extends Controller
         }
 
         if (! $name && isset($socialUser->user['first_name'])) {
-            $name = trim((string) $socialUser->user['first_name'] . ' ' . (string) ($socialUser->user['last_name'] ?? ''));
+            $name = trim((string) $socialUser->user['first_name'].' '.(string) ($socialUser->user['last_name'] ?? ''));
         }
 
         if (! $name) {
@@ -265,7 +265,7 @@ class SocialAuthController extends Controller
         }
 
         if (strlen($base) < 6) {
-            $base = $base . '_' . Str::lower(Str::random(6));
+            $base = $base.'_'.Str::lower(Str::random(6));
         }
 
         return substr($base, 0, 20);
@@ -280,9 +280,9 @@ class SocialAuthController extends Controller
 
         while (User::query()->where('username', $candidate)->exists()) {
             $suffix++;
-            $suffixStr = '_' . $suffix;
+            $suffixStr = '_'.$suffix;
             $maxBaseLength = 20 - strlen($suffixStr);
-            $candidate = substr($base, 0, max(1, $maxBaseLength)) . $suffixStr;
+            $candidate = substr($base, 0, max(1, $maxBaseLength)).$suffixStr;
         }
 
         return $candidate;

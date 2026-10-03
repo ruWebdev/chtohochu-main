@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Manager\SocialiteWasCalled;
+use SocialiteProviders\VKontakte\Provider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Регистрация OAuth-провайдеров для Socialite
         $this->app['events']->listen(function (SocialiteWasCalled $event) {
-            $event->extendSocialite('vkontakte', \SocialiteProviders\VKontakte\Provider::class);
+            $event->extendSocialite('vkontakte', Provider::class);
         });
 
         $this->app['events']->listen(function (SocialiteWasCalled $event) {

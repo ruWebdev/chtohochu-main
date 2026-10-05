@@ -77,7 +77,7 @@ class _WishThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    const size = 48.0;
+    const size = AppSizes.wishThumbSize;
     final radius = BorderRadius.circular(AppRadii.md);
 
     final placeholder = Container(
@@ -95,18 +95,17 @@ class _WishThumb extends StatelessWidget {
     final url = imageUrl;
     if (url == null || url.isEmpty) return placeholder;
 
+    final cacheWidth = (size * MediaQuery.devicePixelRatioOf(context)).round();
+
     return ClipRRect(
       borderRadius: radius,
-      child: Image.network(
-        url,
+      child: AppImage(
+        src: url,
         width: size,
         height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => placeholder,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return placeholder;
-        },
+        cacheWidth: cacheWidth,
+        errorWidget: placeholder,
+        loadingWidget: placeholder,
       ),
     );
   }

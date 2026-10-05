@@ -44,6 +44,12 @@ class FakeApiAdapter implements HttpClientAdapter {
   /// uid → listId → list {'id','title',...,'items': {itemId: item}}.
   final _shoppingLists = <String, Map<String, Map<String, dynamic>>>{};
 
+  /// uploadId → media upload {'user_id','object_key','status',...}.
+  final _mediaUploads = <String, Map<String, dynamic>>{};
+
+  /// `user_id|client_id` → uploadId — идемпотентность retry.
+  final _mediaClientIndex = <String, String>{};
+
   /// Симметричные связи дружбы: uid → множество friendId.
   /// Backend хранит пару в одну строку — здесь храним обе стороны.
   final _friendships = <String, Set<String>>{};
@@ -351,6 +357,97 @@ class FakeApiAdapter implements HttpClientAdapter {
         status = 204;
         data = null;
       }
+    } else if (path == '/media/uploads' && method == 'POST') {
+      final uid = _userIdForToken(token);
+      final purpose = body!['purpose'] as String?;
+      final entityId = body['entity_id'] as String?;
+      final contentType = body['content_type'] as String?;
+      final size = body['size'];
+      final clientId = body['client_id'] as String?;
+
+      if (!{'avatar', 'wish', 'shopping'}.contains(purpose)) {
+        throw _error(422, 'The given data was invalid.');
+      }
+      if (!{'image/jpeg', 'image/png', 'image/webp'}.contains(contentType)) {
+        throw _error(422, 'The given data was invalid.');
+      }
+      if (size is! int || size < 1 || size > 5 * 1024 * 1024) {
+        throw _error(422, 'The given data was invalid.');
+      }
+      if (purpose == 'wish' || purpose == 'shopping') {
+        final owned = purpose == 'wish'
+            ? (_wishes[uid] ?? {}).containsKey(entityId)
+            : (_shoppingLists[uid] ?? {}).containsKey(entityId);
+        if (!owned) throw _error(404, 'Not found.');
+      }
+
+      // Idempotency: тот же client_id → тот же upload и object key.
+      final indexKey = '$uid|$clientId';
+      var upload = clientId != null
+          ? _mediaUploads[_mediaClientIndex[indexKey]]
+          : null;
+      if (upload == null) {
+        final uploadId = _uuid.v4();
+        final imageId = _uuid.v4();
+        final ext = contentType == 'image/jpeg'
+            ? 'jpg'
+            : contentType == 'image/png'
+            ? 'png'
+            : 'webp';
+        final objectKey = purpose == 'avatar'
+            ? 'chtohochu-avatars/users/$uid/avatar/$imageId.$ext'
+            : purpose == 'wish'
+            ? 'chtohochu-wish-images/users/$uid/wishes/$entityId/$imageId.$ext'
+            : 'chtohochu-shopping-images/users/$uid/shopping-lists/$entityId/$imageId.$ext';
+        upload = {
+          'upload_id': uploadId,
+          'user_id': uid,
+          'object_key': objectKey,
+          'status': 'pending',
+          'remote_url': 'https://cdn.test/$objectKey',
+        };
+        _mediaUploads[uploadId] = upload;
+        if (clientId != null) _mediaClientIndex[indexKey] = uploadId;
+      }
+      status = 201;
+      data = {
+        'upload_id': upload['upload_id'],
+        'upload_url': 'fake-put://${upload['upload_id']}',
+        'upload_headers': {'Content-Type': contentType},
+        'method': 'PUT',
+        'object_key': upload['object_key'],
+        'remote_url': upload['remote_url'],
+        'status': upload['status'],
+        'expires_at': DateTime.now()
+            .add(const Duration(minutes: 10))
+            .toIso8601String(),
+        'purpose': purpose,
+        'entity_id': entityId,
+        'client_id': clientId,
+      };
+    } else if (path.startsWith('/media/uploads/') &&
+        path.endsWith('/complete') &&
+        method == 'POST') {
+      final uid = _userIdForToken(token);
+      final uploadId = path.substring(
+        '/media/uploads/'.length,
+        path.length - '/complete'.length,
+      );
+      final upload = _mediaUploads[uploadId];
+      if (upload == null || upload['user_id'] != uid) {
+        throw _error(404, 'Not found.');
+      }
+      // Backend требует существования объекта: фиктивный PUT
+      // регистрируется через markMediaObjectPut в тесте.
+      if (upload['status'] != 'put' && upload['status'] != 'uploaded') {
+        throw _error(422, 'Object not found.');
+      }
+      upload['status'] = 'uploaded';
+      data = {
+        'upload_id': uploadId,
+        'status': 'uploaded',
+        'remote_url': upload['remote_url'],
+      };
     } else if (path == '/wishes' && method == 'GET') {
       final uid = _userIdForToken(token);
       final list = (_wishes[uid] ?? {}).values.toList()
@@ -572,6 +669,18 @@ class FakeApiAdapter implements HttpClientAdapter {
   void deleteServerWish(String uid, String id) {
     _wishes[uid]?.remove(id);
   }
+
+  /// Зафиксировать, что объект попал в «object storage» — эмуляция
+  /// успешного presigned PUT перед `complete` (backend требует
+  /// существования объекта).
+  void markMediaObjectPut(String uploadUrl) {
+    final upload = _mediaUploads[uploadUrl.replaceFirst('fake-put://', '')];
+    if (upload != null) upload['status'] = 'put';
+  }
+
+  /// Media upload по id (для assert'ов статуса/object key).
+  Map<String, dynamic>? mediaUploadOf(String uploadId) =>
+      _mediaUploads[uploadId];
 
   /// «Серверные» списки покупок пользователя (для assert'ов).
   List<Map<String, dynamic>> shoppingListsOf(String uid) =>

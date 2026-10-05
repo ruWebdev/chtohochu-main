@@ -121,7 +121,7 @@ void main() {
 
     expect(find.byType(HomePage), findsOneWidget);
     expect(find.text('Наушники Sony'), findsNothing);
-    expect(find.text('Пока нет желаний'), findsOneWidget);
+    expect(find.text('Что ты хочешь?'), findsOneWidget);
   });
 
   testWidgets('List with several wishes shows all cards and count', (
@@ -156,7 +156,7 @@ void main() {
 
     expect(find.text('Наушники Sony'), findsOneWidget);
     expect(find.text('1 желание'), findsOneWidget);
-    expect(find.text('Пока нет желаний'), findsNothing);
+    expect(find.text('Что ты хочешь?'), findsNothing);
   });
 
   testWidgets('System back on details returns to home', (tester) async {

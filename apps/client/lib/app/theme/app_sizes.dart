@@ -43,13 +43,38 @@ class AppSizes {
   /// Размер аватара L.
   static const double avatarLg = 64;
 
+  /// Размер миниатюры желания в карточке списка.
+  static const double wishThumbSize = 64;
+
+  /// Диаметр центральной кнопки «добавить» в bottom bar.
+  static const double addActionButtonSize = 52;
+
+  /// Диаметр «гнезда», в котором кнопка сидит внутри бара.
+  static const double addActionSocketSize = 60;
+
+  /// Размер плитки фото в add-wish sheet.
+  static const double sheetPhotoTileSize = 56;
+
+  /// Размер микро-индикатора синхронизации в subtitle.
+  static const double syncIndicatorSize = 10;
+
+  // --- Responsive ---
+
+  /// Ширина, с которой контент переключается в wide-layout
+  /// (2-column grid, ограничение maxWidth).
+  static const double wideLayoutBreakpoint = 600;
+
+  /// Максимальная ширина контентной колонки на широких экранах.
+  static const double contentMaxWidth = 720;
+
   // --- Bottom Navigation ---
 
-  /// Высота floating bottom bar.
-  static const double bottomBarHeight = 64;
+  /// Высота стеклянной планки floating bottom bar. Центральная
+  /// кнопка в гнезде выступает за её кромки сверху и снизу.
+  static const double bottomBarHeight = 48;
 
   /// Размер иконки в bottom bar.
-  static const double bottomBarIconSize = 24;
+  static const double bottomBarIconSize = 22;
 
   /// Внутренний горизонтальный padding bottom bar.
   static const double bottomBarPadding = 8;

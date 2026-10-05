@@ -31,6 +31,9 @@ class StorageKeys {
   /// One-time флаг: legacy `wishes_cache` уже импортирован в Drift.
   static const String wishesMigrated = 'wishes_migrated';
 
+  /// One-time перенос `Documents/wish_photos/` в `Documents/media/`.
+  static const String mediaDirsMigrated = 'media_dirs_migrated';
+
   /// Локальное хранилище желаний (JSON) — временное mock-решение.
   static const String wishesCache = 'wishes_cache';
 

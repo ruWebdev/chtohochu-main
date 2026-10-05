@@ -68,6 +68,16 @@ class PreferencesService {
   Future<void> setWishesMigrated() =>
       _prefs.setBool(StorageKeys.wishesMigrated, true);
 
+  // --- Media dirs: wish_photos/ → media/wishes/ ---
+
+  /// Выполнен ли перенос локальных фото в media-структуру.
+  bool isMediaDirsMigrated() =>
+      _prefs.getBool(StorageKeys.mediaDirsMigrated) ?? false;
+
+  /// Отметить перенос выполненным.
+  Future<void> setMediaDirsMigrated() =>
+      _prefs.setBool(StorageKeys.mediaDirsMigrated, true);
+
   // --- Legacy shopping lists cache → Drift migration ---
 
   /// Прочитать legacy JSON-кэш списков покупок (только для

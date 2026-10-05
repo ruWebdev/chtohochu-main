@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Services\Media\MediaStorageGateway;
+use App\Services\Media\S3MediaStorageGateway;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Manager\SocialiteWasCalled;
@@ -14,7 +16,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Object storage — за интерфейсом MediaStorageGateway, чтобы
+        // upload lifecycle тестировался без реального S3.
+        $this->app->bind(
+            MediaStorageGateway::class,
+            S3MediaStorageGateway::class,
+        );
     }
 
     /**

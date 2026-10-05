@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Credentials/secret dumps must never be committed
+*-creds.md

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FriendController;
 use App\Http\Controllers\Api\MeController;
+use App\Http\Controllers\Api\MediaUploadController;
 use App\Http\Controllers\Api\ShoppingItemController;
 use App\Http\Controllers\Api\ShoppingListController;
 use App\Http\Controllers\Api\SocialAuthController;
@@ -57,6 +58,10 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show'])->name('api.shopping_lists.show');
             Route::patch('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'update'])->name('api.shopping_lists.update');
             Route::delete('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'destroy'])->name('api.shopping_lists.destroy');
+
+            // Media uploads (ADR-015): presigned PUT → complete.
+            Route::post('/media/uploads', [MediaUploadController::class, 'store'])->name('api.media.uploads.store');
+            Route::post('/media/uploads/{mediaUpload}/complete', [MediaUploadController::class, 'complete'])->name('api.media.uploads.complete');
 
             // Позиции: атомарные мутации, без whole-list sync
             Route::post('/shopping-lists/{shoppingList}/items', [ShoppingItemController::class, 'store'])->name('api.shopping_items.store');

@@ -5,6 +5,7 @@ import 'package:chtohochu/features/shopping/data/shopping_repository.dart';
 import 'package:chtohochu/features/shopping/presentation/pages/shopping_list_page.dart';
 import 'package:chtohochu/features/shopping/presentation/pages/shopping_page.dart';
 import 'package:chtohochu/shared/ui/buttons/app_button.dart';
+import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -79,7 +80,12 @@ void main() {
     await _openShopping(tester);
 
     // + в AppBar → форма создания.
-    await tester.tap(find.byTooltip('Создать список покупок'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppShellBar),
+        matching: find.byTooltip('Создать список покупок'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Новый список'), findsOneWidget);
 

@@ -53,6 +53,7 @@ environments balance correctness against operational cost.
 | `YANDEX_OAUTH_CLIENT_ID` | Public | OAuth provider client ID |
 | `YANDEX_OAUTH_CLIENT_SECRET` | Secret | OAuth provider secret |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Secret | S3-compatible storage |
+| `S3_BUCKET_AVATARS`, `S3_BUCKET_WISH_IMAGES`, `S3_BUCKET_SHOPPING_IMAGES` | Public | Media disks — all three MUST point to the same physical bucket; separation is via `chtohochu-*` key prefixes (ADR-015) |
 | `FCM_SERVER_KEY` | Secret | Firebase push transport |
 | `MAIL_*` | Secret (if SMTP) | Mail transport credentials |
 

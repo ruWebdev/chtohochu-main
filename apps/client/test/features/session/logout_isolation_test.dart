@@ -58,7 +58,7 @@ void main() {
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Желаний пользователя A нет.
-      expect(find.text('Пока нет желаний'), findsOneWidget);
+      expect(find.text('Что ты хочешь?'), findsOneWidget);
       expect(find.text('Наушники Sony'), findsNothing);
 
       // Списков покупок A нет.
@@ -98,7 +98,7 @@ void main() {
 
       // Создать желание при отсутствии сети — операция в outbox.
       api.failures['POST /wishes'] = 'network';
-      await tester.tap(find.byTooltip('Добавить желание'));
+      await tester.tap(find.text('Добавить первое желание'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Оффлайн желание');
       await tester.tap(find.text('Сохранить желание'));

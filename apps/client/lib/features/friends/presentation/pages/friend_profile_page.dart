@@ -170,7 +170,7 @@ class _FriendBody extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: AppEmptyState(
               icon: const Icon(PhosphorIconsRegular.gift),
-              title: l10n.wishesEmptyTitle,
+              title: l10n.friendWishesEmptyTitle,
               description: l10n.friendNoWishes(
                 friendDisplayName(l10n, friend.name),
               ),

@@ -458,3 +458,18 @@ document architectural decision if necessary
 ```
 
 If the architecture itself is insufficient, stop and document the architectural question rather than silently inventing a solution.
+
+---
+
+## 24. Media Storage Rules
+
+* Media upload is a **separate lifecycle** from entity sync — entity creation (Wish, shopping list, avatar) MUST NEVER block on media upload or on S3/backend availability.
+* The Flutter client never holds S3 credentials and never chooses bucket or object key. It only consumes short-lived presigned PUT URLs issued by the backend (SigV4, ~10 min TTL).
+* Media API is purpose-based and reusable: `avatar | wish | shopping`. Ownership and entity-existence checks are server-enforced.
+* ЧтоХочу uses **one physical S3 bucket** with three logical root prefixes: `chtohochu-avatars/`, `chtohochu-wish-images/`, `chtohochu-shopping-images/` (see `config/media.php` `key_prefix`). The bucket is shared with another project's prefixes — they MUST NEVER be read, modified, or deleted. Every object key MUST start with its purpose prefix; `complete`/`delete`/cleanup MUST re-assert the prefix before any storage operation. Public-read bucket policy MUST stay scoped to `chtohochu-*` only.
+* Backend whitelists content types (`image/jpeg`, `image/png`, `image/webp`) and enforces `MEDIA_MAX_UPLOAD_BYTES`. Completion is verified against S3 (object exists, type/size match) — never trust a client-claimed `remote_url`.
+* Local media lives under `Documents/media/<purpose>/` in persistent storage; Drift keeps `local_path` + `remote_url` + upload status (`pending | uploading | uploaded | failed`). `local_path` is never sent to the API and never erased by pull reconcile.
+* Client-side compression is mandatory before persistence: orientation fix, max 2048 px, JPEG q82 (transparency is preserved — no forced JPEG).
+* Uploads are idempotent via stable `client_id`/`upload_id` per local row — retries must not create duplicate objects.
+* Remote object deletion is asynchronous (queue job) and idempotent — entity deletion must not block on S3.
+* See `docs/adr/ADR-015-media-storage-s3-uploads.md` for the full contract.

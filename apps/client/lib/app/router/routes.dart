@@ -77,6 +77,9 @@ class AppRoutes {
   /// Редактирование профиля.
   static const String profileEdit = '/profile/edit';
 
+  /// Центр оповещений.
+  static const String notifications = '/notifications';
+
   /// Design System Showcase (отладочный маршрут).
   static const String showcase = '/showcase';
 

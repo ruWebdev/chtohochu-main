@@ -9,6 +9,8 @@ import '../../../core/database/database_provider.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/sync/outbox_store.dart';
 import '../domain/wish.dart';
+import '../domain/wish_image.dart';
+import 'wish_photo_picker.dart';
 
 /// Абстракция репозитория желаний.
 ///
@@ -28,13 +30,24 @@ abstract interface class WishRepository {
   /// Есть ли хотя бы одно желание.
   Future<bool> hasWishes();
 
+  /// Реактивный поток дополнительных изображений желания
+  /// (primary — `Wish.imageUrl`), упорядоченных по `sortOrder`.
+  Stream<List<WishImage>> watchWishImages(String wishId);
+
   /// Создать желание локально (UUID генерируется на клиенте).
+  ///
+  /// [imageUrl] — primary-изображение (remote URL или локальный
+  /// путь). [additionalImagePaths] — локальные пути дополнительных
+  /// фото (камера/галерея quick-capture); записываются в
+  /// `wish_images` в порядке списка (`sortOrder` 1..N) в той же
+  /// транзакции — желание никогда не остаётся без части фото.
   Future<Wish> createWish({
     required String title,
     String? description,
     int? price,
     String? link,
     String? imageUrl,
+    List<String> additionalImagePaths = const [],
   });
 
   /// Обновить существующее желание (замена по [Wish.id]).
@@ -113,6 +126,13 @@ class DriftWishRepository implements WishRepository {
     updatedAt: r.updatedAt,
   );
 
+  static WishImage _imageToDomain(WishImageRow r) => WishImage(
+    id: r.id,
+    localPath: r.localPath,
+    remoteUrl: r.remoteUrl,
+    sortOrder: r.sortOrder,
+  );
+
   /// Snapshot полей для outbox payload (snake_case = API body).
   static Map<String, dynamic> _payload(Wish w, {String? id}) => {
     'id': ?id,
@@ -120,7 +140,9 @@ class DriftWishRepository implements WishRepository {
     'description': w.description,
     'price': w.price,
     'link': w.link,
-    'image_url': w.imageUrl,
+    // Локальный путь файла не уходит в API (невалидный URL →
+    // 422 → markFailed): фото живёт локально до upload-эндпоинта.
+    'image_url': Wish.isRemoteImageRef(w.imageUrl) ? w.imageUrl : null,
   };
 
   @override
@@ -143,14 +165,23 @@ class DriftWishRepository implements WishRepository {
   Future<bool> hasWishes() => _db.hasWishes(_ownerId);
 
   @override
+  Stream<List<WishImage>> watchWishImages(String wishId) {
+    return _db
+        .watchWishImages(_ownerId, wishId)
+        .map((rows) => rows.map(_imageToDomain).toList());
+  }
+
+  @override
   Future<Wish> createWish({
     required String title,
     String? description,
     int? price,
     String? link,
     String? imageUrl,
+    List<String> additionalImagePaths = const [],
   }) async {
     final now = DateTime.now();
+    final ownerId = _ownerId;
     final wish = Wish(
       id: _uuid.v4(),
       title: title,
@@ -162,24 +193,53 @@ class DriftWishRepository implements WishRepository {
       updatedAt: now,
     );
 
+    final isLocalImage = imageUrl != null && !Wish.isRemoteImageRef(imageUrl);
+
     await _db.transaction(() async {
       await _db
           .into(_db.wishes)
           .insert(
             WishesCompanion(
               id: Value(wish.id),
-              ownerId: Value(_ownerId),
+              ownerId: Value(ownerId),
               title: Value(wish.title),
               description: Value(wish.description),
               price: Value(wish.price),
               link: Value(wish.link),
               imageUrl: Value(wish.imageUrl),
+              // Локальный файл ждёт upload; remote-ссылка
+              // считается уже доставленной (ADR-015).
+              imageUploadStatus: Value(
+                imageUrl == null
+                    ? null
+                    : isLocalImage
+                    ? 'pending'
+                    : 'uploaded',
+              ),
+              imageUploadId: Value(isLocalImage ? _uuid.v4() : null),
               createdAt: Value(wish.createdAt),
               updatedAt: Value(wish.updatedAt!),
             ),
           );
+      // Дополнительные изображения — в той же транзакции:
+      // желание никогда не остаётся без части фото.
+      for (var i = 0; i < additionalImagePaths.length; i++) {
+        await _db
+            .into(_db.wishImages)
+            .insert(
+              WishImagesCompanion(
+                id: Value(_uuid.v4()),
+                uploadId: Value(_uuid.v4()),
+                ownerId: Value(ownerId),
+                wishId: Value(wish.id),
+                localPath: Value(additionalImagePaths[i]),
+                sortOrder: Value(i + 1),
+                createdAt: Value(now),
+              ),
+            );
+      }
       await OutboxStore(_db).enqueue(
-        ownerId: _ownerId,
+        ownerId: ownerId,
         entityType: 'wish',
         entityId: wish.id,
         operation: OutboxOp.create,
@@ -227,11 +287,19 @@ class DriftWishRepository implements WishRepository {
   @override
   Future<void> deleteWish(String id) async {
     final ownerId = _ownerId;
+    var filePaths = const <String>[];
     await _db.transaction(() async {
       final outbox = OutboxStore(_db);
       if (await outbox.hasUnsyncedCreate(ownerId, id)) {
         // create + delete до первого успешного push: сервер никогда
         // не принимал сущность — удаляем физически, HTTP не нужен.
+        // Изображения уходят вместе с желанием; tombstone-путь
+        // их сохраняет — при 422 желание вернётся вместе с фото.
+        final local = await _db.wishById(ownerId, id);
+        filePaths = [
+          if (!Wish.isRemoteImageRef(local?.imageUrl)) local!.imageUrl!,
+          ...await _db.deleteWishImages(ownerId, id),
+        ];
         await (_db.delete(
           _db.wishes,
         )..where((w) => w.id.equals(id) & w.ownerId.equals(ownerId))).go();
@@ -247,5 +315,7 @@ class DriftWishRepository implements WishRepository {
         operation: OutboxOp.delete,
       );
     });
+    // Файлы — вне транзакции, best-effort.
+    if (filePaths.isNotEmpty) await deleteWishPhotoFiles(filePaths);
   }
 }

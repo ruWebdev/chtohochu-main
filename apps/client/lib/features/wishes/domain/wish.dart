@@ -32,7 +32,15 @@ class Wish {
   final String? link;
 
   /// Ссылка на изображение (опционально).
+  ///
+  /// Может быть удалённым URL или локальным путём файла —
+  /// фото с камеры живёт локально до появления upload-эндпоинта.
   final String? imageUrl;
+
+  /// `true`, если [ref] — удалённый URL (или отсутствует);
+  /// `false` — локальный путь файла, который нельзя слать в API.
+  static bool isRemoteImageRef(String? ref) =>
+      ref == null || ref.startsWith('http://') || ref.startsWith('https://');
 
   /// Дата создания.
   final DateTime createdAt;

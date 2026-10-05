@@ -48,6 +48,7 @@ class WishFormController extends Notifier<WishFormState> {
     int? price,
     String? link,
     String? imageUrl,
+    List<String> additionalImagePaths = const [],
     Wish? existing,
   }) async {
     if (state is WishFormLoading) return null;
@@ -62,6 +63,7 @@ class WishFormController extends Notifier<WishFormState> {
           price: price,
           link: link,
           imageUrl: imageUrl,
+          additionalImagePaths: additionalImagePaths,
         );
       } else {
         // Список обновится сам через Drift stream — ручной

@@ -30,12 +30,71 @@ class Wishes extends Table {
 
   TextColumn get imageUrl => text().nullable()();
 
+  /// Upload-статус primary-изображения (ADR-015):
+  /// `null` — локального изображения нет или оно удалённое;
+  /// pending → uploading → uploaded | failed.
+  TextColumn get imageUploadStatus => text().nullable()();
+
+  /// Стабильный idempotency-ключ (`client_id` media upload) —
+  /// retry запроса инструкций возвращает тот же upload на сервере.
+  TextColumn get imageUploadId => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
 
   /// Soft-delete tombstone до доставки DELETE на сервер.
   DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Дополнительные изображения желаний — source of truth для UI.
+///
+/// Нормализованная таблица (не JSON внутри `wishes`): каждое
+/// изображение — отдельная строка со своим `owner_id` и ссылкой
+/// `wish_id` на родительское желание. Primary-изображение
+/// остаётся `wishes.image_url` — здесь живут только additional.
+///
+/// `local_path` — файл на устройстве (`Documents/wish_photos/`),
+/// `remote_url` — задел под будущий upload (S3): строка
+/// заполняется после загрузки, до этого upload pipeline может
+/// определять незагруженные изображения по `remote_url IS NULL`.
+///
+/// Изображения — local-only сущность: сервер их пока не знает,
+/// outbox-операций нет, tombstone не нужен. Живут и умирают
+/// вместе с родительским желанием (каскад в repository/sync).
+@TableIndex(name: 'wish_images_wish', columns: {#wishId})
+@TableIndex(name: 'wish_images_owner', columns: {#ownerId})
+@DataClassName('WishImageRow')
+class WishImages extends Table {
+  /// UUID изображения — клиентский, как у всех сущностей.
+  TextColumn get id => text()();
+
+  /// Владелец строки = текущий аккаунт (SQL-изоляция).
+  TextColumn get ownerId => text()();
+
+  /// Родительское желание (локальный = серверный UUID).
+  TextColumn get wishId => text()();
+
+  /// Путь к файлу на устройстве (`Documents/media/wishes/…`).
+  TextColumn get localPath => text().nullable()();
+
+  /// URL после загрузки на сервер/CDN. null = ещё не загружено.
+  TextColumn get remoteUrl => text().nullable()();
+
+  /// Upload lifecycle (ADR-015): pending → uploading → uploaded | failed.
+  TextColumn get uploadStatus =>
+      text().withDefault(const Constant('pending'))();
+
+  /// Стабильный idempotency-ключ (`client_id` media upload).
+  TextColumn get uploadId => text().nullable()();
+
+  /// Порядок отображения: 1, 2, … (primary — wishes.image_url).
+  IntColumn get sortOrder => integer()();
+
+  DateTimeColumn get createdAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -261,6 +320,7 @@ class Profiles extends Table {
 @DriftDatabase(
   tables: [
     Wishes,
+    WishImages,
     ShoppingLists,
     ShoppingItems,
     Friendships,
@@ -278,7 +338,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -294,6 +354,30 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(friendships);
         await migrator.createTable(cachedUsers);
         await migrator.createTable(friendWishes);
+      }
+      if (from < 4) {
+        // Дополнительные локальные изображения желаний.
+        // Существующие image_url не мигрируются — они остаются
+        // primary-изображениями в wishes.
+        await migrator.createTable(wishImages);
+      }
+      if (from < 5) {
+        // Media upload lifecycle (ADR-015): статус + idempotency-key.
+        await migrator.addColumn(wishes, wishes.imageUploadStatus);
+        await migrator.addColumn(wishes, wishes.imageUploadId);
+        if (from >= 4) {
+          // wish_images, созданная в шаге v4, уже содержит эти
+          // колонки — addColumn нужен только для реальной v4-базы.
+          await migrator.addColumn(wishImages, wishImages.uploadStatus);
+          await migrator.addColumn(wishImages, wishImages.uploadId);
+        }
+        // Существующие локальные пути ожидают upload; remote —
+        // уже доставлены (status irrelevant).
+        await customStatement(
+          "UPDATE wishes SET image_upload_status = 'pending' "
+          'WHERE image_url IS NOT NULL '
+          "AND image_url NOT LIKE 'http%'",
+        );
       }
     },
   );
@@ -347,6 +431,129 @@ class AppDatabase extends _$AppDatabase {
       ..addColumns([count])
       ..where(wishes.ownerId.equals(ownerId) & wishes.deletedAt.isNull());
     return (await query.getSingle()).read(count)! > 0;
+  }
+
+  // ── Wish images ─────────────────────────────────────────
+
+  /// Реактивные дополнительные изображения желания
+  /// (owner-scoped), упорядоченные по `sort_order`.
+  Stream<List<WishImageRow>> watchWishImages(String ownerId, String wishId) {
+    return (select(wishImages)
+          ..where((i) => i.wishId.equals(wishId) & i.ownerId.equals(ownerId))
+          ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
+        .watch();
+  }
+
+  /// Дополнительные изображения желания (snapshot-чтение).
+  Future<List<WishImageRow>> wishImagesOf(String ownerId, String wishId) {
+    return (select(wishImages)
+          ..where((i) => i.wishId.equals(wishId) & i.ownerId.equals(ownerId))
+          ..orderBy([(i) => OrderingTerm.asc(i.sortOrder)]))
+        .get();
+  }
+
+  /// Удалить все изображения желания. Возвращает `local_path`
+  /// удалённых строк — вызывающий код может убрать файлы.
+  Future<List<String>> deleteWishImages(String ownerId, String wishId) async {
+    final rows = await (select(
+      wishImages,
+    )..where((i) => i.wishId.equals(wishId) & i.ownerId.equals(ownerId))).get();
+    if (rows.isEmpty) return const [];
+    await (delete(
+      wishImages,
+    )..where((i) => i.wishId.equals(wishId) & i.ownerId.equals(ownerId))).go();
+    return [
+      for (final r in rows)
+        if (r.localPath != null) r.localPath!,
+    ];
+  }
+
+  // ── Media upload queue (ADR-015) ────────────────────────
+
+  /// Желания с primary-изображением, ожидающим upload
+  /// (`pending`/`uploading`; `uploading` после сбоя процесса
+  /// retry'ится как pending — idempotent через `client_id`).
+  Future<List<WishRow>> wishesPendingImageUpload(String ownerId) {
+    return (select(wishes)..where(
+          (w) =>
+              w.ownerId.equals(ownerId) &
+              w.deletedAt.isNull() &
+              w.imageUploadStatus.isIn(['pending', 'uploading']),
+        ))
+        .get();
+  }
+
+  /// Дополнительные изображения, ожидающие upload.
+  Future<List<WishImageRow>> wishImagesPendingUpload(String ownerId) {
+    return (select(wishImages)..where(
+          (i) =>
+              i.ownerId.equals(ownerId) &
+              i.uploadStatus.isIn(['pending', 'uploading']) &
+              i.localPath.isNotNull(),
+        ))
+        .get();
+  }
+
+  /// Статус upload primary-изображения желания.
+  Future<void> setWishImageUploadState(
+    String ownerId,
+    String wishId, {
+    required String status,
+    String? uploadId,
+    String? remoteUrl,
+  }) {
+    return (update(
+      wishes,
+    )..where((w) => w.id.equals(wishId) & w.ownerId.equals(ownerId))).write(
+      WishesCompanion(
+        imageUploadStatus: Value(status),
+        imageUploadId: uploadId != null
+            ? Value(uploadId)
+            : const Value.absent(),
+        imageUrl: remoteUrl != null ? Value(remoteUrl) : const Value.absent(),
+      ),
+    );
+  }
+
+  /// Статус upload дополнительного изображения.
+  Future<void> setWishImageRowUploadState(
+    String ownerId,
+    String imageId, {
+    required String status,
+    String? uploadId,
+    String? remoteUrl,
+  }) {
+    return (update(
+      wishImages,
+    )..where((i) => i.id.equals(imageId) & i.ownerId.equals(ownerId))).write(
+      WishImagesCompanion(
+        uploadStatus: Value(status),
+        uploadId: uploadId != null ? Value(uploadId) : const Value.absent(),
+        remoteUrl: remoteUrl != null ? Value(remoteUrl) : const Value.absent(),
+      ),
+    );
+  }
+
+  /// Локальные пути всех изображений аккаунта: `local_path`
+  /// дополнительных + `image_url` желаний, если это файл.
+  /// Используется для best-effort очистки файлов при
+  /// удалении аккаунта/желания.
+  Future<List<String>> localWishImagePaths(String ownerId) async {
+    final imageRows = await (select(
+      wishImages,
+    )..where((i) => i.ownerId.equals(ownerId))).get();
+    final wishRows = await (select(
+      wishes,
+    )..where((w) => w.ownerId.equals(ownerId))).get();
+    return [
+      for (final r in imageRows)
+        if (r.localPath != null) r.localPath!,
+      for (final w in wishRows)
+        if (w.imageUrl != null &&
+            !w.imageUrl!.startsWith('http://') &&
+            !w.imageUrl!.startsWith('https://'))
+          w.imageUrl!,
+    ];
   }
 
   // ── Shopping ─────────────────────────────────────────────
@@ -567,9 +774,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Очистить все account-scoped данные пользователя (logout).
-  Future<void> clearAccountData(String ownerId) async {
+  ///
+  /// Возвращает пути локальных файлов изображений — вызывающий
+  /// код удаляет их best-effort (файлы могут уже отсутствовать).
+  Future<List<String>> clearAccountData(String ownerId) async {
+    final imagePaths = await localWishImagePaths(ownerId);
     await transaction(() async {
       await (delete(wishes)..where((w) => w.ownerId.equals(ownerId))).go();
+      await (delete(wishImages)..where((i) => i.ownerId.equals(ownerId))).go();
       await (delete(
         shoppingLists,
       )..where((l) => l.ownerId.equals(ownerId))).go();
@@ -586,5 +798,6 @@ class AppDatabase extends _$AppDatabase {
       )..where((o) => o.ownerId.equals(ownerId))).go();
       await (delete(profiles)..where((p) => p.id.equals(ownerId))).go();
     });
+    return imagePaths;
   }
 }

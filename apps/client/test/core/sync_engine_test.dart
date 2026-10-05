@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:chtohochu/core/database/app_database.dart';
 import 'package:chtohochu/core/database/legacy_migration.dart';
+import 'package:chtohochu/core/media/media_upload_service.dart';
 import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/core/services/secure_storage_service.dart';
+import 'package:chtohochu/core/sync/outbox_store.dart';
 import 'package:chtohochu/core/sync/sync_engine.dart';
 import 'package:chtohochu/features/auth/data/auth_repository.dart';
 import 'package:chtohochu/features/wishes/data/wish_repository.dart';
@@ -454,6 +457,36 @@ void main() {
       expect(await rowOf(wish.id), isNull);
     });
 
+    test('remote delete → изображения желания каскадно удаляются', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        imageUrl: '/tmp/primary.jpg',
+        additionalImagePaths: ['/tmp/extra.jpg'],
+      );
+      await sync();
+      expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+
+      api.deleteServerWish(ownerA, wish.id);
+      await sync();
+
+      expect(await rowOf(wish.id), isNull);
+      expect(await db.wishImagesOf(ownerA, wish.id), isEmpty);
+    });
+
+    test('server image_url: null не стирает локальные фото '
+        '(primary path + additional rows)', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        imageUrl: '/tmp/primary.jpg',
+        additionalImagePaths: ['/tmp/extra.jpg'],
+      );
+      await sync(); // push: payload.image_url = null (локальный путь)
+      await sync(); // pull: сервер отдаёт null — локальное остаётся
+
+      expect((await rowOf(wish.id))!.imageUrl, '/tmp/primary.jpg');
+      expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+    });
+
     test('pending create отсутствует в snapshot → сохраняется', () async {
       api.failures['POST /wishes'] = 'network'; // create не ушёл
       final wish = await repo.createWish(title: 'Оффлайн');
@@ -784,6 +817,202 @@ void main() {
       expect(await rowOf(wish.id), isNotNull);
       expect(api.wishesOf(ownerA).single['title'], 'v2');
       expect(await outboxOf(ownerA), isEmpty);
+    });
+  });
+
+  group('media upload (ADR-015)', () {
+    late Directory tmp;
+    late List<String> puts;
+    late SyncEngine mediaEngine;
+
+    /// Presigned PUT: fake-put://{uploadId} → регистрируем объект
+    /// в «object storage» fake-API, чтобы complete прошёл.
+    SyncEngine buildEngine({bool failPutOnce = false}) {
+      var failed = false;
+      return SyncEngine(
+        db: db,
+        dio: dio,
+        onUnauthorized: () {},
+        onStatus: (_) {},
+        mediaUploads: MediaUploadService(
+          api: dio,
+          put: (url, headers, file) async {
+            if (failPutOnce && !failed) {
+              failed = true;
+              throw DioException(
+                requestOptions: RequestOptions(),
+                type: DioExceptionType.connectionError,
+              );
+            }
+            puts.add(url);
+            api.markMediaObjectPut(url);
+          },
+        ),
+      );
+    }
+
+    Future<String> fakePhoto(String name) async {
+      final file = File('${tmp.path}/$name.jpg');
+      await file.writeAsBytes(List.filled(128, 7));
+      return file.path;
+    }
+
+    setUp(() async {
+      // Главный engine без media-фейка — отключаем, чтобы его
+      // outbox-listener не дёргал реальный PUT.
+      engine.detach();
+      tmp = await Directory.systemTemp.createTemp('media_test');
+      puts = [];
+      mediaEngine = buildEngine()..attach(ownerA);
+    });
+
+    tearDown(() async {
+      mediaEngine.detach();
+      if (await tmp.exists()) await tmp.delete(recursive: true);
+    });
+
+    test('primary + additional → uploaded, remote_url и локально, '
+        'и на сервере', () async {
+      final p1 = await fakePhoto('primary');
+      final p2 = await fakePhoto('extra');
+      final wish = await repo.createWish(
+        title: 'Фото',
+        imageUrl: p1,
+        additionalImagePaths: [p2],
+      );
+
+      await mediaEngine.requestSync();
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageUrl, startsWith('https://cdn.test/'));
+      expect(row.imageUploadStatus, 'uploaded');
+      final images = await db.wishImagesOf(ownerA, wish.id);
+      expect(images.single.uploadStatus, 'uploaded');
+      expect(images.single.remoteUrl, startsWith('https://cdn.test/'));
+      // Primary remote_url дошёл до сервера штатным update-op.
+      expect(
+        api.wishesOf(ownerA).single['image_url'],
+        startsWith('https://cdn.test/'),
+      );
+      expect(puts, hasLength(2));
+      expect(
+        api.requests.where((r) => r == 'POST /media/uploads'),
+        hasLength(2),
+      );
+    });
+
+    test('offline: upload откладывается, желание живёт', () async {
+      api.failures['POST /media/uploads'] = 'network';
+      final p = await fakePhoto('p');
+      final wish = await repo.createWish(title: 'Оффлайн', imageUrl: p);
+
+      await mediaEngine.requestSync();
+
+      // Желание синхронизировано, фото осталось локальным pending.
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageUrl, p);
+      expect(row.imageUploadStatus, 'pending');
+      expect(api.wishesOf(ownerA).single['title'], 'Оффлайн');
+
+      // Сеть вернулась → следующий sync доставляет upload.
+      api.failures.remove('POST /media/uploads');
+      await mediaEngine.requestSync();
+
+      final done = (await rowOf(wish.id))!;
+      expect(done.imageUploadStatus, 'uploaded');
+      expect(done.imageUrl, startsWith('https://cdn.test/'));
+    });
+
+    test('PUT retry идемпотентен: тот же upload, без дубликатов', () async {
+      mediaEngine.detach();
+      mediaEngine = buildEngine(failPutOnce: true)..attach(ownerA);
+      final p = await fakePhoto('p');
+      final wish = await repo.createWish(title: 'Ретрай', imageUrl: p);
+
+      await mediaEngine.requestSync(); // PUT упал → pending
+
+      expect((await rowOf(wish.id))!.imageUploadStatus, 'pending');
+
+      await mediaEngine.requestSync(); // retry — успех
+
+      expect((await rowOf(wish.id))!.imageUploadStatus, 'uploaded');
+      // Инструкции запрашивались дважды, но server-side upload один:
+      // client_id возвращает существующую запись и тот же object.
+      final instructions = api.requests.where(
+        (r) => r == 'POST /media/uploads',
+      );
+      expect(instructions, hasLength(2));
+      final completes = api.requests.where(
+        (r) => r.startsWith('POST /media/uploads/') && r.endsWith('/complete'),
+      );
+      expect(completes.toSet(), hasLength(1)); // один и тот же upload_id
+    });
+
+    test('4xx → failed: retry не повторяется, localPath на месте', () async {
+      api.failures['POST /media/uploads'] = 422;
+      final p = await fakePhoto('p');
+      final wish = await repo.createWish(title: 'Брак', imageUrl: p);
+
+      await mediaEngine.requestSync();
+      await mediaEngine.requestSync(); // failed не выбирается повторно
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageUploadStatus, 'failed');
+      expect(row.imageUrl, p); // файл доступен локально
+      expect(
+        api.requests.where((r) => r == 'POST /media/uploads'),
+        hasLength(1),
+      );
+    });
+
+    test('pending create → media пропускается до push сущности', () async {
+      api.failures['POST /wishes'] = 'network';
+      final p = await fakePhoto('p');
+      final wish = await repo.createWish(title: 'Ждёт', imageUrl: p);
+
+      await mediaEngine.requestSync();
+
+      // Create в backoff — сервер не знает сущность, media-фаза
+      // пропускает upload (entity check вернул бы 404).
+      expect(api.requests.where((r) => r.startsWith('POST /media/')), isEmpty);
+
+      api.failures.remove('POST /wishes');
+      // Новая локальная мутация revive'ит create-операцию (backoff сброшен).
+      await OutboxStore(db).enqueue(
+        ownerId: ownerA,
+        entityType: 'wish',
+        entityId: wish.id,
+        operation: OutboxOp.update,
+        payload: {'title': 'Ждёт'},
+      );
+
+      await mediaEngine.requestSync();
+      expect(
+        api.requests.where((r) => r == 'POST /media/uploads'),
+        hasLength(1),
+      );
+    });
+
+    test('remote image_url не вызывает media upload вообще', () async {
+      final wish = await repo.createWish(
+        title: 'Уже ссылка',
+        imageUrl: 'https://cdn.example.com/x.jpg',
+      );
+      await mediaEngine.requestSync();
+
+      expect(api.requests.where((r) => r.startsWith('POST /media/')), isEmpty);
+      expect((await rowOf(wish.id))!.imageUploadStatus, 'uploaded');
+    });
+
+    test('потерянный файл → failed без бесконечного retry', () async {
+      final wish = await repo.createWish(
+        title: 'Нет файла',
+        imageUrl: '${tmp.path}/ghost.jpg',
+      );
+      await mediaEngine.requestSync();
+      await mediaEngine.requestSync();
+
+      expect((await rowOf(wish.id))!.imageUploadStatus, 'failed');
     });
   });
 }

@@ -100,7 +100,11 @@ class AppButton extends StatelessWidget {
             .copyWith(color: fg);
 
     Widget content = Row(
-      mainAxisSize: MainAxisSize.min,
+      // Кнопка на всю ширину центрирует контент, компактная — нет.
+      mainAxisAlignment: expand
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.start,
+      mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
       children: [
         if (isLoading)
           SizedBox(

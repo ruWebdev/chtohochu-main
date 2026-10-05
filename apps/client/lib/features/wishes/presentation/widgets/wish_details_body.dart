@@ -11,6 +11,7 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../../../../shared/utils/formatters.dart';
 import '../../domain/wish.dart';
+import '../../domain/wish_image.dart';
 
 /// Тело деталей желания: изображение, название, цена, ссылка,
 /// заметка, дата добавления.
@@ -18,9 +19,17 @@ import '../../domain/wish.dart';
 /// Используется и на собственном экране деталей, и для read-only
 /// просмотра желаний друзей — виджет не содержит действий владельца.
 class WishDetailsBody extends StatelessWidget {
-  const WishDetailsBody({super.key, required this.wish});
+  const WishDetailsBody({
+    super.key,
+    required this.wish,
+    this.additionalImages = const [],
+  });
 
   final Wish wish;
+
+  /// Дополнительные изображения желания (primary — `wish.imageUrl`).
+  /// Для чужих желаний не передаётся — лента не рисуется.
+  final List<WishImage> additionalImages;
 
   static Future<void> _copyLink(BuildContext context, String link) async {
     await Clipboard.setData(ClipboardData(text: link));
@@ -45,6 +54,10 @@ class WishDetailsBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _WishImage(imageUrl: wish.imageUrl, title: wish.title),
+          if (additionalImages.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _AdditionalImages(images: additionalImages, title: wish.title),
+          ],
           const SizedBox(height: AppSpacing.lg),
 
           Text(wish.title, style: t.title),
@@ -115,16 +128,68 @@ class _WishImage extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: radius,
-      child: Image.network(
-        url,
+      child: AppImage(
+        src: url,
         height: height,
         width: double.infinity,
-        fit: BoxFit.cover,
         semanticLabel: title,
-        errorBuilder: (_, _, _) => placeholder,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return placeholder;
+        errorWidget: placeholder,
+        loadingWidget: placeholder,
+      ),
+    );
+  }
+}
+
+/// Лента дополнительных изображений под primary — локальные
+/// файлы и remote URL через тот же `AppImage`, порядок —
+/// по `sortOrder` (он же порядок добавления).
+class _AdditionalImages extends StatelessWidget {
+  const _AdditionalImages({required this.images, required this.title});
+
+  final List<WishImage> images;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    const size = AppSizes.wishThumbSize;
+    final radius = BorderRadius.circular(AppRadii.md);
+
+    final placeholder = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: radius,
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        PhosphorIconsRegular.image,
+        size: AppSizes.iconSize,
+        color: colors.textMuted,
+      ),
+    );
+
+    return SizedBox(
+      height: size,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: images.length,
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
+        itemBuilder: (context, index) {
+          final src = images[index].displaySource;
+          if (src == null) return placeholder;
+          return ClipRRect(
+            borderRadius: radius,
+            child: AppImage(
+              src: src,
+              width: size,
+              height: size,
+              semanticLabel: title,
+              errorWidget: placeholder,
+              loadingWidget: placeholder,
+            ),
+          );
         },
       ),
     );

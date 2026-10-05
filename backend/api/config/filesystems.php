@@ -60,6 +60,54 @@ return [
             'report' => false,
         ],
 
+        // Media storage (ADR-015): три логических диска поверх ОДНОГО
+        // физического bucket — разделение через object-key prefix'ы
+        // (chtohochu-avatars/, chtohochu-wish-images/, chtohochu-shopping-images/,
+        // см. config/media.php). Все S3_BUCKET_* обязаны указывать на один
+        // и тот же реальный bucket. Клиент получает только presigned PUT —
+        // credentials никогда не покидают backend.
+        'media_avatars' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('S3_BUCKET_AVATARS', env('AWS_BUCKET')),
+            'url' => env('S3_PUBLIC_BASE_URL', env('AWS_ENDPOINT'))
+                .'/'.env('S3_BUCKET_AVATARS', env('AWS_BUCKET')),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'media_wish_images' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('S3_BUCKET_WISH_IMAGES', env('AWS_BUCKET')),
+            'url' => env('S3_PUBLIC_BASE_URL', env('AWS_ENDPOINT'))
+                .'/'.env('S3_BUCKET_WISH_IMAGES', env('AWS_BUCKET')),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'media_shopping_images' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('S3_BUCKET_SHOPPING_IMAGES', env('AWS_BUCKET')),
+            'url' => env('S3_PUBLIC_BASE_URL', env('AWS_ENDPOINT'))
+                .'/'.env('S3_BUCKET_SHOPPING_IMAGES', env('AWS_BUCKET')),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

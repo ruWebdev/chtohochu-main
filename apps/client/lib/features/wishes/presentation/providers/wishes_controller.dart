@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/sync/sync_engine.dart';
 import '../../data/wish_repository.dart';
 import '../../domain/wish.dart';
+import '../../domain/wish_image.dart';
 
 /// Контроллер списка желаний.
 ///
@@ -41,4 +42,15 @@ final wishByIdProvider = Provider.family<Wish?, String>((ref, id) {
     if (w.id == id) return w;
   }
   return null;
+});
+
+/// Дополнительные изображения желания (primary — `Wish.imageUrl`).
+///
+/// Используется экраном деталей — реактивный Drift-стрим,
+/// обновляется вместе с локальными мутациями.
+final wishImagesProvider = StreamProvider.family<List<WishImage>, String>((
+  ref,
+  wishId,
+) {
+  return ref.watch(wishRepositoryProvider).watchWishImages(wishId);
 });

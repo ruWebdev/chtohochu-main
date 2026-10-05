@@ -7,6 +7,7 @@ export 'buttons/app_button.dart';
 export 'buttons/app_icon_button.dart';
 export 'cards/app_card.dart';
 export 'chips/app_chip.dart';
+export 'images/app_image.dart';
 export 'feedback/app_empty_state.dart';
 export 'feedback/app_feedback.dart';
 export 'inputs/app_text_field.dart';

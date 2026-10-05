@@ -10,6 +10,7 @@ import '../../../app/theme/app_sizes.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../app/theme/app_typography.dart';
+import '../buttons/app_add_action_button.dart';
 
 /// Пункт floating bottom navigation bar.
 class AppBottomBarItem {
@@ -33,17 +34,50 @@ class AppBottomBarItem {
   final IconData activeIcon;
 }
 
+/// Конфигурация центральной кнопки «добавить» в bottom bar.
+///
+/// Действие контекстное — разрешается shell'ом по текущему разделу.
+class AppBottomBarCenterAction {
+  const AppBottomBarCenterAction({
+    required this.icon,
+    required this.semanticLabel,
+    this.tooltip,
+    required this.onPressed,
+  });
+
+  /// Иконка кнопки.
+  final IconData icon;
+
+  /// Семантическая метка для accessibility.
+  final String semanticLabel;
+
+  /// Тултип при долгом нажатии (опционально).
+  final String? tooltip;
+
+  /// Callback при нажатии.
+  final VoidCallback onPressed;
+}
+
 /// Floating bottom navigation bar в стиле Telegram.
 ///
 /// Компактный, лёгкий, полупрозрачный элемент над контентом.
 /// Не использует стандартный Material `NavigationBar`.
 /// Использует backdrop blur для мягкого glassmorphism.
+///
+/// По центру — кнопка «добавить» в мягком гнезде. Стеклянная
+/// планка центрирована на гнезде и ужата с обеих сторон: его
+/// дуга чуть выступает и над верхней, и под нижней кромкой.
 class AppBottomBar extends StatelessWidget {
+  /// На сколько гнездо выпирает за кромку планки с каждой стороны.
+  static const double _socketOverhang =
+      (AppSizes.addActionSocketSize - AppSizes.bottomBarHeight) / 2;
+
   const AppBottomBar({
     super.key,
     required this.items,
     required this.currentRoute,
     required this.onTap,
+    required this.centerAction,
   });
 
   /// Список пунктов навигации.
@@ -55,6 +89,9 @@ class AppBottomBar extends StatelessWidget {
   /// Callback при нажатии на пункт.
   final ValueChanged<String> onTap;
 
+  /// Центральная кнопка добавления (контекстное действие).
+  final AppBottomBarCenterAction centerAction;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -64,40 +101,84 @@ class AppBottomBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.bottomBarMarginHorizontal,
       ),
-      child: Container(
-        height: AppSizes.bottomBarHeight,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadii.xl),
-          border: Border.all(color: colors.border.withValues(alpha: 0.5)),
-          boxShadow: context.shadowFloating,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadii.xl),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              color:
-                  (brightness == Brightness.light
-                          ? colors.surface
-                          : colors.surfaceElevated)
-                      .withValues(alpha: 0.82),
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.bottomBarPadding,
-              ),
-              child: Row(
-                children: items.map((item) {
-                  final isActive = _isActive(item.route, currentRoute);
-                  return Expanded(
-                    child: _BottomBarItemWidget(
-                      item: item,
-                      isActive: isActive,
-                      onTap: () => onTap(item.route),
+      child: SizedBox(
+        // Слот по высоте гнезда — кнопка целиком остаётся
+        // в hit-test зоне, планка центрирована на ней.
+        height: AppSizes.addActionSocketSize,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Стеклянная планка — клипуется по форме бара.
+            Positioned(
+              top: _socketOverhang,
+              bottom: _socketOverhang,
+              left: 0,
+              right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadii.xl),
+                  border: Border.all(
+                    color: colors.border.withValues(alpha: 0.5),
+                  ),
+                  boxShadow: context.shadowFloating,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadii.xl),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      color:
+                          (brightness == Brightness.light
+                                  ? colors.surface
+                                  : colors.surfaceElevated)
+                              .withValues(alpha: 0.82),
                     ),
-                  );
-                }).toList(),
+                  ),
+                ),
               ),
             ),
-          ),
+            // Пункты навигации — внутри планки.
+            Positioned(
+              top: _socketOverhang,
+              bottom: _socketOverhang,
+              left: 0,
+              right: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.bottomBarPadding,
+                ),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      Expanded(
+                        child: _BottomBarItemWidget(
+                          item: items[i],
+                          isActive: _isActive(items[i].route, currentRoute),
+                          onTap: () => onTap(items[i].route),
+                        ),
+                      ),
+                      // Зарезервированный центральный слот —
+                      // кнопка рисуется отдельным слоем поверх.
+                      if (i == items.length ~/ 2 - 1)
+                        const SizedBox(width: AppSizes.addActionSocketSize),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            // Кнопка «добавить» в гнезде — по центру слота,
+            // симметрично выпирает за кромки планки.
+            Positioned.fill(
+              child: Center(
+                child: AppAddActionButton(
+                  icon: centerAction.icon,
+                  semanticLabel: centerAction.semanticLabel,
+                  tooltip: centerAction.tooltip,
+                  onPressed: centerAction.onPressed,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -146,29 +227,25 @@ class _BottomBarItemWidget extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadii.lg),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isActive ? item.activeIcon : item.icon,
-              size: AppSizes.bottomBarIconSize,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isActive ? item.activeIcon : item.icon,
+            size: AppSizes.bottomBarIconSize,
+            color: color,
+          ),
+          Text(
+            item.label,
+            style: t.captionSmall.copyWith(
               color: color,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
             ),
-            const SizedBox(height: 2),
-            Text(
-              item.label,
-              style: t.captionSmall.copyWith(
-                color: color,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

@@ -2,7 +2,9 @@ import 'package:chtohochu/features/friends/presentation/pages/friends_page.dart'
 import 'package:chtohochu/features/profile/presentation/pages/profile_page.dart';
 import 'package:chtohochu/features/shopping/presentation/pages/shopping_page.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/home_page.dart';
+import 'package:chtohochu/shared/ui/buttons/app_add_action_button.dart';
 import 'package:chtohochu/shared/ui/navigation/app_bottom_bar.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/test_app.dart';
@@ -21,6 +23,26 @@ void main() {
     expect(find.text('Покупки'), findsOneWidget);
     expect(find.text('Друзья'), findsOneWidget);
     expect(find.text('Профиль'), findsOneWidget);
+    // Центральная кнопка «добавить» — часть бара.
+    expect(find.byType(AppAddActionButton), findsOneWidget);
+  });
+
+  testWidgets('Bottom bar renders without overflow at 320px', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final widget = await createTestApp(
+      preferences: {'onboarding_complete': true, 'first_wish_flow_shown': true},
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppBottomBar), findsOneWidget);
+    expect(find.byType(AppAddActionButton), findsOneWidget);
+    expect(find.text('Покупки'), findsOneWidget);
+    expect(find.text('Друзья'), findsOneWidget);
   });
 
   testWidgets('Tapping Shopping tab navigates to shopping page', (

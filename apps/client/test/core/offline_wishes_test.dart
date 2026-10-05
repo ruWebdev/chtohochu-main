@@ -272,4 +272,99 @@ void main() {
       expect((await repo.getWishes()).single.id, uuid);
     });
   });
+
+  group('Wish images (local storage)', () {
+    test('create: image_url = primary, additional → wish_images '
+        'с sort_order и owner-scope', () async {
+      final wish = await repo.createWish(
+        title: 'Дрель',
+        imageUrl: '/tmp/photo-0.jpg',
+        additionalImagePaths: ['/tmp/photo-1.jpg', '/tmp/photo-2.jpg'],
+      );
+
+      expect((await rowOf(wish.id))!.imageUrl, '/tmp/photo-0.jpg');
+
+      final rows = await db.wishImagesOf(ownerA, wish.id);
+      expect(rows.map((r) => r.localPath), [
+        '/tmp/photo-1.jpg',
+        '/tmp/photo-2.jpg',
+      ]);
+      expect(rows.map((r) => r.sortOrder), [1, 2]);
+      for (final r in rows) {
+        expect(r.ownerId, ownerA);
+        expect(r.remoteUrl, isNull);
+        expect(r.wishId, wish.id);
+      }
+    });
+
+    test('watchWishImages стримит доменные сущности по sort_order', () async {
+      final wish = await repo.createWish(
+        title: 'Дрель',
+        additionalImagePaths: ['/tmp/b.jpg', '/tmp/a.jpg'],
+      );
+
+      final images = await repo.watchWishImages(wish.id).first;
+      expect(images.map((i) => i.localPath), ['/tmp/b.jpg', '/tmp/a.jpg']);
+      expect(images.map((i) => i.displaySource), ['/tmp/b.jpg', '/tmp/a.jpg']);
+    });
+
+    test('create без additional → wish_images пуст', () async {
+      final wish = await repo.createWish(title: 'Текст');
+      expect(await db.wishImagesOf(ownerA, wish.id), isEmpty);
+    });
+
+    test('outbox payload не несёт локальные пути ни в image_url, '
+        'ни где-либо ещё', () async {
+      await repo.createWish(
+        title: 'Фото',
+        imageUrl: '/tmp/local.jpg',
+        additionalImagePaths: ['/tmp/extra.jpg'],
+      );
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      // Локальный файл — не remote URL → в API не отправляется.
+      expect(payload['image_url'], isNull);
+      expect(payload.toString(), isNot(contains('/tmp/')));
+    });
+
+    test('remote image_url по-прежнему уходит в payload', () async {
+      await repo.createWish(
+        title: 'Ссылка на картинку',
+        imageUrl: 'https://cdn.example.com/x.jpg',
+      );
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      expect(payload['image_url'], 'https://cdn.example.com/x.jpg');
+    });
+
+    test('deleteWish unsynced create: wish_images уходят каскадно', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: ['/tmp/x.jpg'],
+      );
+      expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+
+      await repo.deleteWish(wish.id);
+
+      expect(await rowOf(wish.id), isNull);
+      expect(await db.wishImagesOf(ownerA, wish.id), isEmpty);
+    });
+
+    test('tombstone delete: изображения живут до confirm DELETE', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: ['/tmp/x.jpg'],
+      );
+      // Снимаем create-op — сущность ведёт себя как синхронизированная.
+      await (db.delete(
+        db.outboxEntries,
+      )..where((o) => o.ownerId.equals(ownerA))).go();
+
+      await repo.deleteWish(wish.id);
+
+      // Tombstone-строка скрыта, но при 422 на DELETE желание
+      // вернётся — фото должны пережить tombstone.
+      expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+    });
+  });
 }

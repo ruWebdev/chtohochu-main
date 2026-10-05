@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_provider.dart';
 import '../../../../core/database/legacy_migration.dart';
+import '../../../../core/media/media_storage_migration.dart';
 import '../../../../core/services/preferences_service.dart';
 import '../../../../core/sync/sync_engine.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -11,6 +12,7 @@ import '../../../friends/presentation/providers/friends_controller.dart';
 import '../../../profile/data/profile_repository.dart';
 import '../../../profile/presentation/providers/profile_controller.dart';
 import '../../../shopping/presentation/providers/shopping_lists_controller.dart';
+import '../../../wishes/data/wish_photo_picker.dart';
 import '../../../wishes/data/wish_repository.dart';
 import '../../../wishes/presentation/providers/wishes_controller.dart';
 
@@ -80,6 +82,8 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
 
     bool hasWishes = false;
     if (_isAuthed && session != null) {
+      // Локальные media-файлы → Documents/media/ (one-time, до sync).
+      await ref.read(mediaStorageMigrationProvider).migrate();
       // Legacy SharedPreferences-кэши → Drift (one-time, до sync).
       await ref.read(legacyWishesMigrationProvider).migrate(session.user.id);
       await ref
@@ -111,6 +115,7 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
   Future<void> onAuthenticated(AuthSession session) async {
     _isAuthed = true;
     _session = session;
+    await ref.read(mediaStorageMigrationProvider).migrate();
     await ref.read(legacyWishesMigrationProvider).migrate(session.user.id);
     await ref
         .read(legacyShoppingListsMigrationProvider)
@@ -193,9 +198,14 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
   /// Очистить все пользовательские данные и состояние.
   Future<void> _clearUserData(String? userId) async {
     final prefs = ref.read(preferencesServiceProvider);
+    var imagePaths = const <String>[];
+    if (userId != null) {
+      // clearAccountData возвращает пути локальных фото —
+      // убираем файлы, чтобы не копились orphan-данные.
+      imagePaths = await ref.read(appDatabaseProvider).clearAccountData(userId);
+    }
     await Future.wait([
-      if (userId != null)
-        ref.read(appDatabaseProvider).clearAccountData(userId),
+      deleteWishPhotoFiles(imagePaths),
       prefs.clearLegacyWishesCache(),
       prefs.clearShoppingListsCache(),
       prefs.clearFriendsCache(),

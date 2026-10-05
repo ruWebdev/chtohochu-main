@@ -436,7 +436,7 @@ void main() {
       "('user-a','wish','w1','create','{\"title\":\"Старое желание\"}',"
       "1735689600)",
     );
-    raw.dispose();
+    raw.close();
 
     // Открытие актуальной базой → onUpgrade 1→3.
     final db = openDb();
@@ -473,6 +473,60 @@ void main() {
     await engine.requestSync();
     engine.detach();
     expect(api.wishesOf(owner).single['title'], 'Старое желание');
+    await db.close();
+  });
+
+  test('wish_images переживают полный restart БД', () async {
+    final prefs = PreferencesService(await SharedPreferences.getInstance());
+
+    // ── Сессия 1: wish + изображения, close ─────────────────
+    var db = openDb();
+    var repo = DriftWishRepository(db, prefs);
+    final wish = await repo.createWish(
+      title: 'Дрель с фото',
+      imageUrl: '/tmp/primary.jpg',
+      additionalImagePaths: ['/tmp/one.jpg', '/tmp/two.jpg'],
+    );
+    await db.close();
+
+    // ── Сессия 2: reopen — изображения и порядок на месте ──
+    db = openDb();
+    repo = DriftWishRepository(db, prefs);
+    final restored = (await repo.getWishes()).single;
+    expect(restored.id, wish.id);
+    expect(restored.imageUrl, '/tmp/primary.jpg');
+
+    final images = await repo.watchWishImages(wish.id).first;
+    expect(images.map((i) => i.localPath), ['/tmp/one.jpg', '/tmp/two.jpg']);
+    expect(images.map((i) => i.sortOrder), [1, 2]);
+    await db.close();
+  });
+
+  test('pending upload state переживает restart (retry после сети)', () async {
+    final prefs = PreferencesService(await SharedPreferences.getInstance());
+
+    // ── Сессия 1: wish + фото, sync так и не случился ────────
+    var db = openDb();
+    var repo = DriftWishRepository(db, prefs);
+    final wish = await repo.createWish(
+      title: 'Оффлайн-фото',
+      imageUrl: '/tmp/primary.jpg',
+      additionalImagePaths: ['/tmp/extra.jpg'],
+    );
+    await db.close();
+
+    // ── Сессия 2: upload-queue видит pending после restart ───
+    db = openDb();
+    repo = DriftWishRepository(db, prefs);
+    final pending = await db.wishesPendingImageUpload(owner);
+    expect(pending.single.id, wish.id);
+    expect(pending.single.imageUploadStatus, 'pending');
+    expect(pending.single.imageUploadId, isNotNull); // client_id
+
+    final pendingImages = await db.wishImagesPendingUpload(owner);
+    expect(pendingImages.single.wishId, wish.id);
+    expect(pendingImages.single.uploadStatus, 'pending');
+    expect(pendingImages.single.uploadId, isNotNull);
     await db.close();
   });
 }

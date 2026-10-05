@@ -27,6 +27,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get more => 'Ещё';
 
   @override
+  String get notificationsTitle => 'Оповещения';
+
+  @override
+  String get notificationsEmptyTitle => 'Пока нет оповещений';
+
+  @override
+  String get notificationsEmptyDescription =>
+      'Здесь будут появляться оповещения.';
+
+  @override
   String get save => 'Сохранить';
 
   @override
@@ -58,6 +68,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pullToRefresh => 'Потяните вниз, чтобы обновить.';
+
+  @override
+  String get syncNotSynced => 'не синхронизировано';
 
   @override
   String get noName => 'Без имени';
@@ -237,11 +250,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishAddFirst => 'Добавить первое желание';
 
   @override
-  String get wishesEmptyTitle => 'Пока нет желаний';
+  String get wishesEmptyTitle => 'Что ты хочешь?';
 
   @override
   String get wishesEmptyDescription =>
-      'Запишите то, чего хотите — чтобы не забыть и чтобы близким было проще выбрать подарок.';
+      'Запиши, чего хочешь, — чтобы не забыть и чтобы близким было проще выбрать подарок.';
+
+  @override
+  String get friendWishesEmptyTitle => 'Пока нет желаний';
 
   @override
   String get wishNotFound => 'Желание не найдено';
@@ -354,6 +370,48 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get firstWishDescription =>
       'Запишите то, чего вы хотите — чтобы не забыть самим и помочь близким выбрать правильный подарок.';
+
+  @override
+  String get wishQuickHint => 'Что хочешь?';
+
+  @override
+  String get wishUrlAction => 'URL';
+
+  @override
+  String get wishUrlActionSemantic => 'Добавить ссылку';
+
+  @override
+  String get wishUrlLabel => 'Ссылка';
+
+  @override
+  String get wishUrlInvalid => 'Некорректная ссылка';
+
+  @override
+  String get wishCameraAction => 'Камера';
+
+  @override
+  String get wishCameraActionSemantic => 'Сфотографировать желание';
+
+  @override
+  String get wishGalleryAction => 'Галерея';
+
+  @override
+  String get wishGalleryActionSemantic => 'Выбрать фото из галереи';
+
+  @override
+  String get wishPhotoRemove => 'Удалить фото';
+
+  @override
+  String get wishPhotoError => 'Не удалось получить фото.';
+
+  @override
+  String get wishPhotoFallbackTitle => 'Фотография';
+
+  @override
+  String get wishDiscardTitle => 'Закрыть без сохранения?';
+
+  @override
+  String get wishDiscardMessage => 'Введённые данные будут потеряны.';
 
   @override
   String get shoppingTitle => 'Покупки';

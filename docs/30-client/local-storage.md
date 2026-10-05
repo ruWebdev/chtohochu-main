@@ -64,6 +64,18 @@ Not every endpoint needs offline support. Read-only, rarely-accessed, or large d
 - Server-derived transient data that has no offline value (e.g. presence lists).
 - Analytics events (use an analytics sink, not the local DB).
 
+### 3.3 Wish images
+
+A wish has one **primary** image and N **additional** images (ADR-014, ADR-015):
+
+- `wishes.image_url` — the primary reference: either a remote `http(s)` URL or a local file path (`Documents/media/wishes/`). Local paths are never sent to the API as `image_url`.
+- `wish_images` — additional images only: `id`, `owner_id`, `wish_id`, `local_path`, `remote_url`, `sort_order`, `created_at`. Rows are created atomically with the wish inside the same transaction; `sort_order` starts at 1. No SQL-level FK — the cascade is enforced by the repository/sync engine so tombstoned wishes keep their images until the server DELETE is confirmed.
+- Upload lifecycle (ADR-015): `wishes.image_upload_status`/`image_upload_id` and `wish_images.upload_status`/`upload_id` track `pending → uploading → uploaded | failed` per image. `client_id`/`upload_id` are stable per row — retries never create duplicate S3 objects.
+- Photos are stored under `Documents/media/{wishes,avatars,shopping}/` after `MediaImageProcessor` (orientation, max 2048 px, JPEG q82 for photos). A one-time `MediaStorageMigration` moves legacy `Documents/wish_photos/` files and rewrites paths.
+- Remote objects live in one shared physical S3 bucket under purpose root prefixes: `chtohochu-avatars/`, `chtohochu-wish-images/`, `chtohochu-shopping-images/` (ADR-015). Local `Documents/media/...` paths and remote keys are different layers — never mixed.
+- Pull reconcile never erases local image references when the server returns `image_url: null`, and never touches `wish_images`.
+- Deleting a wish cascades its `wish_images` rows and best-effort removes the local files; tombstoned wishes keep their images until the server DELETE is confirmed. Remote objects are removed asynchronously by the `DeleteMediaObjects` job — local delete never blocks on S3.
+
 ---
 
 ## 4. Drift Structure

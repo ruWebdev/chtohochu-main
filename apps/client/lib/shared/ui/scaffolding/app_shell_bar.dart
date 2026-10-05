@@ -17,6 +17,7 @@ class AppBarAction {
     required this.onPressed,
     required this.semanticLabel,
     this.tooltip,
+    this.variant = AppIconButtonVariant.subtle,
   });
 
   /// Иконка (Phosphor).
@@ -30,6 +31,9 @@ class AppBarAction {
 
   /// Тултип при долгом нажатии (опционально).
   final String? tooltip;
+
+  /// Визуальный вариант кнопки (по умолчанию — нейтральный subtle).
+  final AppIconButtonVariant variant;
 }
 
 /// Единый переиспользуемый AppBar для основных экранов приложения.
@@ -55,6 +59,7 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     this.title,
     this.subtitle,
+    this.subtitleTrailing,
     this.leading,
     this.actions = const [],
     this.overflowActions = const [],
@@ -66,6 +71,11 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Опциональный подзаголовок (например, количество элементов).
   final String? subtitle;
+
+  /// Опциональный микро-виджет после текста подзаголовка
+  /// (например, индикатор синхронизации). Не переносится,
+  /// текст слева сжимается ellipsis'ом.
+  final Widget? subtitleTrailing;
 
   /// Опциональный leading-виджет.
   ///
@@ -122,13 +132,20 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              subtitle!,
-                              style: t.secondary.copyWith(
-                                color: colors.textMuted,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    subtitle!,
+                                    style: t.secondary.copyWith(
+                                      color: colors.textMuted,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                ?subtitleTrailing,
+                              ],
                             ),
                           ],
                         )
@@ -175,6 +192,7 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
     return AppIconButton(
       icon: Icon(action.icon),
       onPressed: action.onPressed,
+      variant: action.variant,
       semanticLabel: action.semanticLabel,
       tooltip: action.tooltip,
     );

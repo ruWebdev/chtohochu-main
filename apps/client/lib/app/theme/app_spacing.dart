@@ -33,7 +33,9 @@ class AppSpacing {
   static const double bottomBarMarginHorizontal = sm;
 
   /// Нижний отступ floating bottom bar (поверх Safe Area).
-  static const double bottomBarMarginBottom = xs;
+  /// Чуть больше обычного — нижняя дуга центральной кнопки
+  /// выступает за кромку бара и не упирается в край экрана.
+  static const double bottomBarMarginBottom = sm;
 
   // --- AppBar ---
 

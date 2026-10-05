@@ -8,6 +8,7 @@ import '../../features/friends/presentation/pages/friend_profile_page.dart';
 import '../../features/friends/presentation/pages/friend_search_page.dart';
 import '../../features/friends/presentation/pages/friend_wish_details_page.dart';
 import '../../features/friends/presentation/pages/friends_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/profile/presentation/pages/profile_edit_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
@@ -164,6 +165,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ProfileEditPage(),
       ),
 
+      // --- Авторизованная часть: оповещения (без shell) ---
+      GoRoute(
+        path: AppRoutes.notifications,
+        name: 'notifications',
+        builder: (context, state) => const NotificationsPage(),
+      ),
+
       // --- Авторизованная часть: основные разделы (внутри shell) ---
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
@@ -211,6 +219,7 @@ String? _redirectWhenReady(String loc) {
     AppRoutes.shopping,
     AppRoutes.friends,
     AppRoutes.profile,
+    AppRoutes.notifications,
     AppRoutes.showcase,
   ];
   if (allowed.contains(loc)) return null;

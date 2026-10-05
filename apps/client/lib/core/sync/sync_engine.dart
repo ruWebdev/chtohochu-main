@@ -1,16 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/session/presentation/providers/app_session_controller.dart';
+import '../../features/wishes/data/wish_photo_picker.dart';
+import '../../features/wishes/domain/wish.dart';
 import '../database/app_database.dart';
 import '../database/database_provider.dart';
+import '../media/media_paths.dart';
+import '../media/media_upload_service.dart';
 import '../network/api_client.dart';
+import '../services/preferences_service.dart';
 import 'outbox_store.dart';
 
 /// Статус синхронизации для UI/диагностики.
@@ -33,12 +40,15 @@ class SyncEngine {
     required this._dio,
     required this._onUnauthorized,
     required this._onStatus,
+    MediaUploadService? mediaUploads,
   }) : _db = db,
-       _outbox = OutboxStore(db);
+       _outbox = OutboxStore(db),
+       _mediaUploads = mediaUploads ?? MediaUploadService(api: _dio);
 
   final AppDatabase _db;
   final Dio _dio;
   final OutboxStore _outbox;
+  final MediaUploadService _mediaUploads;
   final void Function() _onUnauthorized;
   final void Function(SyncStatus) _onStatus;
 
@@ -90,6 +100,10 @@ class SyncEngine {
       do {
         _runAgain = false;
         await _push();
+        // Media upload идёт после entity push: сервер должен
+        // знать желание для ownership-проверки media API.
+        final ownerId = _ownerId;
+        if (ownerId != null) await _pushWishMedia(ownerId);
         await _pull();
       } while (_runAgain && _ownerId != null && !_authExpired);
       _onStatus(SyncStatus.idle);
@@ -463,13 +477,184 @@ class SyncEngine {
         // Профиль = session identity: строку не удаляем,
         // снимаются только операции (общий dropEntityOps ниже).
         default:
-          await (_db.delete(_db.wishes)..where(
-                (w) => w.id.equals(op.entityId) & w.ownerId.equals(op.ownerId),
-              ))
-              .go();
+          await _dropWishWithImages(op.ownerId, op.entityId);
       }
       await _outbox.dropEntityOps(op.ownerId, op.entityId);
     });
+  }
+
+  // ── Media upload (ADR-015) ──────────────────────────────
+
+  /// Доставить локальные изображения желаний в object storage
+  /// через backend media API (presigned PUT → complete).
+  ///
+  /// Upload — не условие существования желания: ошибки одного
+  /// изображения не блокируют остальные; transient-ошибка
+  /// возвращает строку в `pending` для следующего sync-цикла,
+  /// permanent (4xx) фиксируется `failed` и не retry'ится.
+  Future<void> _pushWishMedia(String ownerId) async {
+    for (final wish in await _db.wishesPendingImageUpload(ownerId)) {
+      if (_ownerId != ownerId) return;
+      // Сервер ещё не знает желание → media API ответит 404 на
+      // entity check. Дождёмся успешного create — следующий цикл.
+      if (await _outbox.hasUnsyncedCreate(ownerId, wish.id)) continue;
+      await _uploadPrimaryImage(ownerId, wish);
+    }
+    for (final image in await _db.wishImagesPendingUpload(ownerId)) {
+      if (_ownerId != ownerId) return;
+      if (await _outbox.hasUnsyncedCreate(ownerId, image.wishId)) {
+        continue;
+      }
+      await _uploadAdditionalImage(ownerId, image);
+    }
+  }
+
+  Future<void> _uploadPrimaryImage(String ownerId, WishRow wish) async {
+    final path = wish.imageUrl;
+    if (path == null || Wish.isRemoteImageRef(path)) {
+      // Строка помечена pending, но ссылка уже remote/пустая —
+      // состояние выравниваем без запросов.
+      await _db.setWishImageUploadState(ownerId, wish.id, status: 'uploaded');
+      return;
+    }
+    final uploadId = wish.imageUploadId ?? const Uuid().v4();
+    await _db.setWishImageUploadState(
+      ownerId,
+      wish.id,
+      status: 'uploading',
+      uploadId: uploadId,
+    );
+    try {
+      final remoteUrl = await _uploadFile(
+        entityId: wish.id,
+        clientId: uploadId,
+        path: path,
+      );
+      await _db.setWishImageUploadState(
+        ownerId,
+        wish.id,
+        status: 'uploaded',
+        remoteUrl: remoteUrl,
+      );
+      // remote_url уходит штатным update-op: сервер и другие
+      // устройства получают его обычным PATCH — отдельный
+      // протокол для изображений не нужен.
+      await _outbox.enqueue(
+        ownerId: ownerId,
+        entityType: 'wish',
+        entityId: wish.id,
+        operation: OutboxOp.update,
+        payload: {'image_url': remoteUrl},
+      );
+    } on DioException catch (e) {
+      await _db.setWishImageUploadState(
+        ownerId,
+        wish.id,
+        status: _isPermanentFailure(e) ? 'failed' : 'pending',
+      );
+      if (!_isPermanentFailure(e)) rethrow;
+    }
+  }
+
+  Future<void> _uploadAdditionalImage(
+    String ownerId,
+    WishImageRow image,
+  ) async {
+    final path = image.localPath;
+    if (path == null) {
+      await _db.setWishImageRowUploadState(ownerId, image.id, status: 'failed');
+      return;
+    }
+    if (image.remoteUrl != null) {
+      await _db.setWishImageRowUploadState(
+        ownerId,
+        image.id,
+        status: 'uploaded',
+      );
+      return;
+    }
+    final uploadId = image.uploadId ?? const Uuid().v4();
+    await _db.setWishImageRowUploadState(
+      ownerId,
+      image.id,
+      status: 'uploading',
+      uploadId: uploadId,
+    );
+    try {
+      final remoteUrl = await _uploadFile(
+        entityId: image.wishId,
+        clientId: uploadId,
+        path: path,
+      );
+      await _db.setWishImageRowUploadState(
+        ownerId,
+        image.id,
+        status: 'uploaded',
+        remoteUrl: remoteUrl,
+      );
+    } on DioException catch (e) {
+      await _db.setWishImageRowUploadState(
+        ownerId,
+        image.id,
+        status: _isPermanentFailure(e) ? 'failed' : 'pending',
+      );
+      if (!_isPermanentFailure(e)) rethrow;
+    }
+  }
+
+  /// request instructions → presigned PUT → complete → remote_url.
+  /// `clientId` стабилен на локальную строку — retry не создаёт
+  /// второй объект (сервер возвращает существующий upload).
+  Future<String> _uploadFile({
+    required String entityId,
+    required String clientId,
+    required String path,
+  }) async {
+    final file = File(path);
+    final contentType = MediaPaths.contentTypeForPath(path);
+    if (!file.existsSync() || contentType == null) {
+      // Файл потерян или тип не в whitelist — retry бессмысленен.
+      throw DioException(
+        requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 422),
+        type: DioExceptionType.badResponse,
+      );
+    }
+    final instructions = await _mediaUploads.requestUpload(
+      purpose: 'wish',
+      entityId: entityId,
+      contentType: contentType,
+      size: file.lengthSync(),
+      clientId: clientId,
+    );
+    return _mediaUploads.uploadAndConfirm(instructions, file);
+  }
+
+  /// 4xx — permanent: повтор того же файла даст тот же отказ.
+  /// Отсутствие ответа (transport) и 5xx — retry позже.
+  bool _isPermanentFailure(DioException e) {
+    final status = e.response?.statusCode;
+    return status != null && status >= 400 && status < 500;
+  }
+
+  /// Физическое удаление желания вместе с изображениями и
+  /// локальными файлами (best-effort — в пределах транзакции
+  /// вызывающего кода).
+  Future<void> _dropWishWithImages(String ownerId, String wishId) async {
+    // tombstone-строка: wishById отфильтровал бы её — читаем без фильтра.
+    final local =
+        await (_db.select(_db.wishes)
+              ..where((w) => w.id.equals(wishId) & w.ownerId.equals(ownerId)))
+            .getSingleOrNull();
+    final paths = [
+      if (local != null && !Wish.isRemoteImageRef(local.imageUrl))
+        local.imageUrl!,
+      ...await _db.deleteWishImages(ownerId, wishId),
+    ];
+    await (_db.delete(
+      _db.wishes,
+    )..where((w) => w.id.equals(wishId) & w.ownerId.equals(ownerId))).go();
+    await deleteWishPhotoFiles(paths);
   }
 
   /// Удалить кэшированную проекцию пользователя, если на него
@@ -722,6 +907,19 @@ class SyncEngine {
   /// (созданной через outbox — та же identity, обновляем timestamps).
   Future<void> _applyServerWish(OutboxEntry op, dynamic data) async {
     if (data is! Map<String, dynamic>) return;
+    final serverImage = data['image_url'] as String?;
+    // Локальный файл не уходит в API — серверный null не должен
+    // затирать локальное фото (до upload-эндпоинта).
+    final local = await _db.wishById(op.ownerId, op.entityId);
+    final localImage = local?.imageUrl;
+    // Сервер не знает локальный файл — сохраняем его. Remote URL,
+    // уже подтверждённый media upload, но ещё не дошедший через
+    // update-op, тоже сохраняем (не затираем серверным null).
+    final keepLocal =
+        serverImage == null &&
+        localImage != null &&
+        (!Wish.isRemoteImageRef(localImage) ||
+            local?.imageUploadStatus == 'uploaded');
     await (_db.update(_db.wishes)..where(
           (w) => w.id.equals(op.entityId) & w.ownerId.equals(op.ownerId),
         ))
@@ -731,7 +929,7 @@ class SyncEngine {
             description: Value(data['description'] as String?),
             price: Value(data['price'] as int?),
             link: Value(data['link'] as String?),
-            imageUrl: Value(data['image_url'] as String?),
+            imageUrl: Value(keepLocal ? localImage : serverImage),
             createdAt: Value(DateTime.parse(data['created_at'] as String)),
             updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
           ),
@@ -897,11 +1095,24 @@ class SyncEngine {
       // не затираем. Позиция дополнительно защищена, если
       // незавершённая операция висит на её родительском списке.
       for (final row in remoteWishes) {
-        if (!pending.contains(row.id.value)) {
-          await _db
-              .into(_db.wishes)
-              .insertOnConflictUpdate(row.copyWith(ownerId: Value(ownerId)));
+        if (pending.contains(row.id.value)) continue;
+        var merged = row;
+        if (row.imageUrl.value == null) {
+          // Сервер не знает о локальном файле — сохраняем его
+          // в строке, чтобы фото не пропадало после reconcile.
+          // То же для remote URL после upload: update-op ещё в
+          // outbox → локальное значение новее серверного null.
+          final local = await _db.wishById(ownerId, row.id.value);
+          final localImage = local?.imageUrl;
+          if (localImage != null &&
+              (!Wish.isRemoteImageRef(localImage) ||
+                  local?.imageUploadStatus == 'uploaded')) {
+            merged = row.copyWith(imageUrl: Value(localImage));
+          }
         }
+        await _db
+            .into(_db.wishes)
+            .insertOnConflictUpdate(merged.copyWith(ownerId: Value(ownerId)));
       }
       for (final row in remoteLists) {
         if (!pending.contains(row.id.value)) {
@@ -926,7 +1137,9 @@ class SyncEngine {
       )..where((w) => w.ownerId.equals(ownerId))).get();
       for (final w in localWishes) {
         if (!remoteWishIds.contains(w.id) && !pending.contains(w.id)) {
-          await (_db.delete(_db.wishes)..where((x) => x.id.equals(w.id))).go();
+          // Каскад: изображения желания и их файлы уходят вместе
+          // с сущностью — не остаёмся с orphan-строками/файлами.
+          await _dropWishWithImages(ownerId, w.id);
         }
       }
       final localLists = await (_db.select(
@@ -1077,6 +1290,16 @@ class SyncStatusNotifier extends Notifier<SyncStatus> {
 final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatus>(
   SyncStatusNotifier.new,
 );
+
+/// Число незавершённых outbox-операций текущего аккаунта
+/// (pending + failed). Используется UI для микро-индикации
+/// «не синхронизировано» — без неё пользователь не видит,
+/// что локальные изменения ещё не доехали до сервера.
+final pendingOutboxCountProvider = StreamProvider<int>((ref) {
+  final userId = ref.watch(preferencesServiceProvider).currentUserId();
+  if (userId == null) return Stream.value(0);
+  return ref.watch(appDatabaseProvider).watchOutboxCount(userId);
+});
 
 /// Провайдер SyncEngine. Живёт всю сессию; attach/detach
 /// управляется AppSessionController. В тестах без сервера

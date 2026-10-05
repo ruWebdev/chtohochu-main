@@ -81,7 +81,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
     expect(find.byType(HomePage), findsOneWidget);
-    expect(find.text('Пока нет желаний'), findsOneWidget);
+    expect(find.text('Что ты хочешь?'), findsOneWidget);
   });
 
   testWidgets('Authenticated user with wishes goes directly to home', (
@@ -121,7 +121,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Открыть экран создания желания через + в AppBar.
-    await tester.tap(find.byTooltip('Добавить желание'));
+    await tester.tap(find.byType(AddWishRow));
     await tester.pumpAndSettle();
 
     expect(find.byType(WishFormPage), findsOneWidget);
@@ -148,7 +148,7 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Добавить желание'));
+    await tester.tap(find.byType(AddWishRow));
     await tester.pumpAndSettle();
     expect(find.byType(WishFormPage), findsOneWidget);
 

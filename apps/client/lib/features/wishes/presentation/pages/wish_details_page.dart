@@ -102,7 +102,11 @@ class WishDetailsPage extends ConsumerWidget {
               ? const Center(child: CircularProgressIndicator())
               : wish == null
               ? _NotFound(onBack: () => _back(context))
-              : WishDetailsBody(wish: wish),
+              : WishDetailsBody(
+                  wish: wish,
+                  additionalImages:
+                      ref.watch(wishImagesProvider(wishId)).value ?? const [],
+                ),
         ),
       ),
     );

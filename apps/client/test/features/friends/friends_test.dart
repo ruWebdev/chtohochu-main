@@ -7,6 +7,7 @@ import 'package:chtohochu/features/friends/presentation/pages/friend_search_page
 import 'package:chtohochu/features/friends/presentation/pages/friend_wish_details_page.dart';
 import 'package:chtohochu/features/friends/presentation/pages/friends_page.dart';
 import 'package:chtohochu/shared/ui/buttons/app_button.dart';
+import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -224,7 +225,12 @@ void main() {
     await _openFriends(tester);
 
     // + в AppBar → экран поиска.
-    await tester.tap(find.byTooltip('Добавить друга'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppShellBar),
+        matching: find.byTooltip('Добавить друга'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byType(FriendSearchPage), findsOneWidget);
@@ -264,7 +270,12 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
     await _openFriends(tester);
-    await tester.tap(find.byTooltip('Добавить друга'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppShellBar),
+        matching: find.byTooltip('Добавить друга'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'несуществующееимя');
@@ -286,7 +297,12 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
     await _openFriends(tester);
-    await tester.tap(find.byTooltip('Добавить друга'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppShellBar),
+        matching: find.byTooltip('Добавить друга'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'анна');
@@ -539,7 +555,12 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
     await _openFriends(tester);
-    await tester.tap(find.byTooltip('Добавить друга'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppShellBar),
+        matching: find.byTooltip('Добавить друга'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'анна');
@@ -574,9 +595,7 @@ class _FailingFriendsRepository implements FriendsRepository {
 
   @override
   Future<Friend> addFriend(Friend user) {
-    return Future.error(
-      const FriendNotFoundError(),
-    );
+    return Future.error(const FriendNotFoundError());
   }
 
   @override

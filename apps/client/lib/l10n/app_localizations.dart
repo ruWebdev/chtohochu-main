@@ -130,6 +130,24 @@ abstract class AppLocalizations {
   /// **'Ещё'**
   String get more;
 
+  /// Title of the notifications page and label of the bell action
+  ///
+  /// In ru, this message translates to:
+  /// **'Оповещения'**
+  String get notificationsTitle;
+
+  /// Empty state title on the notifications page
+  ///
+  /// In ru, this message translates to:
+  /// **'Пока нет оповещений'**
+  String get notificationsEmptyTitle;
+
+  /// Empty state description on the notifications page
+  ///
+  /// In ru, this message translates to:
+  /// **'Здесь будут появляться оповещения.'**
+  String get notificationsEmptyDescription;
+
   /// Generic save button
   ///
   /// In ru, this message translates to:
@@ -195,6 +213,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Потяните вниз, чтобы обновить.'**
   String get pullToRefresh;
+
+  /// Inline suffix in wishes subtitle shown when local changes have not been synced
+  ///
+  /// In ru, this message translates to:
+  /// **'не синхронизировано'**
+  String get syncNotSynced;
 
   /// Fallback display name for a user without a name
   ///
@@ -523,14 +547,20 @@ abstract class AppLocalizations {
   /// Empty state title on the wishes screen
   ///
   /// In ru, this message translates to:
-  /// **'Пока нет желаний'**
+  /// **'Что ты хочешь?'**
   String get wishesEmptyTitle;
 
   /// Empty state description on the wishes screen
   ///
   /// In ru, this message translates to:
-  /// **'Запишите то, чего хотите — чтобы не забыть и чтобы близким было проще выбрать подарок.'**
+  /// **'Запиши, чего хочешь, — чтобы не забыть и чтобы близким было проще выбрать подарок.'**
   String get wishesEmptyDescription;
+
+  /// Empty wishes title inside a friend profile
+  ///
+  /// In ru, this message translates to:
+  /// **'Пока нет желаний'**
+  String get friendWishesEmptyTitle;
 
   /// Empty state when a wish id no longer exists
   ///
@@ -741,6 +771,90 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Запишите то, чего вы хотите — чтобы не забыть самим и помочь близким выбрать правильный подарок.'**
   String get firstWishDescription;
+
+  /// Placeholder of the main field in the quick add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Что хочешь?'**
+  String get wishQuickHint;
+
+  /// Secondary button that reveals the link field in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'URL'**
+  String get wishUrlAction;
+
+  /// Accessibility label for the add-link button
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить ссылку'**
+  String get wishUrlActionSemantic;
+
+  /// Label of the link field in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылка'**
+  String get wishUrlLabel;
+
+  /// Validation error for a malformed URL in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Некорректная ссылка'**
+  String get wishUrlInvalid;
+
+  /// Secondary button that opens the camera in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Камера'**
+  String get wishCameraAction;
+
+  /// Accessibility label for the camera button
+  ///
+  /// In ru, this message translates to:
+  /// **'Сфотографировать желание'**
+  String get wishCameraActionSemantic;
+
+  /// Secondary button that opens the system gallery picker in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Галерея'**
+  String get wishGalleryAction;
+
+  /// Accessibility label for the gallery button
+  ///
+  /// In ru, this message translates to:
+  /// **'Выбрать фото из галереи'**
+  String get wishGalleryActionSemantic;
+
+  /// Accessibility label for removing a photo in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Удалить фото'**
+  String get wishPhotoRemove;
+
+  /// Error shown when camera capture fails
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось получить фото.'**
+  String get wishPhotoError;
+
+  /// Title for a wish created from a photo without text
+  ///
+  /// In ru, this message translates to:
+  /// **'Фотография'**
+  String get wishPhotoFallbackTitle;
+
+  /// Title of the dialog when closing a filled add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Закрыть без сохранения?'**
+  String get wishDiscardTitle;
+
+  /// Body of the dialog when closing a filled add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Введённые данные будут потеряны.'**
+  String get wishDiscardMessage;
 
   /// Title of the shopping lists screen
   ///

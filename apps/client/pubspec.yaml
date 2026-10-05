@@ -43,6 +43,9 @@ dependencies:
   uuid: ^4.6.0
   sqlite3_flutter_libs: ^0.6.0+eol
   intl: ^0.20.3
+  image_picker: ^1.2.3
+  path_provider: ^2.1.6
+  flutter_image_compress: ^2.5.1
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +58,7 @@ dev_dependencies:
   retrofit_generator: ^10.0.0
   riverpod_generator: ^4.0.0
   riverpod_lint: ^3.0.0
+  sqlite3: ^3.5.2
 
 flutter:
   uses-material-design: true

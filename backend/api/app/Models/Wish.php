@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Jobs\DeleteMediaObjects;
 use Database\Factories\WishFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -57,5 +58,14 @@ class Wish extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    protected static function booted(): void
+    {
+        // Удаление желания → асинхронный retryable cleanup remote
+        // media-объектов (ADR-015). Сам delete не зависит от S3.
+        static::deleted(function (Wish $wish) {
+            DeleteMediaObjects::dispatch('wish', $wish->id);
+        });
     }
 }

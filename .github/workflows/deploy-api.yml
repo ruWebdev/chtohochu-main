@@ -79,10 +79,13 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+          # 'docker tag' keeps local :latest in sync with the deployed image —
+          # without it a manual 'up -d' (no TAG) would resolve the stale tag.
           ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
             "cd /srv/chtohochu \
              && TAG=$TAG docker compose pull \
              && TAG=$TAG docker compose up -d \
+             && docker tag ghcr.io/ruwebdev/chtohochu-api:$TAG ghcr.io/ruwebdev/chtohochu-api:latest \
              && docker compose ps"
 
       - name: Health check

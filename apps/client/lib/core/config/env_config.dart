@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 /// Конфигурация окружения приложения.
 ///
 /// Значения передаются через `--dart-define` во время сборки.
-/// По умолчанию: debug/profile — локальный стек
-/// (`https://api.chtohochu.test`), release — production
-/// (`https://api.chtohochu.ru`). Для production-сборок
-/// `--dart-define=API_BASE_URL=...` обязателен лишь для нестандартных
-/// хостов.
+/// По умолчанию приложение обращается к production API
+/// (`https://api.chtohochu.ru`) во всех режимах, включая debug.
+/// Для локального стека передайте
+/// `--dart-define=API_BASE_URL=https://api.chtohochu.test` —
+/// ключ Reverb подставится автоматически.
 /// Backend живёт за domain-routing (`Route::domain(APP_DOMAIN_API)`) —
 /// `http://localhost:8000` не является рабочим адресом API.
 ///
@@ -29,9 +29,7 @@ class EnvConfig {
     );
     final apiBaseUrl = definedUrl.isNotEmpty
         ? definedUrl
-        : (kReleaseMode
-              ? 'https://api.chtohochu.ru'
-              : 'https://api.chtohochu.test');
+        : 'https://api.chtohochu.ru';
 
     // Reverb app key — публичный идентификатор (по дизайну уезжает
     // в клиенты, как Pusher app key). Не секрет. Без явного

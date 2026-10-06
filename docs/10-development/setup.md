@@ -204,15 +204,18 @@ dart run build_runner build --delete-conflicting-outputs
 запросы только на домене `api.chtohochu.test` (domain routing) —
 `http://localhost:8000` не является рабочим адресом API.
 
-По умолчанию (без `--dart-define`): debug/profile — `https://api.chtohochu.test`,
-release — `https://api.chtohochu.ru`. Release-сборка отказывается
-стартовать с локальным/не-HTTPS адресом.
+По умолчанию (без `--dart-define`) приложение идёт на production
+`https://api.chtohochu.ru` во всех режимах, включая debug. Для работы
+против локального стека передайте `API_BASE_URL` — ключ Reverb
+(`REVERB_APP_KEY`) подберётся по хосту автоматически.
+Release-сборка отказывается стартовать с локальным/не-HTTPS адресом.
 
 ```bash
-# Хост-машина (api.chtohochu.test уже в /etc/hosts + mkcert CA)
+# Production API (по умолчанию)
 flutter run
 
-# Android emulator: api.chtohochu.test не резолвится на устройстве —
+# Локальный стек: api.chtohochu.test уже в /etc/hosts + mkcert CA.
+# На Android-эмуляторе .test не резолвится и mkcert CA не доверен —
 # используйте adb reverse / host IP / проброс (см. local-https.md).
 flutter run \
   --dart-define=API_BASE_URL=https://api.chtohochu.test

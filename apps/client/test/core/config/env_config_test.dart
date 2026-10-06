@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('EnvConfig', () {
-    test('без dart-define dev-сборка идёт на локальный стек', () {
+    test('без dart-define приложение идёт на production API', () {
       final env = EnvConfig.fromEnvironment();
 
-      expect(env.apiBaseUrl, 'https://api.chtohochu.test');
-      expect(env.reverbAppKey, 'local-app-key');
+      expect(env.apiBaseUrl, 'https://api.chtohochu.ru');
+      expect(env.reverbAppKey, '34c7a5e068b7da49a052bdf1e260cebe');
       expect(env.environment, 'dev');
     });
   });

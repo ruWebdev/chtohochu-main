@@ -3,10 +3,11 @@ import 'package:flutter/foundation.dart';
 /// Конфигурация окружения приложения.
 ///
 /// Значения передаются через `--dart-define` во время сборки.
-/// По умолчанию приложение обращается к production API
-/// (`https://api.chtohochu.ru`) во всех режимах, включая debug.
-/// Для локального стека передайте
-/// `--dart-define=API_BASE_URL=https://api.chtohochu.test`.
+/// По умолчанию: debug/profile — локальный стек
+/// (`https://api.chtohochu.test`), release — production
+/// (`https://api.chtohochu.ru`). Для production-сборок
+/// `--dart-define=API_BASE_URL=...` обязателен лишь для нестандартных
+/// хостов.
 /// Backend живёт за domain-routing (`Route::domain(APP_DOMAIN_API)`) —
 /// `http://localhost:8000` не является рабочим адресом API.
 ///
@@ -28,32 +29,28 @@ class EnvConfig {
     );
     final apiBaseUrl = definedUrl.isNotEmpty
         ? definedUrl
-        : 'https://api.chtohochu.ru';
+        : (kReleaseMode
+              ? 'https://api.chtohochu.ru'
+              : 'https://api.chtohochu.test');
 
     // Reverb app key — публичный идентификатор (по дизайну уезжает
-    // в клиенты, как Pusher app key). Не секрет. Для локального стека:
-    // `--dart-define=REVERB_APP_KEY=local-app-key`.
-    const reverbAppKey = String.fromEnvironment(
-      'REVERB_APP_KEY',
-      defaultValue: '34c7a5e068b7da49a052bdf1e260cebe',
-    );
+    // в клиенты, как Pusher app key). Не секрет. Без явного
+    // `--dart-define=REVERB_APP_KEY` ключ выбирается по хосту API:
+    // локальный стек → ключ из docker-compose, прод → прод-ключ.
+    const definedReverbKey = String.fromEnvironment('REVERB_APP_KEY');
+    final reverbAppKey = definedReverbKey.isNotEmpty
+        ? definedReverbKey
+        : (_isLocalHost(apiBaseUrl)
+              ? 'local-app-key'
+              : '34c7a5e068b7da49a052bdf1e260cebe');
 
     // Release-сборка не должна указывать на локальный/небезопасный
     // адрес — это misconfiguration сборки, а не runtime-ошибка
     // пользователя. Fail-fast: лучше падение на старте, чем
     // незаметно «мёртвый» релиз.
     if (kReleaseMode) {
-      final uri = Uri.tryParse(apiBaseUrl);
-      final host = uri?.host ?? '';
-      final isLocal =
-          host.isEmpty ||
-          host == 'localhost' ||
-          host == '127.0.0.1' ||
-          host.endsWith('.test') ||
-          host.startsWith('192.168.') ||
-          host.startsWith('10.') ||
-          host.startsWith('172.');
-      if (isLocal || uri?.scheme != 'https') {
+      final isLocal = _isLocalHost(apiBaseUrl);
+      if (isLocal || Uri.tryParse(apiBaseUrl)?.scheme != 'https') {
         throw StateError(
           'Release build requires a production HTTPS API_BASE_URL, '
           'got: $apiBaseUrl',
@@ -79,4 +76,16 @@ class EnvConfig {
 
   /// `true`, если приложение собрано для production.
   bool get isProduction => environment == 'prod';
+
+  /// Локальный/dev хост API: `*.chtohochu.test`, localhost, приватные IP.
+  static bool _isLocalHost(String url) {
+    final host = Uri.tryParse(url)?.host ?? '';
+    return host.isEmpty ||
+        host == 'localhost' ||
+        host == '127.0.0.1' ||
+        host.endsWith('.test') ||
+        host.startsWith('192.168.') ||
+        host.startsWith('10.') ||
+        host.startsWith('172.');
+  }
 }

@@ -90,6 +90,11 @@ class RealtimeClient {
     final apiUri = Uri.parse(_env.apiBaseUrl);
     final isTls = apiUri.scheme == 'https';
 
+    debugPrint(
+      'RealtimeClient: attach user=$userId → '
+      '${isTls ? 'wss' : 'ws'}://${apiUri.host}/app/${_env.reverbAppKey}',
+    );
+
     final client = PusherChannelsClient.websocket(
       options: PusherChannelsOptions.fromHost(
         scheme: isTls ? 'wss' : 'ws',
@@ -205,6 +210,9 @@ class RealtimeClient {
     // Служебные события протокола — не бизнес-события.
     final name = event.name;
     if (name.startsWith('pusher:') || name.startsWith('pusher_internal:')) {
+      if (name == 'pusher_internal:subscription_succeeded') {
+        debugPrint('RealtimeClient: subscribed to ${event.channelName}');
+      }
       return;
     }
 
@@ -225,7 +233,15 @@ class RealtimeClient {
     _onEvent?.call(parsed);
   }
 
-  void _setStatus(RealtimeStatus status) => _onStatus?.call(status);
+  RealtimeStatus _lastStatus = RealtimeStatus.disconnected;
+
+  void _setStatus(RealtimeStatus status) {
+    if (status != _lastStatus) {
+      _lastStatus = status;
+      debugPrint('RealtimeClient: → ${status.name}');
+    }
+    _onStatus?.call(status);
+  }
 }
 
 /// Authorizer для приватных каналов через общий Dio-клиент.

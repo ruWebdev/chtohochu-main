@@ -35,11 +35,16 @@ return [
             'key' => env('REVERB_APP_KEY'),
             'secret' => env('REVERB_APP_SECRET'),
             'app_id' => env('REVERB_APP_ID'),
+            // Серверная доставка событий идёт напрямую в контейнер Reverb
+            // (REVERB_SERVER_*), минуя публичный edge. REVERB_HOST/PORT/SCHEME
+            // остаются клиент-facing значениями для метаданных приложения.
             'options' => [
-                'host' => env('REVERB_HOST'),
-                'port' => env('REVERB_PORT', 443),
-                'scheme' => env('REVERB_SCHEME', 'https'),
-                'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
+                'host' => env('REVERB_SERVER_HOST', env('REVERB_HOST')),
+                'port' => env('REVERB_SERVER_PORT', env('REVERB_PORT', 443)),
+                // Internal Reverb speaks plain HTTP on the Docker network;
+                // client-facing scheme (wss/https) is not valid here.
+                'scheme' => env('REVERB_SERVER_SCHEME', 'http'),
+                'useTLS' => env('REVERB_SERVER_SCHEME', 'http') === 'https',
             ],
             'client_options' => [
                 // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html

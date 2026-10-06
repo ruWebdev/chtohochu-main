@@ -53,6 +53,7 @@ x-laravel-env: &laravel-env
   BROADCAST_CONNECTION: reverb
   REVERB_SERVER_HOST: reverb
   REVERB_SERVER_PORT: "8080"
+  REVERB_SERVER_SCHEME: http
 
 services:
   # ---------------------------------------------------------------------------
@@ -230,7 +231,7 @@ services:
         condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.chtohochu-ws.rule=Host(`api.chtohochu.ru`) && PathPrefix(`/app`)
+      - traefik.http.routers.chtohochu-ws.rule=Host(`api.chtohochu.ru`) && PathPrefix(`/app/`)
       - traefik.http.routers.chtohochu-ws.entrypoints=websecure
       - traefik.http.routers.chtohochu-ws.tls.certresolver=letsencrypt
       - traefik.http.routers.chtohochu-ws.service=chtohochu-ws

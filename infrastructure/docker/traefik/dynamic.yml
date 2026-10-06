@@ -25,11 +25,9 @@ http:
       redirectScheme:
         scheme: https
         permanent: true
-    ws-headers:
-      headers:
-        customRequestHeaders:
-          Connection: Upgrade
-          Upgrade: http
+    # NOTE: WebSocket upgrade is handled by Traefik natively — do NOT add
+    # headers middleware that rewrites Upgrade/Connection, it corrupts the
+    # handshake (client must see a real 101).
 
   # ---------------------------------------------------------------------------
   # Routers
@@ -53,13 +51,13 @@ http:
       service: api-svc
 
     # WebSocket — wss://api.chtohochu.test/app/ → reverb:8080
+    # PathPrefix с trailing slash: `/apps/...` (Pusher trigger API) сюда
+    # не попадает и остаётся недоступным снаружи.
     ws:
       rule: "Host(`api.chtohochu.test`) && PathPrefix(`/app/`)"
       entryPoints:
         - websecure
       service: ws-svc
-      middlewares:
-        - ws-headers
       tls: {}
 
   # ---------------------------------------------------------------------------

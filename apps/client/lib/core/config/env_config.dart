@@ -13,7 +13,11 @@ import 'package:flutter/foundation.dart';
 /// `API_BASE_URL` — хост БЕЗ префикса `/api/v1` (клиент добавляет
 /// `ApiConstants.apiPrefix` сам).
 class EnvConfig {
-  const EnvConfig._({required this.apiBaseUrl, required this.environment});
+  const EnvConfig._({
+    required this.apiBaseUrl,
+    required this.environment,
+    required this.reverbAppKey,
+  });
 
   /// Создаёт конфигурацию из `--dart-define` переменных.
   factory EnvConfig.fromEnvironment() {
@@ -25,6 +29,14 @@ class EnvConfig {
     final apiBaseUrl = definedUrl.isNotEmpty
         ? definedUrl
         : 'https://api.chtohochu.ru';
+
+    // Reverb app key — публичный идентификатор (по дизайну уезжает
+    // в клиенты, как Pusher app key). Не секрет. Для локального стека:
+    // `--dart-define=REVERB_APP_KEY=local-app-key`.
+    const reverbAppKey = String.fromEnvironment(
+      'REVERB_APP_KEY',
+      defaultValue: '34c7a5e068b7da49a052bdf1e260cebe',
+    );
 
     // Release-сборка не должна указывать на локальный/небезопасный
     // адрес — это misconfiguration сборки, а не runtime-ошибка
@@ -49,11 +61,18 @@ class EnvConfig {
       }
     }
 
-    return EnvConfig._(apiBaseUrl: apiBaseUrl, environment: environment);
+    return EnvConfig._(
+      apiBaseUrl: apiBaseUrl,
+      environment: environment,
+      reverbAppKey: reverbAppKey,
+    );
   }
 
   /// Базовый URL API.
   final String apiBaseUrl;
+
+  /// Публичный ключ Reverb-приложения (wss://{apiHost}/app/{key}).
+  final String reverbAppKey;
 
   /// Имя окружения: `dev`, `staging`, `prod`.
   final String environment;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_info.dart';
+import '../core/realtime/realtime_client.dart';
 import '../core/sync/sync_engine.dart';
 import '../l10n/l10n.dart';
 import '../features/showcase/presentation/providers/theme_controller.dart';
@@ -18,6 +19,7 @@ class ChtoHochuApp extends ConsumerStatefulWidget {
 
 class _ChtoHochuAppState extends ConsumerState<ChtoHochuApp> {
   late final SyncLifecycleObserver _syncObserver;
+  late final RealtimeLifecycleObserver _realtimeObserver;
 
   @override
   void initState() {
@@ -25,6 +27,9 @@ class _ChtoHochuAppState extends ConsumerState<ChtoHochuApp> {
     // Sync по возврату приложения в foreground.
     _syncObserver = ref.read(syncLifecycleObserverProvider);
     WidgetsBinding.instance.addObserver(_syncObserver);
+    // Досоединение WebSocket по возврату в foreground.
+    _realtimeObserver = ref.read(realtimeLifecycleObserverProvider);
+    WidgetsBinding.instance.addObserver(_realtimeObserver);
     // Держим engine живым на всю сессию.
     ref.read(syncEngineProvider);
   }
@@ -32,6 +37,7 @@ class _ChtoHochuAppState extends ConsumerState<ChtoHochuApp> {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(_syncObserver);
+    WidgetsBinding.instance.removeObserver(_realtimeObserver);
     super.dispose();
   }
 

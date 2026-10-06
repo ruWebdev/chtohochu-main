@@ -12,9 +12,11 @@ use Illuminate\Support\Facades\Broadcast;
 |
 */
 
-// Стандартный канал Laravel для модели User
+// Стандартный канал Laravel для модели User.
+// User::id — UUID (string); сравнение строгое, приведение к int здесь
+// делало бы авторизацию всегда успешной для любого id.
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
-    return (int) $user->id === (int) $id;
+    return $user->id === $id;
 }, ['guards' => ['web', 'sanctum']]);
 
 /*

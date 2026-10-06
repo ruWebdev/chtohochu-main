@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_provider.dart';
 import '../../../../core/database/legacy_migration.dart';
 import '../../../../core/media/media_storage_migration.dart';
+import '../../../../core/realtime/realtime_client.dart';
 import '../../../../core/services/preferences_service.dart';
 import '../../../../core/sync/sync_engine.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -90,7 +93,13 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
           .read(legacyShoppingListsMigrationProvider)
           .migrate(session.user.id);
       ref.read(syncEngineProvider).attach(session.user.id);
+      // Realtime-подписка на private-канал пользователя.
+      unawaited(ref.read(realtimeClientProvider).attach(session.user.id));
       hasWishes = await wishRepo.hasWishes();
+    } else {
+      // Сессии нет (в т.ч. после инвалидации по 401) — соединение
+      // не должно жить вне аккаунта.
+      ref.read(realtimeClientProvider).detach();
     }
 
     return _resolve(hasWishes);
@@ -121,6 +130,7 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
         .read(legacyShoppingListsMigrationProvider)
         .migrate(session.user.id);
     ref.read(syncEngineProvider).attach(session.user.id);
+    unawaited(ref.read(realtimeClientProvider).attach(session.user.id));
     final hasWishes = await ref.read(wishRepositoryProvider).hasWishes();
     state = AsyncData(_resolve(hasWishes));
   }
@@ -184,6 +194,7 @@ class AppSessionController extends AsyncNotifier<AppSessionState> {
   Future<void> logout() async {
     final userId = _session?.user.id ?? _prefsCurrentUserId();
     ref.read(syncEngineProvider).detach();
+    ref.read(realtimeClientProvider).detach();
     await ref.read(authRepositoryProvider).logout();
     await _clearUserData(userId);
     _isAuthed = false;

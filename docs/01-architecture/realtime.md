@@ -157,7 +157,7 @@ The WebSocket connection authenticates using the Sanctum token. Reverb validates
 
 ### 6.2 Private channels
 
-Subscription to a `private-` channel requires a signed auth ticket. The Flutter client requests the ticket from the backend (`/broadcasting/auth` equivalent) using the Sanctum token, then presents it to Reverb.
+Subscription to a `private-` channel requires a signed auth ticket. The Flutter client requests the ticket from `POST {api}/api/v1/broadcasting/auth` using the Sanctum Bearer token, then presents it to Reverb on subscribe.
 
 ### 6.3 Presence channels
 

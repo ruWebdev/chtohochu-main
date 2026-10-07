@@ -1,0 +1,46 @@
+/* ЧтоХочу — базовые токены публичного веба.
+ * Палитра соответствует светлой теме приложения
+ * (apps/client/lib/app/theme/app_colors.dart). */
+
+:root {
+  --ch-bg: #fbf8f4;
+  --ch-surface: #ffffff;
+  --ch-surface-muted: #f3eee7;
+  --ch-text: #1f1b16;
+  --ch-text-secondary: #5c544b;
+  --ch-text-muted: #8a8278;
+  --ch-brand: #6c63ff;
+  --ch-brand-text: #3a33a8;
+  --ch-secondary: #e8e6ff;
+  --ch-border: #e7e1d8;
+  --ch-radius-lg: 20px;
+  --ch-radius-sm: 14px;
+  --ch-content-width: 28rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ch-bg);
+  color: var(--ch-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    sans-serif;
+  line-height: 1.4;
+}
+
+img {
+  max-width: 100%;
+}

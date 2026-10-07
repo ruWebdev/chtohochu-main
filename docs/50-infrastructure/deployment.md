@@ -191,6 +191,25 @@ CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
 
 ## 3. Nginx / Traefik Configuration
 
+> **Фактическое состояние production (185.105.109.61).** Ingress — внешний
+> Traefik v3 (docker network `proxy`, `exposedbydefault=false`, entrypoint
+> `websecure`, certresolver `letsencrypt`, HTTP→HTTPS редирект). Nginx-конфиги
+> ниже описывают целевую схему; реальный роутинг задаётся docker-лейблами
+> сервисов в `/srv/chtohochu/compose.yaml`:
+>
+> | Host | Service | Source |
+> |---|---|---|
+> | `api.chtohochu.ru` | `app` (Laravel API, :80) | `ghcr.io/ruwebdev/chtohochu-api` |
+> | `api.chtohochu.ru/app/*` | `reverb` (:8080, priority 100) | тот же образ |
+> | `chtohochu.ru`, `www.chtohochu.ru` | `web` (Nuxt SSR, :3000) | `chtohochu-web` из `apps/public-web/Dockerfile` |
+>
+> `web` обслуживает `/`, публичный viewer `/s/{token}` и
+> `/.well-known/assetlinks.json` (Android App Links, package
+> `com.nd.chtohochu`). Образ `chtohochoweb` CI пока не собирает — сборка и
+> доставка ручные: `docker build -t chtohochu-web:latest apps/public-web` +
+> `docker save | ssh deploy@185.105.109.61 docker load`.
+> Backend генерирует share-ссылки через `APP_SHARE_BASE_URL=https://chtohochu.ru`.
+
 ### 3.1 Nginx (reverse proxy)
 
 ```nginx

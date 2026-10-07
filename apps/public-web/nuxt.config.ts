@@ -2,6 +2,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
   ssr: true,
+  css: ['~/assets/css/main.css'],
   app: {
     head: {
       title: 'ЧтоХочу',

@@ -1,11 +1,14 @@
 # =============================================================================
-# ЧтоХочу — Production Docker Compose (API only)
+# ЧтоХочу — Production Docker Compose (API + public-web)
 # =============================================================================
 # Target host: 185.105.109.61 (2 vCPU / 3.8 GB RAM, shared with anonapp).
 # Deploy location on server: /srv/chtohochu/compose.yaml + .env
 #
 # One image (ghcr.io/ruwebdev/chtohochu-api) serves app, queue, scheduler and
 # reverb via different commands — same pattern as the anonapp stack.
+# The `web` service is the Nuxt public-web SSR server (chtohochu.ru +
+# www.chtohochu.ru), including public share pages /s/{token} and
+# /.well-known/assetlinks.json for Android App Links.
 #
 # Traefik is EXTERNAL (already running on the host, docker network `proxy`,
 # certresolver `letsencrypt`, entrypoint `websecure`). No ports are published.
@@ -239,4 +242,40 @@ services:
       - traefik.http.services.chtohochu-ws.loadbalancer.server.port=8080
     healthcheck:
       disable: true
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # web — Nuxt public-web SSR (chtohochu.ru, www.chtohochu.ru)
+  # Serves the marketing index, public share viewer /s/{token} and
+  # /.well-known/assetlinks.json (Android App Links).
+  # The image is built from apps/public-web/Dockerfile and pushed/loaded
+  # manually (no CI yet):
+  #   docker build -t chtohochu-web:latest apps/public-web
+  #   docker save chtohochu-web:latest | ssh deploy@185.105.109.61 docker load
+  # ---------------------------------------------------------------------------
+  web:
+    image: chtohochu-web:${WEB_TAG:-latest}
+    pull_policy: never  # образ грузится вручную (docker save|load), не из registry
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      NODE_ENV: production
+      NITRO_HOST: 0.0.0.0
+      NITRO_PORT: "3000"
+      NUXT_PUBLIC_API_BASE: https://api.chtohochu.ru/api/v1
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.chtohochu-web.rule=Host(`chtohochu.ru`) || Host(`www.chtohochu.ru`)
+      - traefik.http.routers.chtohochu-web.entrypoints=websecure
+      - traefik.http.routers.chtohochu-web.tls.certresolver=letsencrypt
+      - traefik.http.routers.chtohochu-web.service=chtohochu-web
+      - traefik.http.services.chtohochu-web.loadbalancer.server.port=3000
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     logging: *default-logging

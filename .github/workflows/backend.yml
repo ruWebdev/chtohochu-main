@@ -21,6 +21,23 @@ defaults:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # phpunit.xml force-ит DB_* (host `postgres`, база chtohochu_testing,
+    # user chtohochu) — сервис поднимается с теми же кредами, а шаг
+    # "Map postgres host" алиасит имя на localhost раннера.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: chtohochu
+          POSTGRES_PASSWORD: chtohochu
+          POSTGRES_DB: chtohochu_testing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chtohochu -d chtohochu_testing"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -39,12 +56,7 @@ jobs:
           php artisan key:generate
       - name: Run Pint
         run: vendor/bin/pint --test
+      - name: Map postgres host
+        run: echo "127.0.0.1 postgres" | sudo tee -a /etc/hosts
       - name: Run tests
         run: php artisan test --parallel
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: chtohochu_test
-          DB_USERNAME: postgres
-          DB_PASSWORD: postgres

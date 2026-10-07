@@ -23,6 +23,10 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <server name="BROADCAST_CONNECTION" value="null" force="true"/>
         <server name="CACHE_STORE" value="array" force="true"/>
+        <!-- DB_* форсятся: без force тесты в docker-контейнере
+             подхватили бы env compose-стека (DB_DATABASE=chtohochu) и
+             migrate:fresh стёр бы дев-базу. CI поднимает postgres
+             с этими же кредами и алиасом хоста `postgres`. -->
         <server name="DB_CONNECTION" value="pgsql" force="true"/>
         <server name="DB_HOST" value="postgres" force="true"/>
         <server name="DB_PORT" value="5432" force="true"/>

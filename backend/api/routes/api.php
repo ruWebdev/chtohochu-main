@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ShoppingListController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WishController;
+use App\Http\Controllers\Api\WishListController;
 use Illuminate\Support\Facades\Route;
 
 Route::domain(env('APP_DOMAIN_API'))
@@ -41,6 +42,13 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/wishes/{wish}', [WishController::class, 'show'])->name('api.wishes.show');
             Route::patch('/wishes/{wish}', [WishController::class, 'update'])->name('api.wishes.update');
             Route::delete('/wishes/{wish}', [WishController::class, 'destroy'])->name('api.wishes.destroy');
+
+            // Списки желаний (owner-only, soft delete)
+            Route::get('/wish-lists', [WishListController::class, 'index'])->name('api.wish_lists.index');
+            Route::post('/wish-lists', [WishListController::class, 'store'])->name('api.wish_lists.store');
+            Route::get('/wish-lists/{wishList}', [WishListController::class, 'show'])->name('api.wish_lists.show');
+            Route::patch('/wish-lists/{wishList}', [WishListController::class, 'update'])->name('api.wish_lists.update');
+            Route::delete('/wish-lists/{wishList}', [WishListController::class, 'destroy'])->name('api.wish_lists.destroy');
 
             // Поиск пользователей
             Route::get('/users/search', [UserController::class, 'search'])->name('api.users.search');

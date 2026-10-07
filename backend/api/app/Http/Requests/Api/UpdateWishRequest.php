@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateWishRequest extends FormRequest
 {
@@ -31,6 +32,19 @@ class UpdateWishRequest extends FormRequest
             'price' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'link' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
             'image_url' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
+            // null = разгруппировать желание; не-null — только
+            // свой живой список (чужой/удалённый → 422).
+            'list_id' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'uuid',
+                Rule::exists('wish_lists', 'id')->where(
+                    fn ($q) => $q
+                        ->where('owner_id', $this->user()->id)
+                        ->whereNull('deleted_at'),
+                ),
+            ],
         ];
     }
 }

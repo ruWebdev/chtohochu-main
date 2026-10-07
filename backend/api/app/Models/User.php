@@ -91,6 +91,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Списки желаний пользователя (группировка wishes).
+     */
+    public function wishLists(): HasMany
+    {
+        return $this->hasMany(WishList::class, 'owner_id');
+    }
+
+    /**
      * Друзья пользователя. Дружба симметрична — одна запись
      * в friendships с нормализованной парой (user_id < friend_id).
      *

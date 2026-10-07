@@ -2,20 +2,20 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Wish;
+use App\Models\WishList;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin Wish
+ * @mixin WishList
  */
-class WishResource extends JsonResource
+class WishListResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
      *
-     * owner_id не отдаётся клиенту в текущем MVP —
-     * владелец хранится в БД независимо от представления.
+     * owner_id не отдаём — владелец хранится в БД
+     * независимо от представления.
      *
      * @return array<string, mixed>
      */
@@ -24,11 +24,6 @@ class WishResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
-            'description' => $this->description,
-            'price' => $this->price,
-            'link' => $this->link,
-            'image_url' => $this->image_url,
-            'list_id' => $this->list_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

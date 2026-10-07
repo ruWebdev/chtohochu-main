@@ -38,6 +38,7 @@ class Wish extends Model
         'price',
         'link',
         'image_url',
+        'list_id',
     ];
 
     /**
@@ -58,6 +59,15 @@ class Wish extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    /**
+     * Список желаний, в который входит желание (null = вне
+     * списков). Максимум один список на желание.
+     */
+    public function list(): BelongsTo
+    {
+        return $this->belongsTo(WishList::class, 'list_id');
     }
 
     protected static function booted(): void

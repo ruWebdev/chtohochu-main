@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreWishRequest extends FormRequest
 {
@@ -32,6 +33,18 @@ class StoreWishRequest extends FormRequest
             'price' => ['nullable', 'integer', 'min:0'],
             'link' => ['nullable', 'string', 'url', 'max:2048'],
             'image_url' => ['nullable', 'string', 'url', 'max:2048'],
+            // Membership: только СВОЙ живой список желаний —
+            // чужой/удалённый list_id отклоняется (422).
+            'list_id' => [
+                'nullable',
+                'string',
+                'uuid',
+                Rule::exists('wish_lists', 'id')->where(
+                    fn ($q) => $q
+                        ->where('owner_id', $this->user()->id)
+                        ->whereNull('deleted_at'),
+                ),
+            ],
         ];
     }
 }

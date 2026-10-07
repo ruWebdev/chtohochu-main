@@ -26,7 +26,14 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
-            'username' => Str::lower(Str::slug(fake()->unique()->userName(), '_')),
+            // CHECK users_username_format: ^[a-z0-9_.]{3,20}$ — faker
+            // в ru-локали иногда даёт userName длиннее 20 символов;
+            // суффикс сохраняет уникальность после обрезки.
+            'username' => Str::substr(
+                Str::lower(Str::slug(fake()->userName(), '_')),
+                0,
+                13,
+            ).'_'.fake()->unique()->lexify('??????'),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),

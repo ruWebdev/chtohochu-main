@@ -51,7 +51,12 @@ class ShoppingListsApiTest extends TestCase
 
         $list = ShoppingList::sole();
         $this->assertSame($user->id, $list->owner_id);
-        $this->assertArrayNotHasKey('owner_id', $this->getJson($this->api("/shopping-lists/{$list->id}"))->json('data'));
+        // owner_id отдаётся: клиент определяет роль (owner/member)
+        // для совместных списков. Из request он не принимается.
+        $this->assertSame(
+            $user->id,
+            $this->getJson($this->api("/shopping-lists/{$list->id}"))->json('data.owner_id'),
+        );
     }
 
     public function test_list_title_validation(): void

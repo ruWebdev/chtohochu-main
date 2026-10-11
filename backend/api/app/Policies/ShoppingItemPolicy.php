@@ -7,40 +7,40 @@ use App\Models\ShoppingList;
 use App\Models\User;
 
 /**
- * Доступ к позиции определяется владением её списком:
- * item access → ownership of parent ShoppingList.
+ * Доступ к позиции определяется членством в её списке:
+ * item access → membership of parent ShoppingList.
  */
 class ShoppingItemPolicy
 {
     /**
-     * Добавление позиции в список — только владельцу списка.
+     * Добавление позиции — владелец и участники списка.
      */
     public function create(User $user, ShoppingList $list): bool
     {
-        return $user->id === $list->owner_id;
+        return $list->hasMember($user);
     }
 
     /**
-     * Просмотр позиции — владельцу списка.
+     * Просмотр позиции — участникам списка.
      */
     public function view(User $user, ShoppingItem $item): bool
     {
-        return $user->id === $item->list->owner_id;
+        return $item->list->hasMember($user);
     }
 
     /**
-     * Изменение позиции — владельцу списка.
+     * Изменение позиции (включая is_checked) — участникам списка.
      */
     public function update(User $user, ShoppingItem $item): bool
     {
-        return $user->id === $item->list->owner_id;
+        return $item->list->hasMember($user);
     }
 
     /**
-     * Удаление позиции — владельцу списка.
+     * Удаление позиции — участникам списка.
      */
     public function delete(User $user, ShoppingItem $item): bool
     {
-        return $user->id === $item->list->owner_id;
+        return $item->list->hasMember($user);
     }
 }

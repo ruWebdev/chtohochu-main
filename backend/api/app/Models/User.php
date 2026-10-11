@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -96,6 +97,16 @@ class User extends Authenticatable
     public function wishLists(): HasMany
     {
         return $this->hasMany(WishList::class, 'owner_id');
+    }
+
+    /**
+     * Чужие списки покупок, где пользователь — участник.
+     */
+    public function sharedShoppingLists(): BelongsToMany
+    {
+        return $this
+            ->belongsToMany(ShoppingList::class, 'shopping_list_members', 'user_id', 'list_id')
+            ->withTimestamps();
     }
 
     /**

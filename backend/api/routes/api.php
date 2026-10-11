@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\MediaUploadController;
 use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\ShoppingItemController;
 use App\Http\Controllers\Api\ShoppingListController;
+use App\Http\Controllers\Api\ShoppingListMemberController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WishController;
@@ -72,12 +73,18 @@ Route::domain(env('APP_DOMAIN_API'))
             Route::get('/friends/{user}/wishes', [FriendController::class, 'wishes'])->name('api.friends.wishes');
             Route::delete('/friends/{user}', [FriendController::class, 'destroy'])->name('api.friends.destroy');
 
-            // Списки покупок (owner-only)
+            // Списки покупок (владелец + участники)
             Route::get('/shopping-lists', [ShoppingListController::class, 'index'])->name('api.shopping_lists.index');
             Route::post('/shopping-lists', [ShoppingListController::class, 'store'])->name('api.shopping_lists.store');
             Route::get('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'show'])->name('api.shopping_lists.show');
             Route::patch('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'update'])->name('api.shopping_lists.update');
             Route::delete('/shopping-lists/{shoppingList}', [ShoppingListController::class, 'destroy'])->name('api.shopping_lists.destroy');
+
+            // Участники списка: владелец добавляет/удаляет друзей,
+            // участник удаляет себя (leave).
+            Route::get('/shopping-lists/{shoppingList}/members', [ShoppingListMemberController::class, 'index'])->name('api.shopping_lists.members.index');
+            Route::post('/shopping-lists/{shoppingList}/members', [ShoppingListMemberController::class, 'store'])->name('api.shopping_lists.members.store');
+            Route::delete('/shopping-lists/{shoppingList}/members/{user}', [ShoppingListMemberController::class, 'destroy'])->name('api.shopping_lists.members.destroy');
 
             // Media uploads (ADR-015): presigned PUT → complete.
             Route::post('/media/uploads', [MediaUploadController::class, 'store'])->name('api.media.uploads.store');

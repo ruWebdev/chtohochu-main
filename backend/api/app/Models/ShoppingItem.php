@@ -56,4 +56,14 @@ class ShoppingItem extends Model
     {
         return $this->belongsTo(ShoppingList::class, 'list_id');
     }
+
+    /**
+     * Следующая ревизия сущности — вызывать в транзакции мутации.
+     */
+    public function bumpRevision(): int
+    {
+        $this->increment('revision');
+
+        return (int) $this->revision;
+    }
 }

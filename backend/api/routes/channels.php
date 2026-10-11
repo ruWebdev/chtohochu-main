@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ShoppingList;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -8,7 +9,8 @@ use Illuminate\Support\Facades\Broadcast;
 |--------------------------------------------------------------------------
 |
 | Каналы авторизации для WebSocket-событий.
-| Бизнес-каналы будут добавлены в будущих задачах.
+| Бизнес-каналы авторизуются по membership соответствующей
+| сущности (docs/20-backend/realtime-events.md §5).
 |
 */
 
@@ -31,4 +33,21 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
  */
 Broadcast::channel('user.{userId}', function ($user, $userId) {
     return $user->id === $userId;
+}, ['guards' => ['web', 'sanctum']]);
+
+/*
+|--------------------------------------------------------------------------
+| Shopping List Channels
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Канал совместного списка покупок `private-shopping-list.{id}`.
+ * Только участники списка (владелец или member) — удалённый
+ * участник теряет доступ к подписке автоматически.
+ */
+Broadcast::channel('shopping-list.{listId}', function ($user, $listId) {
+    $list = ShoppingList::find($listId);
+
+    return $list !== null && $list->hasMember($user);
 }, ['guards' => ['web', 'sanctum']]);

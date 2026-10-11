@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\ShoppingListEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\StoreShoppingListRequest;
 use App\Http\Requests\Api\UpdateShoppingListRequest;
@@ -11,18 +12,22 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class ShoppingListController extends Controller
 {
     /**
-     * Списки текущего пользователя с items (eager loading,
-     * без N+1), created_at DESC — как во frontend (новые первые).
+     * Списки текущего пользователя: свои + shared (membership)
+     * с items и participants (eager loading, без N+1),
+     * created_at DESC — как во frontend (новые первые).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $lists = $request->user()
-            ->shoppingLists()
-            ->with('items')
+        $user = $request->user();
+        $lists = ShoppingList::query()
+            ->where('owner_id', $user->id)
+            ->orWhereHas('members', fn ($q) => $q->whereKey($user->id))
+            ->with(['items', 'owner', 'members'])
             ->latest('created_at')
             ->get();
 
@@ -51,6 +56,14 @@ class ShoppingListController extends Controller
         }
 
         $list->setRelation('items', collect());
+        $list->setRelation('members', collect());
+
+        event(ShoppingListEvent::forList(
+            $list,
+            'shopping_list.created',
+            (new ShoppingListResource($list))->resolve(),
+            $request->user()->id,
+        ));
 
         return (new ShoppingListResource($list))
             ->toResponse($request)
@@ -58,14 +71,14 @@ class ShoppingListController extends Controller
     }
 
     /**
-     * Список с items. Только владелец (ShoppingListPolicy::view);
-     * чужой → 404.
+     * Список с items и participants. Владелец/участник
+     * (ShoppingListPolicy::view); чужой → 404.
      */
     public function show(Request $request, ShoppingList $shoppingList): ShoppingListResource
     {
         abort_unless($request->user()->can('view', $shoppingList), 404);
 
-        $shoppingList->load('items');
+        $shoppingList->load(['items', 'owner', 'members']);
 
         return new ShoppingListResource($shoppingList);
     }
@@ -78,21 +91,45 @@ class ShoppingListController extends Controller
     {
         abort_unless($request->user()->can('update', $shoppingList), 404);
 
-        $shoppingList->update($request->validated());
-        $shoppingList->load('items');
+        DB::transaction(function () use ($request, $shoppingList) {
+            $shoppingList->update($request->validated());
+            $shoppingList->bumpRevision();
+        });
+        $shoppingList->load(['items', 'owner', 'members']);
+
+        event(ShoppingListEvent::forList(
+            $shoppingList,
+            'shopping_list.updated',
+            (new ShoppingListResource($shoppingList))->resolve(),
+            $request->user()->id,
+        ));
 
         return new ShoppingListResource($shoppingList);
     }
 
     /**
-     * Удаление списка. Только владелец. Items удаляются
-     * каскадом FK на уровне БД. 204.
+     * Удаление списка. Только владелец. Items и membership
+     * удаляются каскадом FK на уровне БД. 204.
      */
     public function destroy(Request $request, ShoppingList $shoppingList): JsonResponse
     {
         abort_unless($request->user()->can('delete', $shoppingList), 404);
 
-        $shoppingList->delete();
+        // Получатели события — снимок до удаления: participants
+        // исчезают вместе со списком каскадом FK.
+        $participantIds = $shoppingList->participantIds();
+        DB::transaction(function () use ($shoppingList) {
+            $shoppingList->bumpRevision();
+            $shoppingList->delete();
+        });
+
+        event(ShoppingListEvent::forList(
+            $shoppingList,
+            'shopping_list.deleted',
+            ['deleted' => true],
+            $request->user()->id,
+            $participantIds,
+        ));
 
         return response()->json(null, 204);
     }

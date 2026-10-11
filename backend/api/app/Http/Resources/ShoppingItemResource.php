@@ -23,8 +23,10 @@ class ShoppingItemResource extends JsonResource
             'title' => $this->title,
             'quantity' => $this->quantity,
             'is_checked' => $this->is_checked,
+            'list_id' => $this->list_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
+            'revision' => (int) ($this->revision ?? 0),
         ];
     }
 }

@@ -8,8 +8,8 @@
 #
 # Required configuration (repo Settings → Secrets and variables → Actions):
 #   secrets.DEPLOY_SSH_KEY   — private key for the deploy user
-#   secrets.SSH_KNOWN_HOSTS  — `ssh-keyscan 185.105.109.61` output
-#   vars.DEPLOY_HOST         — 185.105.109.61
+#   secrets.SSH_KNOWN_HOSTS  — `ssh-keyscan 195.226.194.165` output
+#   vars.DEPLOY_HOST         — 195.226.194.165
 #   vars.DEPLOY_USER         — deploy
 # =============================================================================
 

@@ -1,7 +1,7 @@
 # =============================================================================
 # ЧтоХочу — Production Docker Compose (API + public-web)
 # =============================================================================
-# Target host: 185.105.109.61 (2 vCPU / 3.8 GB RAM, shared with anonapp).
+# Target host: 195.226.194.165 (4 vCPU / 7.8 GB RAM, shared with anonapp).
 # Deploy location on server: /srv/chtohochu/compose.yaml + .env
 #
 # One image (ghcr.io/ruwebdev/chtohochu-api) serves app, queue, scheduler and
@@ -251,7 +251,7 @@ services:
   # The image is built from apps/public-web/Dockerfile and pushed/loaded
   # manually (no CI yet):
   #   docker build -t chtohochu-web:latest apps/public-web
-  #   docker save chtohochu-web:latest | ssh deploy@185.105.109.61 docker load
+  #   docker save chtohochu-web:latest | ssh deploy@195.226.194.165 docker load
   # ---------------------------------------------------------------------------
   web:
     image: chtohochu-web:${WEB_TAG:-latest}

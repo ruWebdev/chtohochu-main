@@ -1,6 +1,6 @@
 # ЧтоХочу API — production deployment
 
-Target server: `deploy@185.105.109.61` (Ubuntu 22.04, 2 vCPU / 3.8 GB / 80 GB).
+Target server: `deploy@195.226.194.165` (Debian 13, 4 vCPU / 7.8 GB / 59 GB).
 Shares the host with the `anonapp` stack and a **global Traefik** instance
 (network `proxy`, certresolver `letsencrypt`, entrypoint `websecure`).
 
@@ -19,14 +19,14 @@ Only the API is deployed here: `postgres`, `redis`, `app`, `queue`,
 ## One-time server bootstrap
 
 ```bash
-ssh deploy@185.105.109.61
+ssh deploy@195.226.194.165
 
 sudo mkdir -p /srv/chtohochu
 sudo chown deploy:deploy /srv/chtohochu
 
 # upload compose + env
-scp infrastructure/docker/docker-compose.prod.yml deploy@185.105.109.61:/srv/chtohochu/compose.yaml
-scp infrastructure/docker/.env.production.example deploy@185.105.109.61:/srv/chtohochu/.env
+scp infrastructure/docker/docker-compose.prod.yml deploy@195.226.194.165:/srv/chtohochu/compose.yaml
+scp infrastructure/docker/.env.production.example deploy@195.226.194.165:/srv/chtohochu/.env
 
 # edit .env on the server: APP_KEY, DB_PASSWORD, REDIS_PASSWORD,
 # REVERB_APP_KEY/SECRET, MAIL_*, VK_*, YANDEX_*
@@ -38,7 +38,7 @@ Generate `APP_KEY` locally:
 cd backend/api && php artisan key:generate --show
 ```
 
-DNS: `api.chtohochu.ru` must be an A-record → `185.105.109.61` **before**
+DNS: `api.chtohochu.ru` must be an A-record → `195.226.194.165` **before**
 the first `up`, otherwise Let's Encrypt cannot issue the certificate.
 
 ## Deploy
@@ -78,12 +78,12 @@ from backup (see `docs/50-infrastructure/deployment.md` §10).
 
 ## Notes / constraints
 
-* RAM is tight (~2.3 GB free alongside anonapp) — every service has
-  `mem_limit`. Do not raise limits without checking `free -m` first.
+* The host also runs the `anonapp` stack — every service has `mem_limit`.
+  Do not raise limits without checking `free -m` first.
 * PostgreSQL is tuned for a small VPS (`shared_buffers=128MB`), not the
   values in `deployment.md` §4.1 (those assume a dedicated DB host).
 * Route caching is intentionally skipped in the entrypoint: `routes/api.php`
   contains a closure (`/api/v1/health`). If routes become closure-free,
   `php artisan route:cache` can be added there.
-* Backups of `postgres_data` are NOT yet automated — set up a daily
-  `pg_dump` cron before real users land on this.
+* Backups: daily `pg_dump` at 03:00 via deploy-user cron →
+  `/srv/chtohochu/backups/chtohochu_YYYYMMDD.sql.gz`, 30-day retention.

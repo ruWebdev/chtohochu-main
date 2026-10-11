@@ -7,10 +7,12 @@ import '../../../../app/router/routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
+import '../../../sharing/presentation/share_actions.dart';
 import '../../data/wish_repository.dart';
 import '../../domain/wish.dart';
 import '../providers/wishes_controller.dart';
 import '../widgets/wish_details_body.dart';
+import '../widgets/wish_list_picker_sheet.dart';
 
 /// Экран деталей желания.
 ///
@@ -61,6 +63,10 @@ class WishDetailsPage extends ConsumerWidget {
     final l10n = context.l10n;
     final isLoading = ref.watch(wishesControllerProvider).isLoading;
     final wish = ref.watch(wishByIdProvider(wishId));
+    final wishListId = wish?.listId;
+    final list = wishListId == null
+        ? null
+        : ref.watch(wishListByIdProvider(wishListId));
 
     return PopScope(
       // Страница открыта через `go()` — системный Back ведёт к списку
@@ -83,6 +89,20 @@ class WishDetailsPage extends ConsumerWidget {
           actions: [
             if (wish != null) ...[
               AppBarAction(
+                icon: PhosphorIconsRegular.listPlus,
+                onPressed: () => showWishListPickerSheet(
+                  context,
+                  wishId: wish.id,
+                  currentListId: wish.listId,
+                ),
+                semanticLabel: wish.listId == null
+                    ? l10n.wishAddToList
+                    : l10n.wishChangeList,
+                tooltip: wish.listId == null
+                    ? l10n.wishAddToList
+                    : l10n.wishChangeList,
+              ),
+              AppBarAction(
                 icon: PhosphorIconsRegular.pencilSimple,
                 onPressed: () => context.go(AppRoutes.wishEdit(wish.id)),
                 semanticLabel: l10n.wishEditSemantic,
@@ -96,6 +116,18 @@ class WishDetailsPage extends ConsumerWidget {
               ),
             ],
           ],
+          overflowActions: [
+            if (wish != null)
+              AppBarAction(
+                icon: PhosphorIconsRegular.shareNetwork,
+                onPressed: () => shareEntity(
+                  context,
+                  ref,
+                  (api) => api.createWishShare(wish.id),
+                ),
+                semanticLabel: l10n.shareAction,
+              ),
+          ],
         ),
         body: SafeArea(
           child: isLoading && wish == null
@@ -106,6 +138,15 @@ class WishDetailsPage extends ConsumerWidget {
                   wish: wish,
                   additionalImages:
                       ref.watch(wishImagesProvider(wishId)).value ?? const [],
+                  // Блок membership: «Без списка» или название
+                  // списка с переходом в него. Пока списки грузятся —
+                  // блок скрыт, чтобы не мигать неверным состоянием.
+                  listTitle: wish.listId == null
+                      ? l10n.wishListNone
+                      : list?.title,
+                  onListTap: list == null
+                      ? null
+                      : () => context.go(AppRoutes.wishList(list.id)),
                 ),
         ),
       ),

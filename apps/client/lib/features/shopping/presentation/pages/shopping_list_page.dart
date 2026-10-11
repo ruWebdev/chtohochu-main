@@ -15,13 +15,15 @@ import '../../data/shopping_repository.dart';
 import '../../domain/shopping_item.dart';
 import '../../domain/shopping_list.dart';
 import '../providers/shopping_lists_controller.dart';
+import '../widgets/shopping_item_composer.dart';
 import '../widgets/shopping_item_row.dart';
 
 /// Экран конкретного списка покупок — позиции списка.
 ///
 /// Позиции: тап переключает «куплено», свайп удаляет, долгое нажатие
-/// открывает редактирование (название + количество). Внизу — быстрое
-/// добавление позиции. Actions: переименовать список, удалить список.
+/// открывает редактирование (название + количество). Внизу — постоянный
+/// composer добавления позиции (текст и/или одно фото).
+/// Actions: переименовать список, удалить список.
 class ShoppingListPage extends ConsumerStatefulWidget {
   const ShoppingListPage({super.key, required this.listId});
 
@@ -32,17 +34,6 @@ class ShoppingListPage extends ConsumerStatefulWidget {
 }
 
 class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
-  final _itemController = TextEditingController();
-  final _itemFocus = FocusNode();
-  bool _isAdding = false;
-
-  @override
-  void dispose() {
-    _itemController.dispose();
-    _itemFocus.dispose();
-    super.dispose();
-  }
-
   void _back() {
     if (context.canPop()) {
       context.pop();
@@ -89,23 +80,23 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
     );
   }
 
-  Future<void> _addItem() async {
-    final title = _itemController.text.trim();
-    if (title.isEmpty) {
-      setState(() => _isAdding = false);
-      return;
-    }
+  /// Локальное создание позиции из composer. Возвращает `true` при
+  /// успехе — тогда composer очищает ввод. Фото-only позиция получает
+  /// fallback-название (backend требует непустой title).
+  Future<bool> _submitItem(String title, String? imagePath) async {
     try {
       await ref
           .read(shoppingListsControllerProvider.notifier)
-          .addItem(widget.listId, title: title);
+          .addItem(
+            widget.listId,
+            title: title.isEmpty ? context.l10n.wishPhotoFallbackTitle : title,
+            imagePath: imagePath,
+          );
+      return true;
     } on ShoppingError catch (e) {
       if (mounted) _showMutationError(e);
-      return;
+      return false;
     }
-    _itemController.clear();
-    // Поле остаётся открытым для быстрого ввода следующей позиции.
-    _itemFocus.requestFocus();
   }
 
   Future<void> _openItemActions(ShoppingList list, ShoppingItem item) async {
@@ -188,12 +179,29 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
             ],
           ],
         ),
+        // Composer — в конце body, а не bottomNavigationBar: Scaffold
+        // уменьшает именно body над viewInsets (resizeToAvoidBottomInset),
+        // а bottomNavigationBar раскладывается по полной высоте экрана
+        // и перекрывается клавиатурой.
         body: SafeArea(
           child: isLoading && list == null
               ? const Center(child: CircularProgressIndicator())
               : list == null
               ? _NotFound(onBack: _back)
-              : _buildList(context, list),
+              : Column(
+                  children: [
+                    Expanded(child: _buildList(context, list)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.screenPaddingHorizontal,
+                        AppSpacing.xs,
+                        AppSpacing.screenPaddingHorizontal,
+                        AppSpacing.sm,
+                      ),
+                      child: ShoppingItemComposer(onSubmit: _submitItem),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -215,38 +223,30 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
           if (list.items.isEmpty)
             const _EmptyItems()
           else
-            for (final item in list.items)
+            for (var i = 0; i < list.items.length; i++) ...[
+              // Тонкий разделитель, выровненный с началом названия
+              // (padding строки + превью 40 + gap).
+              if (i > 0)
+                const AppListDivider(
+                  indent: AppSpacing.xs + 40 + AppSpacing.sm,
+                ),
               ShoppingItemRow(
-                key: ValueKey(item.id),
-                item: item,
+                key: ValueKey(list.items[i].id),
+                item: list.items[i],
                 onToggle: () => _runMutation(
                   () => ref
                       .read(shoppingListsControllerProvider.notifier)
-                      .toggleItem(list.id, item.id),
+                      .toggleItem(list.id, list.items[i].id),
                 ),
                 onDelete: () => _runMutation(
                   () => ref
                       .read(shoppingListsControllerProvider.notifier)
-                      .deleteItem(list.id, item.id),
+                      .deleteItem(list.id, list.items[i].id),
                 ),
-                onLongPress: () => _openItemActions(list, item),
+                onLongPress: () => _openItemActions(list, list.items[i]),
               ),
+            ],
 
-          const SizedBox(height: AppSpacing.xs),
-          _QuickAddRow(
-            isAdding: _isAdding,
-            controller: _itemController,
-            focusNode: _itemFocus,
-            onStart: () {
-              setState(() => _isAdding = true);
-              _itemFocus.requestFocus();
-            },
-            onSubmit: _addItem,
-            onCancel: () {
-              _itemController.clear();
-              setState(() => _isAdding = false);
-            },
-          ),
           const SizedBox(height: AppSpacing.md),
         ],
       ),
@@ -348,84 +348,6 @@ class _EmptyItems extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Быстрое добавление позиции: «+ Добавить товар» → inline TextField.
-///
-/// После добавления поле остаётся открытым — удобно вводить несколько
-/// позиций подряд. Пустой submit или «×» сворачивает поле.
-class _QuickAddRow extends StatelessWidget {
-  const _QuickAddRow({
-    required this.isAdding,
-    required this.controller,
-    required this.focusNode,
-    required this.onStart,
-    required this.onSubmit,
-    required this.onCancel,
-  });
-
-  final bool isAdding;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final VoidCallback onStart;
-  final VoidCallback onSubmit;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    final t = AppTypography.of(context);
-    final l10n = context.l10n;
-
-    if (!isAdding) {
-      return InkWell(
-        onTap: onStart,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.xs,
-            vertical: AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                PhosphorIconsRegular.plus,
-                size: AppSizes.iconSize,
-                color: colors.primary,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(l10n.itemAdd, style: t.body.copyWith(color: colors.primary)),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: AppTextField(
-            controller: controller,
-            focusNode: focusNode,
-            hint: l10n.itemTitleHint,
-            textInputAction: TextInputAction.done,
-            semanticsLabel: l10n.itemTitleHint,
-            onSubmitted: (_) => onSubmit(),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        AppIconButton(
-          icon: const Icon(PhosphorIconsRegular.x),
-          variant: AppIconButtonVariant.ghost,
-          size: 32,
-          iconSize: AppSizes.iconSizeSm,
-          tooltip: l10n.close,
-          semanticLabel: l10n.itemAddCloseSemantic,
-          onPressed: onCancel,
-        ),
-      ],
     );
   }
 }

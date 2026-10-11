@@ -29,6 +29,12 @@ class AppRoutes {
   /// Путь к редактированию конкретного желания.
   static String wishEdit(String id) => '/wishes/$id/edit';
 
+  /// Экран конкретного списка желаний (`/wish-lists/:id`).
+  static const String wishListPath = '/wish-lists/:id';
+
+  /// Путь к конкретному списку желаний.
+  static String wishList(String id) => '/wish-lists/$id';
+
   // --- Основные разделы (внутри AppShell) ---
 
   /// Раздел «Что хочу» — список желаний.
@@ -36,9 +42,6 @@ class AppRoutes {
 
   /// Раздел «Покупки» — список списков.
   static const String shopping = '/shopping';
-
-  /// Создание списка покупок.
-  static const String newShoppingList = '/shopping/new';
 
   /// Экран конкретного списка покупок (`/shopping/:id`).
   static const String shoppingListPath = '/shopping/:id';
@@ -54,9 +57,6 @@ class AppRoutes {
 
   /// Раздел «Друзья» — список друзей.
   static const String friends = '/friends';
-
-  /// Поиск и добавление друга.
-  static const String friendAdd = '/friends/add';
 
   /// Профиль друга (`/friends/:id`).
   static const String friendPath = '/friends/:id';
@@ -82,6 +82,16 @@ class AppRoutes {
 
   /// Design System Showcase (отладочный маршрут).
   static const String showcase = '/showcase';
+
+  /// Публичный просмотр share-ссылки (`/s/:token`).
+  ///
+  /// Публичный read-only route — доступен без авторизации,
+  /// вне AppShell. `token` — непрозрачная строка (capability),
+  /// не UUID сущности.
+  static const String sharePath = '/s/:token';
+
+  /// Путь к публичной share-странице.
+  static String share(String token) => '/s/$token';
 
   /// Маршруты основной части приложения (внутри shell).
   static const List<String> shellRoutes = [home, shopping, friends, profile];

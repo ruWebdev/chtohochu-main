@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 /// Изображение по строковому источнику: сетевой URL или локальный файл.
 ///
 /// Желание может хранить как `https://…`-ссылку, так и путь к фото,
-/// снятому камерой (`/data/…/wish_photos/xx.jpg`). Виджет выбирает
+/// снятому камерой (`/data/…/media/wishes/xx.jpg`). Виджет выбирает
 /// источник по схеме: `http(s)` — network, иначе — file.
+///
+/// Бесшовность перехода local→remote обеспечивается моделью, а не
+/// виджетом: `Wish.imageDisplaySource` всегда отдаёт иммутабельный
+/// `image_local_path`, поэтому src живого изображения не переключается.
 class AppImage extends StatelessWidget {
   const AppImage({
     super.key,

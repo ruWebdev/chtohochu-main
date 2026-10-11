@@ -377,6 +377,12 @@ class _AddWishSheetState extends ConsumerState<AddWishSheet> {
                     leading: const Icon(PhosphorIconsRegular.plus),
                     onPressed: _submit,
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    l10n.wishAddLaterHint,
+                    style: t.caption.copyWith(color: colors.textMuted),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
@@ -439,7 +445,7 @@ class _PhotoTile extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       color: colors.scrim,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(AppRadii.xs),
                     ),
                     alignment: Alignment.center,
                     child: const Icon(

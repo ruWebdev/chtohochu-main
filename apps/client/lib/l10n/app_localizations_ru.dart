@@ -103,6 +103,83 @@ class AppLocalizationsRu extends AppLocalizations {
   String get navProfile => 'Профиль';
 
   @override
+  String get quickAddWish => 'Желание';
+
+  @override
+  String get quickAddList => 'Список';
+
+  @override
+  String get homeMyLists => 'Мои списки';
+
+  @override
+  String get homeMyWishes => 'Мои желания';
+
+  @override
+  String get wishListNewTitle => 'Новый список желаний';
+
+  @override
+  String get wishListEmptyTitle => 'Список пуст';
+
+  @override
+  String get wishListEmptyDescription =>
+      'Добавь желание в этот список — и оно появится здесь.';
+
+  @override
+  String wishListDeleteMessage(String title) {
+    return '«$title» будет удалён. Желания из него останутся — они просто окажутся без списка.';
+  }
+
+  @override
+  String get wishRemoveFromList => 'Убрать из списка';
+
+  @override
+  String get wishRemovedFromList => 'Желание убрано из списка';
+
+  @override
+  String get shareAction => 'Поделиться';
+
+  @override
+  String sharedOwnerWishes(String name) {
+    return '$name хочет';
+  }
+
+  @override
+  String get sharedOpenProduct => 'Открыть товар';
+
+  @override
+  String get sharedListEmptyDescription => 'В этом списке пока нет желаний.';
+
+  @override
+  String get shareInvalidTitle => 'Ссылка недействительна';
+
+  @override
+  String get shareInvalidDescription =>
+      'Возможно, желание было удалено или ссылка больше не доступна.';
+
+  @override
+  String get shareLoadErrorDescription =>
+      'Проверьте подключение к интернету и попробуйте ещё раз.';
+
+  @override
+  String get retry => 'Повторить';
+
+  @override
+  String get wishAddToList => 'Добавить в список';
+
+  @override
+  String get wishChangeList => 'Изменить список';
+
+  @override
+  String get wishListNone => 'Без списка';
+
+  @override
+  String get wishPickerEmptyTitle => 'Нет желаний без списка';
+
+  @override
+  String get wishPickerEmptyDescription =>
+      'Все желания уже разложены по спискам.';
+
+  @override
   String get authTagline => 'Твоё пространство желаний';
 
   @override
@@ -351,6 +428,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noteSection => 'Заметка';
 
   @override
+  String get wishListSection => 'Список';
+
+  @override
   String wishAddedOn(String date) {
     return 'Добавлено $date';
   }
@@ -414,6 +494,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishDiscardMessage => 'Введённые данные будут потеряны.';
 
   @override
+  String get wishAddLaterHint => 'Отредактировать и поделиться можно позже';
+
+  @override
   String get shoppingTitle => 'Покупки';
 
   @override
@@ -459,7 +542,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get listRename => 'Переименовать список';
 
   @override
-  String get listNewTitle => 'Новый список';
+  String get listNewTitle => 'Новый список желаний';
+
+  @override
+  String get listCreateAction => 'Создать';
+
+  @override
+  String get listAddLaterHint => 'Переименовать и поделиться можно позже';
 
   @override
   String get listTitleLabel => 'Название списка';
@@ -516,13 +605,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get listEmptyItems => 'В списке пока ничего нет';
 
   @override
-  String get itemAdd => 'Добавить товар';
+  String get itemComposerHint => 'Что купить?';
 
   @override
-  String get itemTitleHint => 'Название товара';
-
-  @override
-  String get itemAddCloseSemantic => 'Закрыть поле добавления';
+  String get itemPhotoAttach => 'Фото к позиции';
 
   @override
   String get itemSheetTitle => 'Позиция';

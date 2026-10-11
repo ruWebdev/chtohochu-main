@@ -7,6 +7,7 @@ import '../core/sync/sync_engine.dart';
 import '../l10n/l10n.dart';
 import '../features/showcase/presentation/providers/theme_controller.dart';
 import 'router/app_router.dart';
+import 'router/share_deep_links.dart';
 import 'theme/app_theme.dart';
 
 /// Корневой виджет приложения.
@@ -32,6 +33,8 @@ class _ChtoHochuAppState extends ConsumerState<ChtoHochuApp> {
     WidgetsBinding.instance.addObserver(_realtimeObserver);
     // Держим engine живым на всю сессию.
     ref.read(syncEngineProvider);
+    // Входящие share-ссылки (cold/warm/background) → /s/{token}.
+    ref.read(shareDeepLinkHandlerProvider).start();
   }
 
   @override

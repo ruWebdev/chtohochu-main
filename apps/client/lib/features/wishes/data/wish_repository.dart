@@ -10,6 +10,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../../core/sync/outbox_store.dart';
 import '../domain/wish.dart';
 import '../domain/wish_image.dart';
+import '../domain/wish_list.dart';
 import 'wish_photo_picker.dart';
 
 /// Абстракция репозитория желаний.
@@ -29,6 +30,28 @@ abstract interface class WishRepository {
 
   /// Есть ли хотя бы одно желание.
   Future<bool> hasWishes();
+
+  /// Реактивный поток списков желаний с числом желаний в каждом.
+  Stream<List<WishList>> watchWishLists();
+
+  /// Реактивный поток желаний конкретного списка (owner-scoped,
+  /// без tombstone). Реагирует на изменение `Wish.listId` —
+  /// экран списка обновляется без ручного refresh.
+  Stream<List<Wish>> watchWishesInList(String listId);
+
+  /// Создать список желаний локально (UUID генерируется
+  /// на клиенте). Запись + outbox create — одна транзакция;
+  /// доставку на сервер выполняет SyncEngine.
+  Future<WishList> createWishList({required String title});
+
+  /// Переименовать список (замена по [WishList.id]).
+  Future<WishList> updateWishList(WishList list);
+
+  /// Удалить список по id: tombstone/физическое удаление по
+  /// outbox-правилам + разгруппировка желаний (`listId` → null;
+  /// pending-операции желаний патчатся, чтобы не унести мёртвую
+  /// ссылку на сервер).
+  Future<void> deleteWishList(String id);
 
   /// Реактивный поток дополнительных изображений желания
   /// (primary — `Wish.imageUrl`), упорядоченных по `sortOrder`.
@@ -52,6 +75,11 @@ abstract interface class WishRepository {
 
   /// Обновить существующее желание (замена по [Wish.id]).
   Future<Wish> updateWish(Wish wish);
+
+  /// Изменить принадлежность желания списку: [listId] — целевой
+  /// список, `null` — убрать из всех списков. Membership — часть
+  /// серверного контракта wish: уходит обычным update-op.
+  Future<Wish> assignWishToList(String wishId, String? listId);
 
   /// Удалить желание по id.
   Future<void> deleteWish(String id);
@@ -84,6 +112,12 @@ class WishNotFoundError extends WishError {
 /// Непредвиденная ошибка при сохранении желания.
 class UnknownWishError extends WishError {
   const UnknownWishError() : super('unknown');
+}
+
+/// Типы сущностей outbox/sync для wishes-домена.
+abstract final class WishEntityTypes {
+  static const String wish = 'wish';
+  static const String wishList = 'wish_list';
 }
 
 /// Провайдер `WishRepository` — Drift-backed реализация.
@@ -122,6 +156,8 @@ class DriftWishRepository implements WishRepository {
     price: r.price,
     link: r.link,
     imageUrl: r.imageUrl,
+    imageLocalPath: r.imageLocalPath,
+    listId: r.listId,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   );
@@ -143,6 +179,8 @@ class DriftWishRepository implements WishRepository {
     // Локальный путь файла не уходит в API (невалидный URL →
     // 422 → markFailed): фото живёт локально до upload-эндпоинта.
     'image_url': Wish.isRemoteImageRef(w.imageUrl) ? w.imageUrl : null,
+    // Membership — серверная часть контракта (null = вне списков).
+    'list_id': w.listId,
   };
 
   @override
@@ -165,6 +203,134 @@ class DriftWishRepository implements WishRepository {
   Future<bool> hasWishes() => _db.hasWishes(_ownerId);
 
   @override
+  Stream<List<WishList>> watchWishLists() {
+    return _db.watchWishListsWithWishes(_ownerId).map((rows) {
+      // Группировка join-строк `list + wish?` — счётчик желаний.
+      final byId = <String, WishListRow>{};
+      final counts = <String, int>{};
+      final order = <String>[];
+      for (final row in rows) {
+        final l = row.readTable(_db.wishLists);
+        if (!byId.containsKey(l.id)) {
+          byId[l.id] = l;
+          order.add(l.id);
+        }
+        if (row.readTableOrNull(_db.wishes) != null) {
+          counts[l.id] = (counts[l.id] ?? 0) + 1;
+        }
+      }
+      return [
+        for (final id in order)
+          WishList(
+            id: id,
+            title: byId[id]!.title,
+            createdAt: byId[id]!.createdAt,
+            updatedAt: byId[id]!.updatedAt,
+            wishCount: counts[id] ?? 0,
+          ),
+      ];
+    });
+  }
+
+  @override
+  Stream<List<Wish>> watchWishesInList(String listId) {
+    return _db
+        .watchWishesInList(_ownerId, listId)
+        .map((rows) => rows.map(_toDomain).toList());
+  }
+
+  @override
+  Future<WishList> createWishList({required String title}) async {
+    final ownerId = _ownerId;
+    final now = DateTime.now();
+    final list = WishList(id: _uuid.v4(), title: title, createdAt: now);
+
+    await _db.transaction(() async {
+      await _db
+          .into(_db.wishLists)
+          .insert(
+            WishListsCompanion(
+              id: Value(list.id),
+              ownerId: Value(ownerId),
+              title: Value(list.title),
+              createdAt: Value(now),
+              updatedAt: Value(now),
+            ),
+          );
+      await OutboxStore(_db).enqueue(
+        ownerId: ownerId,
+        entityType: WishEntityTypes.wishList,
+        entityId: list.id,
+        operation: OutboxOp.create,
+        payload: {'id': list.id, 'title': list.title},
+      );
+    });
+
+    return list;
+  }
+
+  @override
+  Future<WishList> updateWishList(WishList list) async {
+    final ownerId = _ownerId;
+    final updated = list.copyWith(updatedAt: DateTime.now());
+
+    await _db.transaction(() async {
+      await (_db.update(
+        _db.wishLists,
+      )..where((l) => l.id.equals(list.id) & l.ownerId.equals(ownerId))).write(
+        WishListsCompanion(
+          title: Value(updated.title),
+          updatedAt: Value(updated.updatedAt!),
+        ),
+      );
+      await OutboxStore(_db).enqueue(
+        ownerId: ownerId,
+        entityType: WishEntityTypes.wishList,
+        entityId: list.id,
+        operation: OutboxOp.update,
+        payload: {'title': updated.title},
+      );
+    });
+
+    return updated;
+  }
+
+  @override
+  Future<void> deleteWishList(String id) async {
+    final ownerId = _ownerId;
+    await _db.transaction(() async {
+      // Желания списка не удаляются — разгруппировываем.
+      // Серверная сторона сама обнулит list_id при DELETE списка,
+      // поэтому отдельные wish-операции не ставятся; но уже
+      // поставленные pending-операции не должны унести list_id
+      // мёртвого списка — вычищаем его из их payload'ов.
+      await (_db.update(_db.wishes)
+            ..where((w) => w.listId.equals(id) & w.ownerId.equals(ownerId)))
+          .write(const WishesCompanion(listId: Value(null)));
+      await _db.nullListIdInWishOps(ownerId, id);
+
+      final outbox = OutboxStore(_db);
+      if (await outbox.hasUnsyncedCreate(ownerId, id)) {
+        // create + delete до первого push: сервер сущность не
+        // принимал — удаляем физически, HTTP не нужен.
+        await (_db.delete(
+          _db.wishLists,
+        )..where((l) => l.id.equals(id) & l.ownerId.equals(ownerId))).go();
+      } else {
+        await (_db.update(_db.wishLists)
+              ..where((l) => l.id.equals(id) & l.ownerId.equals(ownerId)))
+            .write(WishListsCompanion(deletedAt: Value(DateTime.now())));
+      }
+      await outbox.enqueue(
+        ownerId: ownerId,
+        entityType: WishEntityTypes.wishList,
+        entityId: id,
+        operation: OutboxOp.delete,
+      );
+    });
+  }
+
+  @override
   Stream<List<WishImage>> watchWishImages(String wishId) {
     return _db
         .watchWishImages(_ownerId, wishId)
@@ -178,10 +344,13 @@ class DriftWishRepository implements WishRepository {
     int? price,
     String? link,
     String? imageUrl,
+    String? listId,
     List<String> additionalImagePaths = const [],
   }) async {
     final now = DateTime.now();
     final ownerId = _ownerId;
+    final isLocalImage = imageUrl != null && !Wish.isRemoteImageRef(imageUrl);
+
     final wish = Wish(
       id: _uuid.v4(),
       title: title,
@@ -189,11 +358,11 @@ class DriftWishRepository implements WishRepository {
       price: price,
       link: link,
       imageUrl: imageUrl,
+      imageLocalPath: isLocalImage ? imageUrl : null,
+      listId: listId,
       createdAt: now,
       updatedAt: now,
     );
-
-    final isLocalImage = imageUrl != null && !Wish.isRemoteImageRef(imageUrl);
 
     await _db.transaction(() async {
       await _db
@@ -207,6 +376,7 @@ class DriftWishRepository implements WishRepository {
               price: Value(wish.price),
               link: Value(wish.link),
               imageUrl: Value(wish.imageUrl),
+              imageLocalPath: Value(wish.imageLocalPath),
               // Локальный файл ждёт upload; remote-ссылка
               // считается уже доставленной (ADR-015).
               imageUploadStatus: Value(
@@ -217,6 +387,7 @@ class DriftWishRepository implements WishRepository {
                     : 'uploaded',
               ),
               imageUploadId: Value(isLocalImage ? _uuid.v4() : null),
+              listId: Value(wish.listId),
               createdAt: Value(wish.createdAt),
               updatedAt: Value(wish.updatedAt!),
             ),
@@ -240,7 +411,7 @@ class DriftWishRepository implements WishRepository {
       }
       await OutboxStore(_db).enqueue(
         ownerId: ownerId,
-        entityType: 'wish',
+        entityType: WishEntityTypes.wish,
         entityId: wish.id,
         operation: OutboxOp.create,
         payload: _payload(wish, id: wish.id),
@@ -258,6 +429,14 @@ class DriftWishRepository implements WishRepository {
       throw const WishNotFoundError();
     }
     final updated = wish.copyWith(updatedAt: DateTime.now());
+    // Local path следует за image_url: не менялся → сохраняем
+    // (remote URL после upload не трогает display-source); новый
+    // локальный файл → новый путь; смена на URL/null → сброс.
+    final localPath = updated.imageUrl == existing.imageUrl
+        ? existing.imageLocalPath
+        : Wish.isRemoteImageRef(updated.imageUrl)
+        ? null
+        : updated.imageUrl;
 
     await _db.transaction(() async {
       await (_db.update(
@@ -269,12 +448,14 @@ class DriftWishRepository implements WishRepository {
           price: Value(updated.price),
           link: Value(updated.link),
           imageUrl: Value(updated.imageUrl),
+          imageLocalPath: Value(localPath),
+          listId: Value(updated.listId),
           updatedAt: Value(updated.updatedAt!),
         ),
       );
       await OutboxStore(_db).enqueue(
         ownerId: ownerId,
-        entityType: 'wish',
+        entityType: WishEntityTypes.wish,
         entityId: updated.id,
         operation: OutboxOp.update,
         payload: _payload(updated),
@@ -282,6 +463,30 @@ class DriftWishRepository implements WishRepository {
     });
 
     return updated;
+  }
+
+  @override
+  Future<Wish> assignWishToList(String wishId, String? listId) async {
+    // copyWith не умеет сбрасывать nullable — собираем доменную
+    // модель из строки напрямую с явным listId.
+    final row = await _db.wishById(_ownerId, wishId);
+    if (row == null) {
+      throw const WishNotFoundError();
+    }
+    return updateWish(
+      Wish(
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        price: row.price,
+        link: row.link,
+        imageUrl: row.imageUrl,
+        imageLocalPath: row.imageLocalPath,
+        listId: listId,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      ),
+    );
   }
 
   @override
@@ -297,7 +502,10 @@ class DriftWishRepository implements WishRepository {
         // их сохраняет — при 422 желание вернётся вместе с фото.
         final local = await _db.wishById(ownerId, id);
         filePaths = [
-          if (!Wish.isRemoteImageRef(local?.imageUrl)) local!.imageUrl!,
+          if (local?.imageLocalPath != null)
+            local!.imageLocalPath!
+          else if (!Wish.isRemoteImageRef(local?.imageUrl))
+            local!.imageUrl!,
           ...await _db.deleteWishImages(ownerId, id),
         ];
         await (_db.delete(
@@ -310,7 +518,7 @@ class DriftWishRepository implements WishRepository {
       }
       await outbox.enqueue(
         ownerId: ownerId,
-        entityType: 'wish',
+        entityType: WishEntityTypes.wish,
         entityId: id,
         operation: OutboxOp.delete,
       );

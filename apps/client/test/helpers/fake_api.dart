@@ -44,6 +44,17 @@ class FakeApiAdapter implements HttpClientAdapter {
   /// uid → listId → list {'id','title',...,'items': {itemId: item}}.
   final _shoppingLists = <String, Map<String, Map<String, dynamic>>>{};
 
+  /// uid → listId → wish list {'id','title','created_at','updated_at'}.
+  final _wishLists = <String, Map<String, Map<String, dynamic>>>{};
+
+  /// `'$uid|wish:$id'` / `'$uid|list:$id'` → share
+  /// {'id','token','url','revoked_at','entity','uid'}.
+  final _shares = <String, Map<String, dynamic>>{};
+
+  /// Искусственная задержка ответа — для тестов «запрос ещё
+  /// выполняется» (in-flight guards).
+  Duration latency = Duration.zero;
+
   /// uploadId → media upload {'user_id','object_key','status',...}.
   final _mediaUploads = <String, Map<String, dynamic>>{};
 
@@ -88,6 +99,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       });
       _wishes.putIfAbsent(user['id'] as String, () => {});
       _shoppingLists.putIfAbsent(user['id'] as String, () => {});
+      _wishLists.putIfAbsent(user['id'] as String, () => {});
       return user['id'] as String;
     });
   }
@@ -121,6 +133,7 @@ class FakeApiAdapter implements HttpClientAdapter {
     requests.add('$method $path');
     _inFlight++;
     if (_inFlight > maxInFlight) maxInFlight = _inFlight;
+    if (latency > Duration.zero) await Future.delayed(latency);
     try {
       return await _handle(options, method, path, requestStream);
     } finally {
@@ -464,6 +477,11 @@ class FakeApiAdapter implements HttpClientAdapter {
       if (wishes.containsKey(id)) {
         throw _error(409, 'Resource already exists.');
       }
+      // Backend-валидация membership: только свой живой список.
+      final lid = body['list_id'];
+      if (lid != null && !(_wishLists[uid] ?? {}).containsKey(lid)) {
+        throw _error(422, 'The given data was invalid.');
+      }
       final now = DateTime.now().toIso8601String();
       final wish = {
         'id': id,
@@ -472,6 +490,7 @@ class FakeApiAdapter implements HttpClientAdapter {
         'price': body['price'],
         'link': body['link'],
         'image_url': body['image_url'],
+        'list_id': body['list_id'],
         'created_at': now,
         'updated_at': now,
       };
@@ -505,6 +524,61 @@ class FakeApiAdapter implements HttpClientAdapter {
       lists[id] = list;
       status = 201;
       data = _serializeList(list);
+    } else if (path == '/wish-lists' && method == 'GET') {
+      final uid = _userIdForToken(token);
+      final lists = (_wishLists[uid] ?? {}).values.toList()
+        ..sort(
+          (a, b) =>
+              (b['created_at'] as String).compareTo(a['created_at'] as String),
+        );
+      return _json(options, {'data': lists});
+    } else if (path == '/wish-lists' && method == 'POST') {
+      final uid = _userIdForToken(token);
+      final lists = _wishLists.putIfAbsent(uid, () => {});
+      final id = body!['id'] as String? ?? _uuid.v4();
+      if (lists.containsKey(id)) {
+        throw _error(409, 'Resource already exists.');
+      }
+      final now = DateTime.now().toIso8601String();
+      final list = <String, dynamic>{
+        'id': id,
+        'title': body['title'],
+        'created_at': now,
+        'updated_at': now,
+      };
+      lists[id] = list;
+      status = 201;
+      data = list;
+    } else if (path.startsWith('/wish-lists/')) {
+      final uid = _userIdForToken(token);
+      final rest = path.substring(12);
+      if (rest.endsWith('/share') && method == 'POST') {
+        // POST /wish-lists/{id}/share — идемпотентно, как backend.
+        final id = rest.substring(0, rest.length - 6);
+        if (!(_wishLists[uid] ?? {}).containsKey(id)) {
+          throw _error(404, 'Not found.');
+        }
+        status = 201;
+        data = _shareFor(uid, 'list:$id');
+      } else {
+        final list = (_wishLists[uid] ?? {})[rest];
+        if (list == null) throw _error(404, 'Not found.');
+        if (method == 'GET') {
+          data = list;
+        } else if (method == 'PATCH') {
+          if (body!.containsKey('title')) list['title'] = body['title'];
+          list['updated_at'] = DateTime.now().toIso8601String();
+          data = list;
+        } else if (method == 'DELETE') {
+          _wishLists[uid]!.remove(rest);
+          // Как backend: soft-delete списка разгруппировывает wishes.
+          for (final w in (_wishes[uid] ?? {}).values) {
+            if (w['list_id'] == rest) w['list_id'] = null;
+          }
+          status = 204;
+          data = null;
+        }
+      }
     } else if (path.startsWith('/shopping-items/')) {
       final uid = _userIdForToken(token);
       final id = path.substring(16);
@@ -574,12 +648,17 @@ class FakeApiAdapter implements HttpClientAdapter {
         if (method == 'GET') {
           data = wish;
         } else if (method == 'PATCH') {
+          final lid = body?['list_id'];
+          if (lid != null && !(_wishLists[uid] ?? {}).containsKey(lid)) {
+            throw _error(422, 'The given data was invalid.');
+          }
           for (final k in [
             'title',
             'description',
             'price',
             'link',
             'image_url',
+            'list_id',
           ]) {
             if (body!.containsKey(k)) wish[k] = body[k];
           }
@@ -590,6 +669,64 @@ class FakeApiAdapter implements HttpClientAdapter {
           status = 204;
           data = null;
         }
+      }
+    }
+
+    // --- Sharing ---
+    if (data == null && status == 200) {
+      final shareCreate = RegExp(r'^/wishes/[^/]+/share$').firstMatch(path);
+      if (shareCreate != null && method == 'POST') {
+        final uid = _userIdForToken(token);
+        final id = path.substring(8, path.length - 6);
+        if (!(_wishes[uid] ?? {}).containsKey(id)) {
+          throw _error(404, 'Not found.');
+        }
+        return _json(options, {
+          'data': _shareFor(uid, 'wish:$id'),
+        }, status: 201);
+      }
+      final shareDelete = RegExp(r'^/shares/[^/]+$').firstMatch(path);
+      if (shareDelete != null && method == 'DELETE') {
+        final uid = _userIdForToken(token);
+        final share = _shares.values.where(
+          (s) => s['uid'] == uid && s['id'] == path.substring(8),
+        );
+        if (share.isEmpty) throw _error(404, 'Not found.');
+        share.first['revoked_at'] = DateTime.now().toIso8601String();
+        return _json(options, null, status: 204);
+      }
+      final sharePublic = RegExp(r'^/share/[^/]+$').firstMatch(path);
+      if (sharePublic != null && method == 'GET') {
+        // Публичный resolver — без auth-токена.
+        final tokenStr = path.substring(7);
+        final share = _shares.values.where(
+          (s) => s['token'] == tokenStr && s['revoked_at'] == null,
+        );
+        if (share.isEmpty) throw _error(404, 'Not found.');
+        final s = share.first;
+        final uid = s['uid'] as String;
+        final entity = s['entity'] as String;
+        if (entity.startsWith('wish:')) {
+          final w = (_wishes[uid] ?? {})[entity.substring(5)];
+          if (w == null) throw _error(404, 'Not found.');
+          return _json(options, {'type': 'wish', 'data': _publicWish(uid, w)});
+        }
+        final l = (_wishLists[uid] ?? {})[entity.substring(5)];
+        if (l == null) throw _error(404, 'Not found.');
+        final wishes = (_wishes[uid] ?? {}).values
+            .where((w) => w['list_id'] == l['id'])
+            .map((w) => _publicWish(uid, w)..remove('owner'))
+            .toList();
+        return _json(options, {
+          'type': 'wish_list',
+          'data': {
+            'title': l['title'],
+            'owner': {
+              'name': _users.values.firstWhere((u) => u['id'] == uid)['name'],
+            },
+            'wishes': wishes,
+          },
+        });
       }
     }
 
@@ -726,6 +863,68 @@ class FakeApiAdapter implements HttpClientAdapter {
   /// Удалить позицию на «сервере» (remote delete с другого устройства).
   void deleteServerShoppingItem(String uid, String id) {
     _findItem(uid, id)?.$1['items']?.remove(id);
+  }
+
+  // ── Wish lists ───────────────────────────────────────────
+
+  /// «Серверные» списки желаний пользователя (для assert'ов).
+  List<Map<String, dynamic>> wishListsOf(String uid) =>
+      (_wishLists[uid] ?? {}).values.toList();
+
+  /// Посеять список желаний на «сервере» (remote-изменение).
+  /// Идемпотентный share: активный уже есть — возвращаем его,
+  /// как backend (`owner + entity → один active share`).
+  Map<String, dynamic> _shareFor(String uid, String entity) {
+    final key = '$uid|$entity';
+    final existing = _shares[key];
+    if (existing != null && existing['revoked_at'] == null) {
+      return {'token': existing['token'], 'url': existing['url']};
+    }
+    final token = 'tok-${_uuid.v4()}';
+    final share = <String, dynamic>{
+      'id': _uuid.v4(),
+      'token': token,
+      'url': 'https://app.chtohochu.ru/s/$token',
+      'revoked_at': null,
+      'entity': entity,
+      'uid': uid,
+    };
+    _shares[key] = share;
+    return {'token': token, 'url': share['url']};
+  }
+
+  /// Создаёт активный share напрямую (как после `POST .../share`)
+  /// и возвращает его capability-токен для `GET /share/{token}`.
+  String seedShare(String uid, String entity) =>
+      _shareFor(uid, entity)['token'] as String;
+
+  /// Публичная проекция желания — как SharedWishResource.
+  Map<String, dynamic> _publicWish(String uid, Map<String, dynamic> w) => {
+    'title': w['title'],
+    'price': w['price'],
+    'link': w['link'],
+    'image_url': w['image_url'],
+    'owner': {
+      'name': _users.values.firstWhere(
+        (u) => u['id'] == uid,
+        orElse: () => {'name': null},
+      )['name'],
+    },
+  };
+
+  void seedWishList(String uid, String id, String title) {
+    final now = DateTime.now().toIso8601String();
+    _wishLists.putIfAbsent(uid, () => {})[id] = {
+      'id': id,
+      'title': title,
+      'created_at': now,
+      'updated_at': now,
+    };
+  }
+
+  /// Удалить список желаний на «сервере» (remote delete).
+  void deleteServerWishList(String uid, String id) {
+    _wishLists[uid]?.remove(id);
   }
 
   // ── Friends ──────────────────────────────────────────────

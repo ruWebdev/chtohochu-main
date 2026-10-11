@@ -12,18 +12,15 @@ import '../../../../shared/ui/ui.dart';
 import '../../domain/shopping_list.dart';
 import '../providers/shopping_list_form_controller.dart';
 
-/// Экран формы списка покупок — создание и переименование
-/// в одном компоненте.
+/// Экран переименования списка покупок.
 ///
-/// Режимы:
-/// * создание ([existing] = `null`): X → назад к спискам;
-/// * редактирование ([existing] != `null`): поле предзаполнено,
-///   сохранение возвращает на экран списка.
+/// Поле предзаполнено текущим названием, сохранение возвращает
+/// на экран списка. Создание списка — bottom sheet.
 class ShoppingListFormPage extends ConsumerStatefulWidget {
-  const ShoppingListFormPage({super.key, this.existing});
+  const ShoppingListFormPage({super.key, required this.existing});
 
-  /// Список для редактирования. Если `null` — режим создания.
-  final ShoppingList? existing;
+  /// Список для редактирования.
+  final ShoppingList existing;
 
   @override
   ConsumerState<ShoppingListFormPage> createState() =>
@@ -34,12 +31,10 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
   late final TextEditingController _titleController;
   String? _titleError;
 
-  bool get _isEditing => widget.existing != null;
-
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.existing?.title);
+    _titleController = TextEditingController(text: widget.existing.title);
   }
 
   @override
@@ -68,9 +63,7 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
         .save(title: _titleController.text.trim(), existing: widget.existing);
     if (list == null || !mounted) return;
 
-    context.go(
-      _isEditing ? AppRoutes.shoppingList(list.id) : AppRoutes.shopping,
-    );
+    context.go(AppRoutes.shoppingList(list.id));
   }
 
   /// Закрыть без сохранения. Маршруты открываются через `go()`,
@@ -80,12 +73,7 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
       context.pop();
       return;
     }
-    final existing = widget.existing;
-    context.go(
-      existing != null
-          ? AppRoutes.shoppingList(existing.id)
-          : AppRoutes.shopping,
-    );
+    context.go(AppRoutes.shoppingList(widget.existing.id));
   }
 
   @override
@@ -125,10 +113,7 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    _isEditing ? l10n.listRename : l10n.listNewTitle,
-                    style: t.screenTitle,
-                  ),
+                  Text(l10n.listRename, style: t.screenTitle),
                   const SizedBox(height: AppSpacing.xl),
 
                   AppTextField(
@@ -137,7 +122,6 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
                     hint: l10n.listTitleHint,
                     errorText: _titleError,
                     enabled: !isLoading,
-                    autofocus: !_isEditing,
                     textInputAction: TextInputAction.done,
                     semanticsLabel: l10n.listTitleLabel,
                     onSubmitted: (_) => _save(),
@@ -155,7 +139,7 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
                   ],
 
                   AppButton(
-                    label: _isEditing ? l10n.saveChanges : l10n.listCreate,
+                    label: l10n.saveChanges,
                     expand: true,
                     isLoading: isLoading,
                     enabled: !isLoading,

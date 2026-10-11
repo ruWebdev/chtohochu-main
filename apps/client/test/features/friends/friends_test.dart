@@ -3,7 +3,7 @@ import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/features/friends/data/friends_repository.dart';
 import 'package:chtohochu/features/friends/domain/friend.dart';
 import 'package:chtohochu/features/friends/presentation/pages/friend_profile_page.dart';
-import 'package:chtohochu/features/friends/presentation/pages/friend_search_page.dart';
+import 'package:chtohochu/features/friends/presentation/widgets/add_friend_sheet.dart';
 import 'package:chtohochu/features/friends/presentation/pages/friend_wish_details_page.dart';
 import 'package:chtohochu/features/friends/presentation/pages/friends_page.dart';
 import 'package:chtohochu/shared/ui/buttons/app_button.dart';
@@ -233,7 +233,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(FriendSearchPage), findsOneWidget);
+    expect(find.byType(AddFriendSheet), findsOneWidget);
     // Initial — подсказка до ввода.
     expect(find.text('Найдите друга'), findsOneWidget);
 
@@ -251,8 +251,8 @@ void main() {
     expect(find.text('Добавлен'), findsOneWidget);
     expect(api.friendsOf(_me), contains('u5'));
 
-    // Назад → в списке появилась Ольга.
-    await tester.tap(find.byTooltip('Назад'));
+    // Закрываем sheet → в списке появилась Ольга.
+    await tester.tap(find.byTooltip('Закрыть'));
     await tester.pumpAndSettle();
     expect(find.byType(FriendsPage), findsOneWidget);
     expect(find.text('Ольга Смирнова'), findsOneWidget);
@@ -309,9 +309,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400)); // debounce
     await tester.pumpAndSettle();
 
-    expect(find.text('Анна Соколова'), findsOneWidget);
-    expect(find.text('В друзьях'), findsOneWidget);
-    expect(find.widgetWithText(AppButton, 'Добавить'), findsNothing);
+    // Sheet открыт поверх списка друзей — ищем внутри sheet.
+    final sheet = find.byType(AddFriendSheet);
+    expect(
+      find.descendant(of: sheet, matching: find.text('Анна Соколова')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: sheet, matching: find.text('В друзьях')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: sheet,
+        matching: find.widgetWithText(AppButton, 'Добавить'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('Friend wish opens read-only details without edit/delete', (

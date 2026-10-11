@@ -53,6 +53,8 @@ class AppColors {
     errorSurface: Color(0xFFFDECEA),
     info: Color(0xFF2A6DBE),
     infoSurface: Color(0xFFE7F0FB),
+    accentShopping: Color(0xFF2FAE9E),
+    accentFriends: Color(0xFFE9715E),
     scrim: Color(0x66000000),
   );
 
@@ -79,6 +81,8 @@ class AppColors {
     errorSurface: Color(0xFF3A1E1C),
     info: Color(0xFF8AB8F0),
     infoSurface: Color(0xFF1E2A3A),
+    accentShopping: Color(0xFF66D4C2),
+    accentFriends: Color(0xFFFF9C8C),
     scrim: Color(0x99000000),
   );
 }
@@ -110,6 +114,8 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     required this.errorSurface,
     required this.info,
     required this.infoSurface,
+    required this.accentShopping,
+    required this.accentFriends,
     required this.scrim,
   });
 
@@ -176,6 +182,12 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   /// Фон блока информации.
   final Color infoSurface;
 
+  /// Акцент раздела «Покупки» (мягкий teal в весе бренда).
+  final Color accentShopping;
+
+  /// Акцент раздела «Друзья» (тёплый coral).
+  final Color accentFriends;
+
   /// Затемнение scrim.
   final Color scrim;
 
@@ -202,6 +214,8 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     Color? errorSurface,
     Color? info,
     Color? infoSurface,
+    Color? accentShopping,
+    Color? accentFriends,
     Color? scrim,
   }) {
     return AppThemeColors(
@@ -226,6 +240,8 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       errorSurface: errorSurface ?? this.errorSurface,
       info: info ?? this.info,
       infoSurface: infoSurface ?? this.infoSurface,
+      accentShopping: accentShopping ?? this.accentShopping,
+      accentFriends: accentFriends ?? this.accentFriends,
       scrim: scrim ?? this.scrim,
     );
   }
@@ -263,6 +279,8 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       errorSurface: Color.lerp(errorSurface, other.errorSurface, t)!,
       info: Color.lerp(info, other.info, t)!,
       infoSurface: Color.lerp(infoSurface, other.infoSurface, t)!,
+      accentShopping: Color.lerp(accentShopping, other.accentShopping, t)!,
+      accentFriends: Color.lerp(accentFriends, other.accentFriends, t)!,
       scrim: Color.lerp(scrim, other.scrim, t)!,
     );
   }

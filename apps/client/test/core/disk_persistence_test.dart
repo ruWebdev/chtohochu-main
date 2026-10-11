@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chtohochu/core/database/app_database.dart';
@@ -527,6 +528,205 @@ void main() {
     expect(pendingImages.single.wishId, wish.id);
     expect(pendingImages.single.uploadStatus, 'pending');
     expect(pendingImages.single.uploadId, isNotNull);
+    await db.close();
+  });
+
+  test('schema v8 → v9: local-only списки получают tombstone и '
+      'backfill outbox create', () async {
+    // Имитация установки v8: wish_lists local-only (без
+    // deleted_at), связь wishes.list_id уже есть.
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE wish_lists (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE wishes (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        price INTEGER,
+        link TEXT,
+        image_url TEXT,
+        image_local_path TEXT,
+        image_upload_status TEXT,
+        image_upload_id TEXT,
+        list_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE outbox_entries (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        owner_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload_json TEXT,
+        created_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        next_retry_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending'
+      );
+      INSERT INTO wish_lists VALUES ('wl-1','user-a','Старый список',
+        1735689600,1735689600);
+      INSERT INTO wishes (id,owner_id,title,list_id,created_at,
+        updated_at) VALUES ('w1','user-a','В списке','wl-1',
+        1735689600,1735689600);
+      PRAGMA user_version = 8;
+      ''');
+    raw.close();
+
+    // Открытие актуальной базой → onUpgrade 8→9.
+    final db = openDb();
+
+    // Список на месте, tombstone-колонка есть.
+    final list = (await db.select(db.wishLists).get()).single;
+    expect(list.title, 'Старый список');
+    expect(list.deletedAt, isNull);
+
+    // Связь wish→list сохранена.
+    final wish = (await db.select(db.wishes).get()).single;
+    expect(wish.listId, 'wl-1');
+
+    // Backfill: ровно одна create-операция на список.
+    final ops = await (db.select(
+      db.outboxEntries,
+    )..where((o) => o.entityId.equals('wl-1'))).get();
+    expect(ops.single.entityType, 'wish_list');
+    expect(ops.single.operation, 'create');
+    expect(ops.single.payloadJson, contains('Старый список'));
+    await db.close();
+  });
+
+  test('schema v9 → v10: существующий local-only membership '
+      'уходит в outbox', () async {
+    // База v9: wish_lists с tombstone, wishes.list_id заполнен —
+    // но сервер о membership не знает.
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE wish_lists (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE wishes (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        price INTEGER,
+        link TEXT,
+        image_url TEXT,
+        image_local_path TEXT,
+        image_upload_status TEXT,
+        image_upload_id TEXT,
+        list_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      CREATE TABLE outbox_entries (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        owner_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload_json TEXT,
+        created_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        next_retry_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending'
+      );
+      INSERT INTO wish_lists VALUES ('wl-1','user-a','Список',
+        1735689600,1735689600,NULL);
+      INSERT INTO wishes (id,owner_id,title,list_id,created_at,
+        updated_at) VALUES
+        ('w-member','user-a','В списке','wl-1',1735689600,1735689600),
+        ('w-solo','user-a','Без списка',NULL,1735689600,1735689600),
+        ('w-dangling','user-a','Битый ref','wl-gone',
+        1735689600,1735689600);
+      INSERT INTO outbox_entries (owner_id,entity_type,entity_id,
+        operation,payload_json,created_at) VALUES
+        ('user-a','wish','w-pending','create',
+        '{"id":"w-pending","title":"Летит"}',1735689600);
+      INSERT INTO wishes (id,owner_id,title,list_id,created_at,
+        updated_at) VALUES ('w-pending','user-a','Летит','wl-1',
+        1735689600,1735689600);
+      PRAGMA user_version = 9;
+      ''');
+    raw.close();
+
+    final db = openDb();
+
+    // Связи и строки сохранены.
+    final wishes = await db.select(db.wishes).get();
+    expect(wishes, hasLength(4));
+    expect(wishes.firstWhere((w) => w.id == 'w-member').listId, 'wl-1');
+
+    // w-member: новая update-операция с membership.
+    final memberOps = await db.opsFor('user-a', 'w-member');
+    expect(memberOps.single.operation, 'update');
+    expect(jsonDecode(memberOps.single.payloadJson!)['list_id'], 'wl-1');
+
+    // w-pending: существующий create дополнен, новых op нет.
+    final pendingOps = await db.opsFor('user-a', 'w-pending');
+    expect(pendingOps, hasLength(1));
+    expect(pendingOps.single.operation, 'create');
+    expect(jsonDecode(pendingOps.single.payloadJson!)['list_id'], 'wl-1');
+
+    // Без membership и с мёртвой ссылкой — без операций.
+    expect(await db.opsFor('user-a', 'w-solo'), isEmpty);
+    expect(await db.opsFor('user-a', 'w-dangling'), isEmpty);
+    await db.close();
+  });
+
+  test('WishList и outbox переживают restart: до sync и после', () async {
+    final prefs = PreferencesService(await SharedPreferences.getInstance());
+    final api = FakeApiAdapter(autoUserId: owner);
+
+    // ── Сессия 1: offline create, close ─────────────────────
+    var db = openDb();
+    var repo = DriftWishRepository(db, prefs);
+    final list = await repo.createWishList(title: 'Подарки');
+    final wish = await repo.createWish(title: 'W', listId: list.id);
+    await db.close();
+
+    // ── Сессия 2: reopen — список, membership и операции ────
+    db = openDb();
+    repo = DriftWishRepository(db, prefs);
+    expect((await repo.watchWishLists().first).single.id, list.id);
+    expect((await repo.getWishById(wish.id))!.listId, list.id);
+    expect((await db.select(db.outboxEntries).get()), hasLength(2));
+
+    var engine = SyncEngine(
+      db: db,
+      dio: createTestApiClient(api),
+      onUnauthorized: () {},
+      onStatus: (_) {},
+    );
+    engine.attach(owner);
+    await engine.requestSync();
+    engine.detach();
+    expect(api.wishListsOf(owner).single['id'], list.id);
+    expect(api.wishesOf(owner).single['list_id'], list.id);
+    expect(await db.select(db.outboxEntries).get(), isEmpty);
+    await db.close();
+
+    // ── Сессия 3: reopen — серверное состояние сохранено ────
+    db = openDb();
+    repo = DriftWishRepository(db, prefs);
+    expect((await repo.watchWishLists().first).single.title, 'Подарки');
+    expect((await repo.getWishById(wish.id))!.listId, list.id);
     await db.close();
   });
 }

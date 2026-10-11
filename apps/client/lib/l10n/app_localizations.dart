@@ -280,6 +280,144 @@ abstract class AppLocalizations {
   /// **'Профиль'**
   String get navProfile;
 
+  /// Expanded bottom bar action: create a wish
+  ///
+  /// In ru, this message translates to:
+  /// **'Желание'**
+  String get quickAddWish;
+
+  /// Expanded bottom bar action: create a list
+  ///
+  /// In ru, this message translates to:
+  /// **'Список'**
+  String get quickAddList;
+
+  /// Home section header: user's wish lists
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои списки'**
+  String get homeMyLists;
+
+  /// Home section header: user's wishes
+  ///
+  /// In ru, this message translates to:
+  /// **'Мои желания'**
+  String get homeMyWishes;
+
+  /// Title of the wish list creation sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Новый список желаний'**
+  String get wishListNewTitle;
+
+  /// Empty state title on the wish list page
+  ///
+  /// In ru, this message translates to:
+  /// **'Список пуст'**
+  String get wishListEmptyTitle;
+
+  /// Empty state description on the wish list page
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавь желание в этот список — и оно появится здесь.'**
+  String get wishListEmptyDescription;
+
+  /// Body of the delete wish list confirmation: wishes are kept, only the grouping is removed
+  ///
+  /// In ru, this message translates to:
+  /// **'«{title}» будет удалён. Желания из него останутся — они просто окажутся без списка.'**
+  String wishListDeleteMessage(String title);
+
+  /// Action on a wish inside a wish list: ungroup it (list_id becomes null), the wish itself is not deleted
+  ///
+  /// In ru, this message translates to:
+  /// **'Убрать из списка'**
+  String get wishRemoveFromList;
+
+  /// Snackbar shown after a wish was ungrouped from a wish list
+  ///
+  /// In ru, this message translates to:
+  /// **'Желание убрано из списка'**
+  String get wishRemovedFromList;
+
+  /// Action/menu item that creates a share link for a wish or wish list
+  ///
+  /// In ru, this message translates to:
+  /// **'Поделиться'**
+  String get shareAction;
+
+  /// Owner line on the public shared-wish page
+  ///
+  /// In ru, this message translates to:
+  /// **'{name} хочет'**
+  String sharedOwnerWishes(String name);
+
+  /// Button on the public shared-wish page that opens the product link externally
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть товар'**
+  String get sharedOpenProduct;
+
+  /// Empty state description on the public shared wish list page
+  ///
+  /// In ru, this message translates to:
+  /// **'В этом списке пока нет желаний.'**
+  String get sharedListEmptyDescription;
+
+  /// Title when a share link is invalid, revoked or its entity was deleted
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылка недействительна'**
+  String get shareInvalidTitle;
+
+  /// Description under the invalid share title — reason is intentionally not disclosed
+  ///
+  /// In ru, this message translates to:
+  /// **'Возможно, желание было удалено или ссылка больше не доступна.'**
+  String get shareInvalidDescription;
+
+  /// Description under the generic load-failed title on the share viewer
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверьте подключение к интернету и попробуйте ещё раз.'**
+  String get shareLoadErrorDescription;
+
+  /// Retry button on failed load states
+  ///
+  /// In ru, this message translates to:
+  /// **'Повторить'**
+  String get retry;
+
+  /// Action/sheet title: assign a wish to a wish list (wish currently ungrouped)
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить в список'**
+  String get wishAddToList;
+
+  /// Action/sheet title: move a wish to another wish list
+  ///
+  /// In ru, this message translates to:
+  /// **'Изменить список'**
+  String get wishChangeList;
+
+  /// Wish list picker option: wish is not in any list
+  ///
+  /// In ru, this message translates to:
+  /// **'Без списка'**
+  String get wishListNone;
+
+  /// Empty state in the pick-wish sheet when all wishes already belong to lists
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет желаний без списка'**
+  String get wishPickerEmptyTitle;
+
+  /// Empty state description in the pick-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Все желания уже разложены по спискам.'**
+  String get wishPickerEmptyDescription;
+
   /// Static product tagline under the app name on the auth screen
   ///
   /// In ru, this message translates to:
@@ -736,6 +874,12 @@ abstract class AppLocalizations {
   /// **'Заметка'**
   String get noteSection;
 
+  /// Section label above the wish list membership row on the wish details screen
+  ///
+  /// In ru, this message translates to:
+  /// **'Список'**
+  String get wishListSection;
+
   /// Creation date caption on the wish details screen
   ///
   /// In ru, this message translates to:
@@ -856,6 +1000,12 @@ abstract class AppLocalizations {
   /// **'Введённые данные будут потеряны.'**
   String get wishDiscardMessage;
 
+  /// Subtle hint under the primary button in the add-wish sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Отредактировать и поделиться можно позже'**
+  String get wishAddLaterHint;
+
   /// Title of the shopping lists screen
   ///
   /// In ru, this message translates to:
@@ -904,11 +1054,23 @@ abstract class AppLocalizations {
   /// **'Переименовать список'**
   String get listRename;
 
-  /// Form title when creating a shopping list
+  /// Title of the create-list bottom sheet
   ///
   /// In ru, this message translates to:
-  /// **'Новый список'**
+  /// **'Новый список желаний'**
   String get listNewTitle;
+
+  /// Submit button label in the create-list bottom sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Создать'**
+  String get listCreateAction;
+
+  /// Subtle hint under the primary button in the create-list bottom sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Переименовать и поделиться можно позже'**
+  String get listAddLaterHint;
 
   /// List title field label
   ///
@@ -1006,23 +1168,17 @@ abstract class AppLocalizations {
   /// **'В списке пока ничего нет'**
   String get listEmptyItems;
 
-  /// Row that opens the inline add-item field
+  /// Placeholder of the shopping item composer text field
   ///
   /// In ru, this message translates to:
-  /// **'Добавить товар'**
-  String get itemAdd;
+  /// **'Что купить?'**
+  String get itemComposerHint;
 
-  /// Placeholder and accessibility label for the quick-add item field
+  /// Title and accessibility label of the item photo attach action sheet
   ///
   /// In ru, this message translates to:
-  /// **'Название товара'**
-  String get itemTitleHint;
-
-  /// Accessibility label for the button that collapses the add-item field
-  ///
-  /// In ru, this message translates to:
-  /// **'Закрыть поле добавления'**
-  String get itemAddCloseSemantic;
+  /// **'Фото к позиции'**
+  String get itemPhotoAttach;
 
   /// Title of the item edit bottom sheet
   ///

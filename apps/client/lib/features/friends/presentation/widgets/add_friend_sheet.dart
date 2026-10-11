@@ -1,14 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
-import '../../../../app/router/routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
@@ -16,23 +17,45 @@ import '../../domain/friend.dart';
 import '../providers/friends_controller.dart';
 import '../utils/friends_formatters.dart';
 
-/// Экран поиска и добавления друга.
+/// Открывает sheet поиска и добавления друга.
 ///
-/// Поиск по имени или `@username` в mock-каталоге.
-/// Состояния: initial, results, no results, already added, added.
-class FriendSearchPage extends ConsumerStatefulWidget {
-  const FriendSearchPage({super.key});
-
-  @override
-  ConsumerState<FriendSearchPage> createState() => _FriendSearchPageState();
+/// Механика роута — стандартная (`showModalBottomSheet` даёт
+/// barrier, back и drag-dismiss), визуальная поверхность —
+/// собственный компонент [AddFriendSheet] в дизайн-системе.
+Future<void> showAddFriendSheet(BuildContext context) {
+  final colors = context.appColors;
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: colors.scrim,
+    builder: (_) => const AddFriendSheet(),
+  );
 }
 
-class _FriendSearchPageState extends ConsumerState<FriendSearchPage> {
+/// Sheet поиска и добавления друга.
+///
+/// Поиск по имени или `@username`. Добавление идёт через существующий
+/// offline-first `friendsControllerProvider.addFriend` → repository →
+/// outbox. Состояния: initial, results, no results, already added, added.
+class AddFriendSheet extends ConsumerStatefulWidget {
+  const AddFriendSheet({super.key});
+
+  @override
+  ConsumerState<AddFriendSheet> createState() => _AddFriendSheetState();
+}
+
+class _AddFriendSheetState extends ConsumerState<AddFriendSheet> {
   String _query = '';
 
   /// Debounce ввода: без него каждый символ — отдельный
   /// `GET /users/search` (спам запросов + throttle-риск).
   Timer? _debounce;
+
+  /// Пользователи, добавленные за время жизни этого sheet'а —
+  /// для состояния «Добавлен» (в отличие от «уже в друзьях»).
+  final Set<String> _justAdded = {};
 
   @override
   void dispose() {
@@ -45,18 +68,6 @@ class _FriendSearchPageState extends ConsumerState<FriendSearchPage> {
     _debounce = Timer(const Duration(milliseconds: 350), () {
       if (mounted) setState(() => _query = value);
     });
-  }
-
-  /// Пользователи, добавленные за время жизни этого экрана —
-  /// для состояния «Добавлен» (в отличие от «уже в друзьях»).
-  final Set<String> _justAdded = {};
-
-  void _back(BuildContext context) {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    context.go(AppRoutes.friends);
   }
 
   Future<void> _add(Friend user) async {
@@ -86,83 +97,113 @@ class _FriendSearchPageState extends ConsumerState<FriendSearchPage> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final t = AppTypography.of(context);
     final l10n = context.l10n;
     final results = ref.watch(friendSearchProvider(_query));
     final friends = ref.watch(friendsControllerProvider).value ?? const [];
 
-    return PopScope(
-      // Страница открыта через `go()` — системный Back ведёт к списку
-      // друзей, а не закрывает приложение.
-      canPop: context.canPop(),
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        _back(context);
-      },
-      child: Scaffold(
-        backgroundColor: colors.background,
-        appBar: AppShellBar(
-          leading: AppIconButton(
-            icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
-            semanticLabel: l10n.back,
-            tooltip: l10n.back,
-            onPressed: () => _back(context),
+    // Sheet занимает основную часть экрана и ужимается над клавиатурой,
+    // результаты скроллятся внутри Expanded.
+    final mediaHeight = MediaQuery.sizeOf(context).height;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final sheetHeight = math.max(
+      mediaHeight * 0.82 - keyboard,
+      mediaHeight * 0.45,
+    );
+
+    return AnimatedPadding(
+      // Клавиатура поднимает sheet, не перекрывая поле поиска.
+      padding: EdgeInsets.only(bottom: keyboard),
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      child: Container(
+        height: sheetHeight,
+        decoration: BoxDecoration(
+          color: colors.surfaceElevated,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadii.xl),
           ),
-          title: l10n.friendAdd,
+          border: Border(
+            top: BorderSide(color: colors.border.withValues(alpha: 0.6)),
+          ),
+          boxShadow: context.shadowFloating,
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenPaddingHorizontal,
-                  AppSpacing.sm,
-                  AppSpacing.screenPaddingHorizontal,
-                  AppSpacing.sm,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.md,
+              AppSpacing.md,
+            ),
+            child: Column(
+              children: [
+                // Drag indicator — визуальная метка sheet.
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colors.border,
+                      borderRadius: BorderRadius.circular(AppRadii.full),
+                    ),
+                  ),
                 ),
-                child: AppTextField(
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(child: Text(l10n.friendAdd, style: t.title)),
+                    AppIconButton(
+                      icon: const Icon(PhosphorIconsRegular.x),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      semanticLabel: l10n.close,
+                      tooltip: l10n.close,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+
+                AppTextField(
                   hint: l10n.friendSearchHint,
                   leading: const Icon(PhosphorIconsRegular.magnifyingGlass),
                   autofocus: true,
                   textInputAction: TextInputAction.search,
                   onChanged: _onQueryChanged,
                 ),
-              ),
-              Expanded(
-                child: _query.trim().isEmpty
-                    ? const _SearchHint()
-                    : results.when(
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => const _SearchError(),
-                        data: (users) => users.isEmpty
-                            ? _NoResults(query: _query.trim())
-                            : ListView.separated(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal:
-                                      AppSpacing.screenPaddingHorizontal,
-                                  vertical: AppSpacing.sm,
+                const SizedBox(height: AppSpacing.sm),
+
+                Expanded(
+                  child: _query.trim().isEmpty
+                      ? const _SearchHint()
+                      : results.when(
+                          loading: () =>
+                              const Center(child: CircularProgressIndicator()),
+                          error: (e, _) => const _SearchError(),
+                          data: (users) => users.isEmpty
+                              ? _NoResults(query: _query.trim())
+                              : ListView.separated(
+                                  itemCount: users.length,
+                                  separatorBuilder: (_, _) => const SizedBox(
+                                    height: AppSpacing.betweenCards,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final user = users[index];
+                                    final isFriend = friends.any(
+                                      (f) => f.id == user.id,
+                                    );
+                                    return _SearchResultCard(
+                                      user: user,
+                                      isFriend: isFriend,
+                                      justAdded: _justAdded.contains(user.id),
+                                      onAdd: isFriend ? null : () => _add(user),
+                                    );
+                                  },
                                 ),
-                                itemCount: users.length,
-                                separatorBuilder: (_, _) => const SizedBox(
-                                  height: AppSpacing.betweenCards,
-                                ),
-                                itemBuilder: (context, index) {
-                                  final user = users[index];
-                                  final isFriend = friends.any(
-                                    (f) => f.id == user.id,
-                                  );
-                                  return _SearchResultCard(
-                                    user: user,
-                                    isFriend: isFriend,
-                                    justAdded: _justAdded.contains(user.id),
-                                    onAdd: isFriend ? null : () => _add(user),
-                                  );
-                                },
-                              ),
-                      ),
-              ),
-            ],
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_sizes.dart';
 import '../../../app/theme/app_theme.dart';
 
-/// Круглая кнопка-иконка.
+/// Квадратная кнопка-иконка с умеренным скруглением углов.
 ///
 /// Используется в AppBar actions и как самостоятельная action-кнопка.
 /// Компактная, с мягким фоном и hover/pressed state.
@@ -26,7 +27,7 @@ class AppIconButton extends StatelessWidget {
   /// Callback. Если `null` — кнопка disabled.
   final VoidCallback? onPressed;
 
-  /// Внешний размер круглой кнопки.
+  /// Внешний размер кнопки.
   final double size;
 
   /// Размер иконки.
@@ -61,12 +62,14 @@ class AppIconButton extends StatelessWidget {
         variant == AppIconButtonVariant.subtle ||
         variant == AppIconButtonVariant.outline;
 
+    final radius = BorderRadius.circular(AppRadii.lg);
+
     final inner = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: bg,
-        shape: BoxShape.circle,
+        borderRadius: radius,
         border: hasBorder ? Border.all(color: colors.border) : null,
       ),
       alignment: Alignment.center,
@@ -77,20 +80,16 @@ class AppIconButton extends StatelessWidget {
     );
 
     // Тень рисуется внешним контейнером, чтобы Material clip
-    // (CircleBorder + antiAlias) её не обрезал.
+    // (borderRadius + antiAlias) её не обрезал.
     final interactive = Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: shadow),
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: shadow),
       child: Material(
         color: Colors.transparent,
-        shape: const CircleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: radius),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onPressed,
-          customBorder: const CircleBorder(),
-          child: inner,
-        ),
+        child: InkWell(onTap: onPressed, borderRadius: radius, child: inner),
       ),
     );
 
@@ -123,7 +122,7 @@ class AppIconButton extends StatelessWidget {
   }
 }
 
-/// Вариант круглой кнопки-иконки.
+/// Вариант кнопки-иконки.
 enum AppIconButtonVariant {
   /// Мягкий фон (surfaceMuted) + тонкая обводка.
   subtle,

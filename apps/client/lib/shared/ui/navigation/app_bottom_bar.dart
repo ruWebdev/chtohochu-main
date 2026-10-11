@@ -42,7 +42,8 @@ class AppBottomBarCenterAction {
     required this.icon,
     required this.semanticLabel,
     this.tooltip,
-    required this.onPressed,
+    this.onPressed,
+    this.color,
   });
 
   /// Иконка кнопки.
@@ -54,8 +55,38 @@ class AppBottomBarCenterAction {
   /// Тултип при долгом нажатии (опционально).
   final String? tooltip;
 
-  /// Callback при нажатии.
-  final VoidCallback onPressed;
+  /// Callback при нажатии. `null` — кнопка визуально неактивна
+  /// и не выполняет действие (раздел без add-action).
+  final VoidCallback? onPressed;
+
+  /// Акцентный цвет кнопки для текущего раздела.
+  /// `null` — брендовый `primary` темы.
+  final Color? color;
+}
+
+/// Действия выбора в expanded-режиме центральной кнопки.
+///
+/// Когда заданы, обычные пункты навигации временно заменяются
+/// двумя action-пилюлями по сторонам от центральной кнопки.
+class AppBottomBarQuickActions {
+  const AppBottomBarQuickActions({
+    required this.leftLabel,
+    required this.onLeft,
+    required this.rightLabel,
+    required this.onRight,
+  });
+
+  /// Метка левого действия.
+  final String leftLabel;
+
+  /// Callback левого действия.
+  final VoidCallback onLeft;
+
+  /// Метка правого действия.
+  final String rightLabel;
+
+  /// Callback правого действия.
+  final VoidCallback onRight;
 }
 
 /// Floating bottom navigation bar в стиле Telegram.
@@ -78,6 +109,7 @@ class AppBottomBar extends StatelessWidget {
     required this.currentRoute,
     required this.onTap,
     required this.centerAction,
+    this.quickActions,
   });
 
   /// Список пунктов навигации.
@@ -91,6 +123,10 @@ class AppBottomBar extends StatelessWidget {
 
   /// Центральная кнопка добавления (контекстное действие).
   final AppBottomBarCenterAction centerAction;
+
+  /// Expanded-режим: пара действий вместо пунктов навигации.
+  /// `null` — обычная навигация.
+  final AppBottomBarQuickActions? quickActions;
 
   @override
   Widget build(BuildContext context) {
@@ -147,22 +183,22 @@ class AppBottomBar extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSizes.bottomBarPadding,
                 ),
-                child: Row(
-                  children: [
-                    for (var i = 0; i < items.length; i++) ...[
-                      Expanded(
-                        child: _BottomBarItemWidget(
-                          item: items[i],
-                          isActive: _isActive(items[i].route, currentRoute),
-                          onTap: () => onTap(items[i].route),
-                        ),
-                      ),
-                      // Зарезервированный центральный слот —
-                      // кнопка рисуется отдельным слоем поверх.
-                      if (i == items.length ~/ 2 - 1)
-                        const SizedBox(width: AppSizes.addActionSocketSize),
-                    ],
-                  ],
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  switchInCurve: Curves.easeOutCubic,
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(
+                        begin: 0.94,
+                        end: 1,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: quickActions == null
+                      ? _navItemsRow()
+                      : _quickActionsRow(quickActions!),
                 ),
               ),
             ),
@@ -174,6 +210,7 @@ class AppBottomBar extends StatelessWidget {
                   icon: centerAction.icon,
                   semanticLabel: centerAction.semanticLabel,
                   tooltip: centerAction.tooltip,
+                  color: centerAction.color,
                   onPressed: centerAction.onPressed,
                 ),
               ),
@@ -181,6 +218,60 @@ class AppBottomBar extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Обычная строка пунктов навигации с центральным слотом-гнездом.
+  Widget _navItemsRow() {
+    return IgnorePointer(
+      // Пока действия выбора видимы (или ещё отыгрывают
+      // fade-out), пункты навигации не принимают тапы.
+      ignoring: quickActions != null,
+      child: Row(
+        key: const ValueKey('nav-items'),
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            Expanded(
+              child: _BottomBarItemWidget(
+                item: items[i],
+                isActive: _isActive(items[i].route, currentRoute),
+                onTap: () => onTap(items[i].route),
+              ),
+            ),
+            // Зарезервированный центральный слот —
+            // кнопка рисуется отдельным слоем поверх.
+            if (i == items.length ~/ 2 - 1)
+              const SizedBox(width: AppSizes.addActionSocketSize),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Строка действий выбора — та же геометрия: по одной
+  /// компактной пилюле в каждой половине вокруг гнезда.
+  Widget _quickActionsRow(AppBottomBarQuickActions actions) {
+    return Row(
+      key: const ValueKey('quick-actions'),
+      children: [
+        Expanded(
+          child: Center(
+            child: _QuickActionPill(
+              label: actions.leftLabel,
+              onTap: actions.onLeft,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSizes.addActionSocketSize),
+        Expanded(
+          child: Center(
+            child: _QuickActionPill(
+              label: actions.rightLabel,
+              onTap: actions.onRight,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -246,6 +337,60 @@ class _BottomBarItemWidget extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Компактная скруглённая action-пилюля expanded-режима.
+///
+/// Визуально — тот же «вторичный» акцент, что у выбранных
+/// элементов темы (`secondary`/`secondaryForeground`).
+class _QuickActionPill extends StatelessWidget {
+  const _QuickActionPill({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+
+    return Material(
+      color: colors.secondary,
+      borderRadius: BorderRadius.circular(AppRadii.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        child: SizedBox(
+          height: AppSizes.buttonHeightSm,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  PhosphorIconsBold.plus,
+                  size: AppSizes.iconSizeSm,
+                  color: colors.secondaryForeground,
+                ),
+                const SizedBox(width: AppSpacing.xxs),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: t.caption.copyWith(
+                      color: colors.secondaryForeground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

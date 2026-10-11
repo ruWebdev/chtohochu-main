@@ -46,6 +46,14 @@ class AppSizes {
   /// Размер миниатюры желания в карточке списка.
   static const double wishThumbSize = 64;
 
+  /// Высота карточки списка желаний в сетке (иконка + название
+  /// в 2 строки + счётчик).
+  static const double wishListCardExtent = 112;
+
+  /// Высота карточки желания в сетке (обложка + название
+  /// в 2 строки + цена).
+  static const double wishCardExtent = 172;
+
   /// Диаметр центральной кнопки «добавить» в bottom bar.
   static const double addActionButtonSize = 52;
 

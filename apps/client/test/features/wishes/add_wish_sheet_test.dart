@@ -93,6 +93,9 @@ Future<void> _openSheet(
     ),
   );
   await tester.pumpAndSettle();
+  // «+» на home раскрывает выбор действия — жмём «Желание».
+  await tester.tap(find.text('Желание'));
+  await tester.pumpAndSettle();
 }
 
 Finder get _addButton => find.widgetWithText(AppButton, 'Добавить');
@@ -276,6 +279,8 @@ void main() {
         matching: find.byTooltip('Добавить желание'),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Желание'));
     await tester.pumpAndSettle();
 
     // Три фото: камера + два из галереи за раз.

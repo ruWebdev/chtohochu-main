@@ -27,6 +27,7 @@ class AppCard extends StatelessWidget {
     this.variant = AppCardVariant.outlined,
     this.padding = const EdgeInsets.all(AppSpacing.md),
     this.onTap,
+    this.onLongPress,
     this.radius = AppRadii.lg,
   });
 
@@ -34,6 +35,7 @@ class AppCard extends StatelessWidget {
   final AppCardVariant variant;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final double radius;
 
   @override
@@ -60,6 +62,7 @@ class AppCard extends StatelessWidget {
       elevation: 0,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(radius),
         child: Container(
           padding: padding,

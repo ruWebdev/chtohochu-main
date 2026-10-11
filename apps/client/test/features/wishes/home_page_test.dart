@@ -1,18 +1,29 @@
+import 'dart:convert';
+
 import 'package:chtohochu/core/sync/sync_engine.dart';
 import 'package:chtohochu/features/notifications/presentation/pages/notifications_page.dart';
-import 'package:chtohochu/features/shopping/presentation/pages/shopping_list_form_page.dart';
-import 'package:chtohochu/features/friends/presentation/pages/friend_search_page.dart';
+import 'package:chtohochu/features/shopping/presentation/widgets/add_shopping_list_sheet.dart';
+import 'package:chtohochu/features/wishes/data/wish_repository.dart';
+import 'package:chtohochu/features/wishes/presentation/widgets/add_wish_list_sheet.dart';
+import 'package:chtohochu/features/wishes/presentation/widgets/wish_list_card.dart';
+import 'package:chtohochu/features/friends/presentation/widgets/add_friend_sheet.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/home_page.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/add_wish_sheet.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/wish_details_page.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/wish_form_page.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_card.dart';
+import 'package:chtohochu/app/theme/app_colors.dart';
+import 'package:chtohochu/shared/ui/buttons/app_add_action_button.dart';
 import 'package:chtohochu/shared/ui/navigation/app_bottom_bar.dart';
 import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chtohochu/core/database/app_database.dart';
+import 'package:drift/drift.dart' show Value;
+
+import '../../helpers/fake_api.dart';
 import '../../helpers/test_app.dart';
 
 Map<String, Object> _authPrefs([String wishesCache = '[]']) => {
@@ -79,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2 желания'), findsOneWidget);
-    expect(find.byType(WishCard), findsNWidgets(2));
+    expect(find.byType(WishGridCard), findsNWidgets(2));
     expect(find.byType(AddWishRow), findsOneWidget);
     expect(find.text('Добавить желание'), findsOneWidget);
   });
@@ -112,7 +123,42 @@ void main() {
     expect(find.text('Пока нет оповещений'), findsOneWidget);
   });
 
-  testWidgets('Center add button on home opens quick-add sheet', (
+  testWidgets('Center «+» expands bar into action chooser', (tester) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final bar = find.byType(AppBottomBar);
+    Finder pill(String label) =>
+        find.descendant(of: bar, matching: find.text(label));
+
+    final centerAdd = find.descendant(
+      of: bar,
+      matching: find.byTooltip('Добавить желание'),
+    );
+    expect(centerAdd, findsOneWidget);
+
+    await tester.tap(centerAdd);
+    await tester.pumpAndSettle();
+
+    // Пилюли действий по сторонам от центральной «+».
+    expect(pill('Желание'), findsOneWidget);
+    expect(pill('Список'), findsOneWidget);
+    // Обычные пункты навигации временно скрыты: «Что хочу»
+    // остаётся только как заголовок страницы.
+    expect(pill('Покупки'), findsNothing);
+    expect(pill('Друзья'), findsNothing);
+    expect(pill('Профиль'), findsNothing);
+    expect(find.text('Что хочу'), findsOneWidget);
+    // Ни один sheet не открыт.
+    expect(find.byType(AddWishSheet), findsNothing);
+    expect(find.byType(AddShoppingListSheet), findsNothing);
+  });
+
+  testWidgets('Chooser «Желание» collapses bar and opens wish sheet', (
     tester,
   ) async {
     final widget = await createTestApp(
@@ -122,16 +168,104 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
+    final bar = find.byType(AppBottomBar);
+    await tester.tap(
+      find.descendant(of: bar, matching: find.byTooltip('Добавить желание')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: bar, matching: find.text('Желание')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddWishSheet), findsOneWidget);
+    // Bar вернулся в обычное состояние — навигация видна за sheet.
+    expect(find.text('Покупки'), findsOneWidget);
+    expect(find.text('Профиль'), findsOneWidget);
+  });
+
+  testWidgets('Chooser «Список» collapses bar and opens list sheet', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final bar = find.byType(AppBottomBar);
+    await tester.tap(
+      find.descendant(of: bar, matching: find.byTooltip('Добавить желание')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: bar, matching: find.text('Список')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddWishListSheet), findsOneWidget);
+    expect(find.text('Покупки'), findsWidgets);
+    expect(find.text('Друзья'), findsOneWidget);
+  });
+
+  testWidgets('Tap outside expanded bar collapses chooser without sheet', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final bar = find.byType(AppBottomBar);
+    await tester.tap(
+      find.descendant(of: bar, matching: find.byTooltip('Добавить желание')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: bar, matching: find.text('Желание')),
+      findsOneWidget,
+    );
+
+    // Тап по контенту вне бара — в центре body.
+    await tester.tapAt(const Offset(200, 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Покупки'), findsOneWidget);
+    expect(find.text('Друзья'), findsOneWidget);
+    expect(find.text('Профиль'), findsOneWidget);
+    expect(find.text('Желание'), findsNothing);
+    expect(find.text('Список'), findsNothing);
+    expect(find.byType(AddWishSheet), findsNothing);
+    expect(find.byType(AddShoppingListSheet), findsNothing);
+  });
+
+  testWidgets('Second tap on center «+» collapses chooser', (tester) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final bar = find.byType(AppBottomBar);
     final centerAdd = find.descendant(
-      of: find.byType(AppBottomBar),
+      of: bar,
       matching: find.byTooltip('Добавить желание'),
     );
-    expect(centerAdd, findsOneWidget);
+
+    await tester.tap(centerAdd);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: bar, matching: find.text('Желание')),
+      findsOneWidget,
+    );
 
     await tester.tap(centerAdd);
     await tester.pumpAndSettle();
 
-    expect(find.byType(AddWishSheet), findsOneWidget);
+    expect(find.text('Покупки'), findsOneWidget);
+    expect(find.text('Профиль'), findsOneWidget);
+    expect(find.byType(AddWishSheet), findsNothing);
+    expect(find.byType(AddShoppingListSheet), findsNothing);
   });
 
   testWidgets('Center add button is contextual: shopping → new list', (
@@ -157,7 +291,7 @@ void main() {
     await tester.tap(centerAdd);
     await tester.pumpAndSettle();
 
-    expect(find.byType(ShoppingListFormPage), findsOneWidget);
+    expect(find.byType(AddShoppingListSheet), findsOneWidget);
   });
 
   testWidgets('Center add button is contextual: friends → add friend', (
@@ -182,7 +316,53 @@ void main() {
     await tester.tap(centerAdd);
     await tester.pumpAndSettle();
 
-    expect(find.byType(FriendSearchPage), findsOneWidget);
+    expect(find.byType(AddFriendSheet), findsOneWidget);
+  });
+
+  testWidgets('Center add button color follows section; disabled on profile', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final expected = AppColors.lightThemeColors;
+
+    AppAddActionButton centerButton() => tester.widget<AppAddActionButton>(
+      find.descendant(
+        of: find.byType(AppBottomBar),
+        matching: find.byType(AppAddActionButton),
+      ),
+    );
+
+    // Желания — брендовый primary, действие активно.
+    expect(centerButton().color, expected.primary);
+    expect(centerButton().onPressed, isNotNull);
+
+    await tester.tap(find.text('Покупки'));
+    await tester.pumpAndSettle();
+    expect(centerButton().color, expected.accentShopping);
+    expect(centerButton().onPressed, isNotNull);
+
+    await tester.tap(find.text('Друзья'));
+    await tester.pumpAndSettle();
+    expect(centerButton().color, expected.accentFriends);
+    expect(centerButton().onPressed, isNotNull);
+
+    // Профиль — действия нет: кнопка визуально и функционально disabled.
+    await tester.tap(find.text('Профиль'));
+    await tester.pumpAndSettle();
+    expect(centerButton().color, expected.surfaceMuted);
+    expect(centerButton().onPressed, isNull);
+
+    // Возврат к активному разделу — действие восстанавливается.
+    await tester.tap(find.text('Что хочу'));
+    await tester.pumpAndSettle();
+    expect(centerButton().color, expected.primary);
+    expect(centerButton().onPressed, isNotNull);
   });
 
   testWidgets('AddRow navigates to new wish', (tester) async {
@@ -210,7 +390,7 @@ void main() {
     expect(find.text('Ноутбук'), findsOneWidget);
     expect(find.text('120 000 ₽'), findsOneWidget);
 
-    await tester.tap(find.byType(WishCard));
+    await tester.tap(find.byType(WishGridCard));
     await tester.pumpAndSettle();
 
     expect(find.byType(WishDetailsPage), findsOneWidget);
@@ -227,10 +407,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Поездка на море'), findsOneWidget);
-    expect(find.byType(WishCard), findsOneWidget);
-    final cardSize = tester.getSize(find.byType(WishCard));
-    // Высота карточки = 64 thumb + 2×12 padding = 88.
-    expect(cardSize.height, 88);
+    expect(find.byType(WishGridCard), findsOneWidget);
+    final cardSize = tester.getSize(find.byType(WishGridCard));
+    // Высота grid-карточки = 96 cover + padding + текст ≈ 172.
+    expect(cardSize.height, 172);
   });
 
   testWidgets('Syncing: micro spinner in subtitle', (tester) async {
@@ -315,10 +495,158 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    // 800 logical px → wide layout: SliverGrid вместо ListView.separated.
+    // 800 logical px → wide layout: та же сетка в центрированной колонке.
     expect(find.byType(SliverGrid), findsOneWidget);
-    expect(find.byType(WishCard), findsNWidgets(3));
+    expect(find.byType(WishGridCard), findsNWidgets(3));
     expect(find.byType(AddWishRow), findsOneWidget);
+  });
+
+  const listOwnerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+  /// Сидирует списки желаний с их outbox create-операциями —
+  /// иначе reconcile при boot снимет строки, которых нет на
+  /// сервере (offline-first: без pending-операции строка не
+  /// защищена от remote-delete). Возвращает (db, listIds).
+  Future<(AppDatabase, List<String>)> dbWithWishLists(
+    List<String> titles,
+  ) async {
+    final db = createTestDatabase();
+    final ids = <String>[];
+    for (var i = 0; i < titles.length; i++) {
+      final listId = 'list-000$i-0000-0000-0000-00000000000$i';
+      ids.add(listId);
+      final now = DateTime(2025, 1, 10 + i);
+      await db
+          .into(db.wishLists)
+          .insert(
+            WishListsCompanion(
+              id: Value(listId),
+              ownerId: const Value(listOwnerId),
+              title: Value(titles[i]),
+              createdAt: Value(now),
+              updatedAt: Value(now),
+            ),
+          );
+      await db
+          .into(db.outboxEntries)
+          .insert(
+            OutboxEntriesCompanion(
+              ownerId: const Value(listOwnerId),
+              entityType: const Value('wish_list'),
+              entityId: Value(listId),
+              operation: const Value('create'),
+              payloadJson: Value(
+                jsonEncode({'id': listId, 'title': titles[i]}),
+              ),
+              createdAt: Value(now),
+            ),
+          );
+    }
+    return (db, ids);
+  }
+
+  testWidgets('Home shows «Мои списки» grid above wishes', (tester) async {
+    final (db, listIds) = await dbWithWishLists(['Подарки']);
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+      database: db,
+      api: FakeApiAdapter(autoUserId: listOwnerId),
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    // Два желания через репозиторий (после стартового sync —
+    // иначе reconcile снимет не-outbox'нутые строки), привязка —
+    // доменным методом membership.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(HomePage)),
+    );
+    final repo = container.read(wishRepositoryProvider);
+    for (final title in ['A', 'B']) {
+      final wish = await repo.createWish(title: title);
+      await repo.assignWishToList(wish.id, listIds.first);
+    }
+    await tester.pumpAndSettle();
+
+    expect(find.text('Мои списки'), findsOneWidget);
+    expect(find.text('Мои желания'), findsOneWidget);
+    expect(find.byType(WishListCard), findsOneWidget);
+    expect(find.text('Подарки'), findsOneWidget);
+    expect(find.text('2 желания'), findsOneWidget);
+    // Две двухколоночные сетки: списки + желания.
+    expect(find.byType(SliverGrid), findsNWidgets(2));
+    // Списки выше желаний.
+    final listsY = tester.getTopLeft(find.text('Мои списки')).dy;
+    final wishesY = tester.getTopLeft(find.text('Мои желания')).dy;
+    expect(listsY, lessThan(wishesY));
+  });
+
+  testWidgets('No «Мои списки» section without lists', (tester) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Мои списки'), findsNothing);
+    expect(find.text('Мои желания'), findsOneWidget);
+    expect(find.byType(SliverGrid), findsOneWidget);
+  });
+
+  testWidgets('Two wish lists render as 2-col grid row', (tester) async {
+    final (db, _) = await dbWithWishLists(['Подарки', 'Дом']);
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+      database: db,
+      api: FakeApiAdapter(autoUserId: listOwnerId),
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WishListCard), findsNWidgets(2));
+    // Одна строка grid — карточки на одной высоте, в одной строке.
+    final first = tester.getTopLeft(find.byType(WishListCard).first);
+    final second = tester.getTopLeft(find.byType(WishListCard).at(1));
+    expect(first.dy, second.dy);
+    expect(first.dx, lessThan(second.dx));
+  });
+
+  testWidgets('«+» → «+ Список» creates wish list shown on Home', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WishListCard), findsNothing);
+
+    final bar = find.byType(AppBottomBar);
+    await tester.tap(
+      find.descendant(of: bar, matching: find.byTooltip('Добавить желание')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: bar, matching: find.text('Список')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddWishListSheet), findsOneWidget);
+    expect(find.text('Новый список желаний'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'Подарки родителям');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Создать'));
+    await tester.pumpAndSettle();
+
+    // Sheet закрылся, список появился на Home.
+    expect(find.byType(AddWishListSheet), findsNothing);
+    expect(find.text('Подарки родителям'), findsOneWidget);
+    expect(find.byType(WishListCard), findsOneWidget);
+    expect(find.text('Мои списки'), findsOneWidget);
   });
 
   testWidgets('Narrow layout (<600): single-column list', (tester) async {
@@ -333,9 +661,9 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    // 360 logical px → узкий layout.
-    expect(find.byType(SliverGrid), findsNothing);
-    expect(find.byType(ListView), findsOneWidget);
-    expect(find.byType(WishCard), findsNWidgets(2));
+    // 360 logical px → узкий layout: те же двухколоночные сетки.
+    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
+    expect(find.byType(WishGridCard), findsNWidgets(2));
   });
 }

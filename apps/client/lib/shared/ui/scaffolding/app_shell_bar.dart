@@ -10,7 +10,7 @@ import '../buttons/app_icon_button.dart';
 /// Action для [AppShellBar].
 ///
 /// Описывает одну контекстную action-кнопку в AppBar.
-/// Каждая action — круглая [AppIconButton] с semantic label и tooltip.
+/// Каждая action — [AppIconButton] с semantic label и tooltip.
 class AppBarAction {
   const AppBarAction({
     required this.icon,
@@ -85,7 +85,7 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Контекстные action-кнопки (1–3).
   ///
-  /// Показываются справа. Каждая — круглая [AppIconButton].
+  /// Показываются справа. Каждая — [AppIconButton].
   final List<AppBarAction> actions;
 
   /// Редко используемые действия → overflow menu (PopupMenuButton).

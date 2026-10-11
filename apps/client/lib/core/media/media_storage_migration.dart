@@ -73,6 +73,9 @@ class MediaStorageMigration {
     await _db.transaction(() async {
       await (_db.update(_db.wishes)..where((w) => w.imageUrl.equals(from)))
           .write(WishesCompanion(imageUrl: Value(to)));
+      await (_db.update(_db.wishes)
+            ..where((w) => w.imageLocalPath.equals(from)))
+          .write(WishesCompanion(imageLocalPath: Value(to)));
       await (_db.update(_db.wishImages)..where((i) => i.localPath.equals(from)))
           .write(WishImagesCompanion(localPath: Value(to)));
     });

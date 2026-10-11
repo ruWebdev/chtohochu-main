@@ -10,6 +10,7 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../providers/shopping_lists_controller.dart';
 import '../utils/shopping_formatters.dart';
+import '../widgets/add_shopping_list_sheet.dart';
 import '../widgets/shopping_list_card.dart';
 
 /// Экран «Покупки» — список списков покупок.
@@ -37,7 +38,7 @@ class ShoppingPage extends ConsumerWidget {
         actions: [
           AppBarAction(
             icon: PhosphorIconsRegular.plus,
-            onPressed: () => context.go(AppRoutes.newShoppingList),
+            onPressed: () => showAddShoppingListSheet(context),
             semanticLabel: l10n.listAdd,
             tooltip: l10n.listAdd,
           ),
@@ -72,7 +73,7 @@ class ShoppingPage extends ConsumerWidget {
                       action: AppButton(
                         label: l10n.listCreate,
                         leading: const Icon(PhosphorIconsRegular.plus),
-                        onPressed: () => context.go(AppRoutes.newShoppingList),
+                        onPressed: () => showAddShoppingListSheet(context),
                       ),
                     ),
                   ],

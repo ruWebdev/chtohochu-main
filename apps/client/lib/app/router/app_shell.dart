@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
+import '../../features/friends/presentation/widgets/add_friend_sheet.dart';
+import '../../features/shopping/presentation/widgets/add_shopping_list_sheet.dart';
+import '../../features/wishes/presentation/widgets/add_wish_list_sheet.dart';
 import '../../features/wishes/presentation/widgets/add_wish_sheet.dart';
 import '../../l10n/l10n.dart';
 import '../../shared/ui/navigation/app_bottom_bar.dart';
@@ -15,11 +18,41 @@ import 'routes.dart';
 /// Используется через `ShellRoute` в GoRouter — каждый раздел
 /// получает этот shell как родителя, bottom bar остётся на месте
 /// при переключении вкладок.
-class AppShell extends StatelessWidget {
+///
+/// На разделе «Что хочу» центральная «+» не открывает sheet
+/// напрямую, а разворачивает bottom bar в режим выбора действия
+/// (`+ Желание` → AddWishSheet, `+ Список` → AddWishListSheet) —
+/// четыре пункта навигации временно скрываются. Тап вне бара или
+/// повторный тап по «+» сворачивает выбор обратно.
+class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.child});
 
   /// Контент текущего раздела.
   final Widget child;
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  /// Bottom bar «Что хочу» в режиме выбора действия.
+  bool _chooserOpen = false;
+
+  void _toggleChooser() => setState(() => _chooserOpen = !_chooserOpen);
+
+  void _closeChooser() {
+    if (_chooserOpen) setState(() => _chooserOpen = false);
+  }
+
+  void _openWishSheet() {
+    _closeChooser();
+    showAddWishSheet(context);
+  }
+
+  void _openListSheet() {
+    _closeChooser();
+    showAddWishListSheet(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,17 +60,49 @@ class AppShell extends StatelessWidget {
     final l10n = context.l10n;
     final currentRoute = GoRouterState.of(context).matchedLocation;
 
+    // Chooser живёт только на «Что хочу»: при смене маршрута
+    // (редирект, programmatic navigation) он сбрасывается.
+    final chooserOpen = _chooserOpen && currentRoute == AppRoutes.home;
+    if (!chooserOpen) _chooserOpen = false;
+
     // Центральная «+» — контекстное действие раздела.
-    // Желание — quick-capture sheet; списки/друзья — свои экраны.
-    final (addRoute, addLabel) = switch (currentRoute) {
-      AppRoutes.shopping => (AppRoutes.newShoppingList, l10n.listAdd),
-      AppRoutes.friends => (AppRoutes.friendAdd, l10n.friendAdd),
-      _ => (null, l10n.wishAdd),
+    // Желание и список — quick-capture sheets; друзья — свой экран.
+    // Цвет кнопки синхронизирован с действием: каждый раздел — свой акцент,
+    // Профиль — раздел без действия, кнопка приглушена.
+    final (addAction, addLabel, addColor) = switch (currentRoute) {
+      AppRoutes.shopping => (
+        () => showAddShoppingListSheet(context),
+        l10n.listAdd,
+        colors.accentShopping,
+      ),
+      AppRoutes.friends => (
+        () => showAddFriendSheet(context),
+        l10n.friendAdd,
+        colors.accentFriends,
+      ),
+      AppRoutes.profile => (null, l10n.add, colors.surfaceMuted),
+      // На «Что хочу» «+» разворачивает/сворачивает выбор действия.
+      _ => (_toggleChooser, l10n.wishAdd, colors.primary),
     };
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: child,
+      body: Stack(
+        children: [
+          widget.child,
+          // Тап вне expanded bottom bar сворачивает выбор —
+          // прозрачный слой ловит все тапы по контенту и AppBar,
+          // но не перекрывает сам bottomNavigationBar.
+          if (chooserOpen)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeChooser,
+                child: const SizedBox.expand(),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
@@ -52,14 +117,17 @@ class AppShell extends StatelessWidget {
               icon: PhosphorIconsBold.plus,
               semanticLabel: addLabel,
               tooltip: addLabel,
-              onPressed: () {
-                if (addRoute == null) {
-                  showAddWishSheet(context);
-                } else {
-                  context.go(addRoute);
-                }
-              },
+              color: addColor,
+              onPressed: addAction,
             ),
+            quickActions: chooserOpen
+                ? AppBottomBarQuickActions(
+                    leftLabel: l10n.quickAddWish,
+                    onLeft: _openWishSheet,
+                    rightLabel: l10n.quickAddList,
+                    onRight: _openListSheet,
+                  )
+                : null,
           ),
         ),
       ),

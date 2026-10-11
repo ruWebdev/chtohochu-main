@@ -181,8 +181,15 @@ class SyncEngine {
   /// страховка для случаев, когда create списка отложен backoff'ом,
   /// а операция позиции due раньше.
   Future<bool> _shouldDefer(OutboxEntry op) async {
-    if (op.entityType != 'shopping_item') return false;
-    final listId = await _itemListId(op);
+    // Wish тоже может ссылаться на ещё не созданный на сервере
+    // список: membership — часть wish-контракта, поэтому defer
+    // на родителя здесь общий. Для wish берём list_id только из
+    // payload — это и есть намерение операции.
+    final listId = switch (op.entityType) {
+      'shopping_item' => await _itemListId(op),
+      'wish' => _payload(op)['list_id'] as String?,
+      _ => null,
+    };
     if (listId == null) return false; // сирота — пусть получит 404
     return _outbox.hasUnsyncedCreate(op.ownerId, listId);
   }
@@ -203,6 +210,7 @@ class SyncEngine {
   String _collection(OutboxEntry op) => switch (op.entityType) {
     'shopping_list' => '/shopping-lists',
     'shopping_item' => '/shopping-items',
+    'wish_list' => '/wish-lists',
     'friendship' => '/friends',
     'profile' => '/me',
     _ => '/wishes',
@@ -277,6 +285,7 @@ class SyncEngine {
             (entity['quantity'] as int? ?? 1) ==
                 (sent['quantity'] as int? ?? 1),
       'shopping_list' => entity['title'] == sent['title'],
+      'wish_list' => entity['title'] == sent['title'],
       'friendship' =>
         // GET /friends/{id} → PublicUserResource {id, ...};
         // POST отправлял {user_id: friendId}.
@@ -286,7 +295,8 @@ class SyncEngine {
             entity['description'] == sent['description'] &&
             (entity['price'] as int?) == (sent['price'] as int?) &&
             entity['link'] == sent['link'] &&
-            entity['image_url'] == sent['image_url'],
+            entity['image_url'] == sent['image_url'] &&
+            entity['list_id'] == sent['list_id'],
     };
   }
 
@@ -457,6 +467,10 @@ class SyncEngine {
                 (i) => i.id.equals(op.entityId) & i.ownerId.equals(op.ownerId),
               ))
               .go();
+        case 'wish_list':
+          // Список желаний удаляется БЕЗ каскада: его wishes
+          // остаются, разгруппировываясь (list_id → null).
+          await _dropWishListUngrouped(op.ownerId, op.entityId);
         case 'friendship':
           await (_db.delete(_db.friendships)..where(
                 (f) =>
@@ -481,6 +495,21 @@ class SyncEngine {
       }
       await _outbox.dropEntityOps(op.ownerId, op.entityId);
     });
+  }
+
+  /// Физически удалить список желаний, разгруппировав его
+  /// wishes (`list_id` → null — сами желания не удаляются).
+  /// Используется и при drop по outbox-операции, и при
+  /// remote-delete в pull reconcile.
+  Future<void> _dropWishListUngrouped(String ownerId, String listId) async {
+    await (_db.update(_db.wishes)
+          ..where((w) => w.listId.equals(listId) & w.ownerId.equals(ownerId)))
+        .write(const WishesCompanion(listId: Value(null)));
+    // Pending-операции желаний не должны унести мёртвый list_id.
+    await _db.nullListIdInWishOps(ownerId, listId);
+    await (_db.delete(
+      _db.wishLists,
+    )..where((l) => l.id.equals(listId) & l.ownerId.equals(ownerId))).go();
   }
 
   // ── Media upload (ADR-015) ──────────────────────────────
@@ -739,6 +768,17 @@ class SyncEngine {
                 updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
               ),
             );
+      case 'wish_list':
+        await (_db.update(_db.wishLists)..where(
+              (l) => l.id.equals(op.entityId) & l.ownerId.equals(op.ownerId),
+            ))
+            .write(
+              WishListsCompanion(
+                title: Value(data['title'] as String),
+                createdAt: Value(DateTime.parse(data['created_at'] as String)),
+                updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
+              ),
+            );
       case 'friendship':
         // Ответ POST/GET /friends — PublicUserResource: кэшируем
         // публичную проекцию, friendship-строка уже создана локально
@@ -812,10 +852,12 @@ class SyncEngine {
     }
     if (fresh.payloadJson == op.payloadJson) return false;
     // Свежий payload может быть create-формы: убираем identity-поля —
-    // PATCH не должен нести id / list_id (parent неизменяем).
+    // PATCH не должен нести id; list_id для shopping_item — тоже
+    // parent-identity (позиции не перемещаются), а для wish это
+    // обычное изменяемое поле membership — сохраняем его.
     final payload = jsonDecode(fresh.payloadJson!) as Map<String, dynamic>
-      ..remove('id')
-      ..remove('list_id');
+      ..remove('id');
+    if (op.entityType == 'shopping_item') payload.remove('list_id');
     await _outbox.complete(op.id);
     await _outbox.enqueue(
       ownerId: op.ownerId,
@@ -849,6 +891,15 @@ class SyncEngine {
                       i.id.equals(op.entityId) &
                       i.ownerId.equals(op.ownerId) &
                       i.deletedAt.isNull(),
+                ))
+                .getSingleOrNull() !=
+            null,
+      'wish_list' =>
+        await (_db.select(_db.wishLists)..where(
+                  (l) =>
+                      l.id.equals(op.entityId) &
+                      l.ownerId.equals(op.ownerId) &
+                      l.deletedAt.isNull(),
                 ))
                 .getSingleOrNull() !=
             null,
@@ -930,6 +981,7 @@ class SyncEngine {
             price: Value(data['price'] as int?),
             link: Value(data['link'] as String?),
             imageUrl: Value(keepLocal ? localImage : serverImage),
+            listId: Value(data['list_id'] as String?),
             createdAt: Value(DateTime.parse(data['created_at'] as String)),
             updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
           ),
@@ -987,6 +1039,11 @@ class SyncEngine {
               (i) => i.id.equals(op.entityId) & i.ownerId.equals(op.ownerId),
             ))
             .write(const ShoppingItemsCompanion(deletedAt: Value(null)));
+      case 'wish_list':
+        await (_db.update(_db.wishLists)..where(
+              (l) => l.id.equals(op.entityId) & l.ownerId.equals(op.ownerId),
+            ))
+            .write(const WishListsCompanion(deletedAt: Value(null)));
       case 'friendship':
         await (_db.update(_db.friendships)..where(
               (f) =>
@@ -1005,20 +1062,22 @@ class SyncEngine {
 
   // ── Pull (snapshot reconcile) ─────────────────────────────
 
-  /// Полные snapshot'ы `GET /wishes` + `GET /shopping-lists` +
-  /// `GET /friends` → reconcile в одной транзакции. Локальные
-  /// данные не трогаются до успешных ответов и полного парсинга
-  /// всех выборок.
+  /// Полные snapshot'ы `GET /wishes` + `GET /wish-lists` +
+  /// `GET /shopping-lists` + `GET /friends` → reconcile в одной
+  /// транзакции. Локальные данные не трогаются до успешных ответов
+  /// и полного парсинга всех выборок.
   Future<void> _pull() async {
     final ownerId = _ownerId;
     if (ownerId == null) return;
 
     final Response<Map<String, dynamic>> wishesRes;
+    final Response<Map<String, dynamic>> wishListsRes;
     final Response<Map<String, dynamic>> listsRes;
     final Response<Map<String, dynamic>> friendsRes;
     final Response<Map<String, dynamic>> meRes;
     try {
       wishesRes = await _dio.get<Map<String, dynamic>>('/wishes');
+      wishListsRes = await _dio.get<Map<String, dynamic>>('/wish-lists');
       listsRes = await _dio.get<Map<String, dynamic>>('/shopping-lists');
       friendsRes = await _dio.get<Map<String, dynamic>>('/friends');
       meRes = await _dio.get<Map<String, dynamic>>('/me');
@@ -1033,10 +1092,12 @@ class SyncEngine {
       rethrow;
     }
     final rawWishes = wishesRes.data?['data'];
+    final rawWishLists = wishListsRes.data?['data'];
     final rawLists = listsRes.data?['data'];
     final rawFriends = friendsRes.data?['data'];
     final rawMe = meRes.data?['data'];
     if (rawWishes is! List ||
+        rawWishLists is! List ||
         rawLists is! List ||
         rawFriends is! List ||
         rawMe is! Map<String, dynamic>) {
@@ -1050,6 +1111,14 @@ class SyncEngine {
 
     final remoteWishes = rawWishes.map(_parseWishRow).toList();
     final remoteWishIds = remoteWishes.map((w) => w.id.value).toSet();
+
+    final remoteWishLists = <WishListsCompanion>[];
+    final remoteWishListIds = <String>{};
+    for (final raw in rawWishLists) {
+      final list = _parseWishListRow(raw as Map<String, dynamic>);
+      remoteWishLists.add(list);
+      remoteWishListIds.add(list.id.value);
+    }
 
     final remoteLists = <ShoppingListsCompanion>[];
     final remoteListIds = <String>{};
@@ -1114,6 +1183,13 @@ class SyncEngine {
             .into(_db.wishes)
             .insertOnConflictUpdate(merged.copyWith(ownerId: Value(ownerId)));
       }
+      for (final row in remoteWishLists) {
+        if (!pending.contains(row.id.value)) {
+          await _db
+              .into(_db.wishLists)
+              .insertOnConflictUpdate(row.copyWith(ownerId: Value(ownerId)));
+        }
+      }
       for (final row in remoteLists) {
         if (!pending.contains(row.id.value)) {
           await _db
@@ -1140,6 +1216,16 @@ class SyncEngine {
           // Каскад: изображения желания и их файлы уходят вместе
           // с сущностью — не остаёмся с orphan-строками/файлами.
           await _dropWishWithImages(ownerId, w.id);
+        }
+      }
+      final localWishLists = await (_db.select(
+        _db.wishLists,
+      )..where((l) => l.ownerId.equals(ownerId))).get();
+      for (final l in localWishLists) {
+        if (!remoteWishListIds.contains(l.id) && !pending.contains(l.id)) {
+          // Списка нет на сервере — удалён на другом устройстве:
+          // желания не удаляются, снимается только связь.
+          await _dropWishListUngrouped(ownerId, l.id);
         }
       }
       final localLists = await (_db.select(
@@ -1234,6 +1320,15 @@ class SyncEngine {
     });
   }
 
+  WishListsCompanion _parseWishListRow(Map<String, dynamic> m) {
+    return WishListsCompanion(
+      id: Value(m['id'] as String),
+      title: Value(m['title'] as String),
+      createdAt: Value(DateTime.parse(m['created_at'] as String)),
+      updatedAt: Value(DateTime.parse(m['updated_at'] as String)),
+    );
+  }
+
   ShoppingListsCompanion _parseShoppingListRow(Map<String, dynamic> m) {
     return ShoppingListsCompanion(
       id: Value(m['id'] as String),
@@ -1267,6 +1362,7 @@ class SyncEngine {
       price: Value(m['price'] as int?),
       link: Value(m['link'] as String?),
       imageUrl: Value(m['image_url'] as String?),
+      listId: Value(m['list_id'] as String?),
       createdAt: Value(DateTime.parse(m['created_at'] as String)),
       updatedAt: Value(DateTime.parse(m['updated_at'] as String)),
     );

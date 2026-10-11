@@ -26,14 +26,21 @@ class ShoppingListsController extends StreamNotifier<List<ShoppingList>> {
       ref.read(shoppingRepositoryProvider).deleteList(id);
 
   /// Добавить позицию в список. Возвращает обновлённый список.
+  /// [imagePath] — локальный файл фото (offline-first, не сеть).
   Future<ShoppingList?> addItem(
     String listId, {
     required String title,
     int quantity = 1,
+    String? imagePath,
   }) async {
     await ref
         .read(shoppingRepositoryProvider)
-        .addItem(listId: listId, title: title, quantity: quantity);
+        .addItem(
+          listId: listId,
+          title: title,
+          quantity: quantity,
+          imagePath: imagePath,
+        );
     return ref.read(shoppingRepositoryProvider).getListById(listId);
   }
 

@@ -13,14 +13,18 @@ import '../../../../core/sync/sync_engine.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../../domain/wish.dart';
+import '../../domain/wish_list.dart';
 import '../providers/wishes_controller.dart';
 import '../utils/formatters.dart';
 import '../widgets/wish_card.dart';
+import '../widgets/wish_list_card.dart';
 
 /// Главный экран приложения — личный архив желаний пользователя.
 ///
-/// Состояния: загрузка, ошибка, empty state, список желаний.
-/// Тап по карточке открывает детали, `+` в AppBar — создание.
+/// Структура: секция «Мои списки» (если списки есть) + секция
+/// «Мои желания» — обе двухколоночные сетки карточек.
+/// Состояния: загрузка, ошибка, empty state, контент.
+/// Тап по карточке желания открывает детали.
 /// Sync-статус живёт микроскопично в subtitle, без баннеров.
 /// Выход из аккаунта живёт в разделе «Профиль».
 class HomePage extends ConsumerWidget {
@@ -30,6 +34,7 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final wishesAsync = ref.watch(wishesControllerProvider);
+    final lists = ref.watch(wishListsProvider).value ?? const <WishList>[];
     final wishes = wishesAsync.value;
     final l10n = context.l10n;
 
@@ -85,7 +90,7 @@ class HomePage extends ConsumerWidget {
               ),
             ),
             data: (wishes) {
-              if (wishes.isEmpty) {
+              if (wishes.isEmpty && lists.isEmpty) {
                 return ListView(
                   children: [
                     const SizedBox(height: AppSpacing.xxl),
@@ -104,19 +109,20 @@ class HomePage extends ConsumerWidget {
               }
               return LayoutBuilder(
                 builder: (context, constraints) {
+                  final sections = _HomeSections(wishes: wishes, lists: lists);
                   if (constraints.maxWidth >= AppSizes.wideLayoutBreakpoint) {
-                    // Wide: центрированная колонка + 2-column grid,
-                    // карточки не растягиваются на всю ширину.
+                    // Wide: центрированная колонка — карточки
+                    // не растягиваются на всю ширину.
                     return Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(
                           maxWidth: AppSizes.contentMaxWidth,
                         ),
-                        child: _WishGrid(wishes: wishes),
+                        child: sections,
                       ),
                     );
                   }
-                  return _WishList(wishes: wishes);
+                  return sections;
                 },
               );
             },
@@ -127,70 +133,68 @@ class HomePage extends ConsumerWidget {
   }
 }
 
-/// Одноколоночный ленивый список желаний (телефон).
-/// Последний элемент — [AddWishRow].
-class _WishList extends StatelessWidget {
-  const _WishList({required this.wishes});
+/// Ленивый контент Home: секции «Мои списки» и «Мои желания» —
+/// обе двухколоночные сетки. Последний элемент — [AddWishRow].
+class _HomeSections extends StatelessWidget {
+  const _HomeSections({required this.wishes, required this.lists});
 
   final List<Wish> wishes;
+  final List<WishList> lists;
+
+  /// Высоты карточек — токены дизайн-системы (shared с
+  /// WishListPage).
+  static const double _listCardExtent = AppSizes.wishListCardExtent;
+  static const double _wishCardExtent = AppSizes.wishCardExtent;
+
+  static const _horizontal = EdgeInsets.symmetric(
+    horizontal: AppSpacing.screenPaddingHorizontal,
+  );
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.screenPaddingHorizontal,
-        right: AppSpacing.screenPaddingHorizontal,
-        top: AppSpacing.sm,
-        bottom: AppSpacing.md,
-      ),
-      itemCount: wishes.length + 1,
-      separatorBuilder: (_, _) =>
-          const SizedBox(height: AppSpacing.betweenCards),
-      itemBuilder: (context, index) {
-        if (index == wishes.length) return const AddWishRow();
-        final wish = wishes[index];
-        return WishCard(
-          wish: wish,
-          onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
-        );
-      },
-    );
-  }
-}
+    final l10n = context.l10n;
 
-/// Двухколоночный ленивый grid желаний (tablet / landscape ≥ 600px).
-/// Карточки фиксированной высоты, AddWishRow — во всю ширину под grid.
-class _WishGrid extends StatelessWidget {
-  const _WishGrid({required this.wishes});
-
-  final List<Wish> wishes;
-
-  @override
-  Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.only(
-            left: AppSpacing.screenPaddingHorizontal,
-            right: AppSpacing.screenPaddingHorizontal,
-            top: AppSpacing.sm,
+        const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
+        if (lists.isNotEmpty) ...[
+          _SectionHeader(title: l10n.homeMyLists),
+          _grid(
+            extent: _listCardExtent,
+            children: [
+              for (final list in lists)
+                WishListCard(
+                  list: list,
+                  onTap: () => context.go(AppRoutes.wishList(list.id)),
+                ),
+            ],
           ),
-          sliver: SliverGrid(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final wish = wishes[index];
-              return WishCard(
-                wish: wish,
-                onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
-              );
-            }, childCount: wishes.length),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: AppSpacing.betweenCards,
-              crossAxisSpacing: AppSpacing.betweenCards,
-              mainAxisExtent: AppSizes.wishThumbSize + AppSpacing.sm * 2,
+        ],
+        _SectionHeader(title: l10n.homeMyWishes),
+        if (wishes.isEmpty)
+          SliverToBoxAdapter(
+            child: AppEmptyState(
+              icon: const Icon(PhosphorIconsRegular.gift),
+              title: l10n.wishesEmptyTitle,
+              description: l10n.wishesEmptyDescription,
+              action: AppButton(
+                label: l10n.wishAddFirst,
+                leading: const Icon(PhosphorIconsRegular.plus),
+                onPressed: () => context.go(AppRoutes.newWish),
+              ),
             ),
+          )
+        else
+          _grid(
+            extent: _wishCardExtent,
+            children: [
+              for (final wish in wishes)
+                WishGridCard(
+                  wish: wish,
+                  onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
+                ),
+            ],
           ),
-        ),
         const SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.only(
@@ -203,6 +207,50 @@ class _WishGrid extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _grid({required double extent, required List<Widget> children}) {
+    return SliverPadding(
+      padding: _horizontal,
+      sliver: SliverGrid(
+        delegate: SliverChildListDelegate(children),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: AppSpacing.betweenCards,
+          crossAxisSpacing: AppSpacing.betweenCards,
+          mainAxisExtent: extent,
+        ),
+      ),
+    );
+  }
+}
+
+/// Заголовок секции Home («Мои списки» / «Мои желания»).
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTypography.of(context);
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: AppSpacing.screenPaddingHorizontal,
+          right: AppSpacing.screenPaddingHorizontal,
+          top: AppSpacing.sm,
+          bottom: AppSpacing.xs,
+        ),
+        child: Text(
+          title,
+          style: t.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
   }
 }

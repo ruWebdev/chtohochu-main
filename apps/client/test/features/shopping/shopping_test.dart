@@ -87,10 +87,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Новый список'), findsOneWidget);
+    expect(find.text('Новый список желаний'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'В поездку');
-    await tester.tap(find.text('Создать список'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Создать'));
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
     // Вернулись на список списков, новый список виден.
@@ -132,11 +133,10 @@ void main() {
     await tester.tap(find.textContaining('Продукты'));
     await tester.pumpAndSettle();
 
-    // Развернуть поле добавления и ввести позицию.
-    await tester.tap(find.text('Добавить товар'));
-    await tester.pumpAndSettle();
+    // Ввести позицию в composer и отправить.
     await tester.enterText(find.byType(TextField).last, 'Кофе');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.tap(find.byIcon(PhosphorIconsRegular.paperPlaneTilt));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Кофе'), findsOneWidget);

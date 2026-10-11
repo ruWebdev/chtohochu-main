@@ -23,6 +23,8 @@ class WishDetailsBody extends StatelessWidget {
     super.key,
     required this.wish,
     this.additionalImages = const [],
+    this.listTitle,
+    this.onListTap,
   });
 
   final Wish wish;
@@ -30,6 +32,15 @@ class WishDetailsBody extends StatelessWidget {
   /// Дополнительные изображения желания (primary — `wish.imageUrl`).
   /// Для чужих желаний не передаётся — лента не рисуется.
   final List<WishImage> additionalImages;
+
+  /// Название списка желания для блока membership (или уже
+  /// локализованное «Без списка»). `null` — блок не рисуется
+  /// (просмотр чужих желаний, список ещё не загружен).
+  final String? listTitle;
+
+  /// Тап по блоку списка — переход в список. `null` — желание
+  /// без списка, строка не интерактивна.
+  final VoidCallback? onListTap;
 
   static Future<void> _copyLink(BuildContext context, String link) async {
     await Clipboard.setData(ClipboardData(text: link));
@@ -53,7 +64,7 @@ class WishDetailsBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _WishImage(imageUrl: wish.imageUrl, title: wish.title),
+          _WishImage(imageUrl: wish.imageDisplaySource, title: wish.title),
           if (additionalImages.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             _AdditionalImages(images: additionalImages, title: wish.title),
@@ -66,6 +77,19 @@ class WishDetailsBody extends StatelessWidget {
             Text(
               formatPrice(wish.price!),
               style: t.title.copyWith(color: colors.primary),
+            ),
+          ],
+          if (listTitle != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              l10n.wishListSection,
+              style: t.caption.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            _ListRow(
+              title: listTitle!,
+              inList: onListTap != null,
+              onTap: onListTap,
             ),
           ],
           if (wish.link != null && wish.link!.isNotEmpty) ...[
@@ -191,6 +215,60 @@ class _AdditionalImages extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Строка принадлежности списку: название списка (тап → переход
+/// в него) или «Без списка» (не интерактивна).
+class _ListRow extends StatelessWidget {
+  const _ListRow({required this.title, required this.inList, this.onTap});
+
+  final String title;
+  final bool inList;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            inList
+                ? PhosphorIconsRegular.listBullets
+                : PhosphorIconsRegular.listDashes,
+            size: AppSizes.iconSize,
+            color: colors.primary,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              title,
+              style: t.secondary.copyWith(
+                color: inList ? colors.textPrimary : colors.textSecondary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: AppSpacing.xs),
+            Icon(
+              PhosphorIconsRegular.caretRight,
+              size: AppSizes.iconSizeSm,
+              color: colors.textMuted,
+            ),
+          ],
+        ],
       ),
     );
   }

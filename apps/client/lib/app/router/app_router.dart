@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/pages/auth_page.dart';
 import '../../features/friends/presentation/pages/friend_profile_page.dart';
-import '../../features/friends/presentation/pages/friend_search_page.dart';
 import '../../features/friends/presentation/pages/friend_wish_details_page.dart';
 import '../../features/friends/presentation/pages/friends_page.dart';
 import '../../features/notifications/presentation/pages/notifications_page.dart';
@@ -13,8 +12,8 @@ import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/profile/presentation/pages/profile_edit_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/session/presentation/providers/app_session_controller.dart';
+import '../../features/sharing/presentation/pages/shared_link_page.dart';
 import '../../features/shopping/presentation/pages/shopping_list_edit_page.dart';
-import '../../features/shopping/presentation/pages/shopping_list_form_page.dart';
 import '../../features/shopping/presentation/pages/shopping_list_page.dart';
 import '../../features/shopping/presentation/pages/shopping_page.dart';
 import '../../features/showcase/presentation/pages/showcase_page.dart';
@@ -22,6 +21,7 @@ import '../../features/wishes/presentation/pages/home_page.dart';
 import '../../features/wishes/presentation/pages/wish_details_page.dart';
 import '../../features/wishes/presentation/pages/wish_edit_page.dart';
 import '../../features/wishes/presentation/pages/wish_form_page.dart';
+import '../../features/wishes/presentation/pages/wish_list_page.dart';
 import 'app_shell.dart';
 import 'routes.dart';
 import 'splash_page.dart';
@@ -54,6 +54,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final session = ref.read(appSessionControllerProvider);
       final loc = state.matchedLocation;
+
+      // Публичный share-viewer доступен до авторизации и не ждёт
+      // session bootstrap — иначе получатель ссылки без аккаунта
+      // ушёл бы на /auth, а пришедший с сессией — мигал бы splash'ем.
+      if (loc.startsWith('/s/')) return null;
 
       // Пока состояние загружается — держим splash.
       if (session.isLoading || session.isRefreshing) {
@@ -99,6 +104,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const WishFormPage(isFirstWish: true),
       ),
 
+      // --- Публичный share-viewer (без auth, без shell) ---
+      GoRoute(
+        path: AppRoutes.sharePath,
+        name: 'sharedLink',
+        builder: (context, state) =>
+            SharedLinkPage(token: state.pathParameters['token']!),
+      ),
+
       // --- Авторизованная часть: желания (без shell) ---
       GoRoute(
         path: AppRoutes.newWish,
@@ -117,13 +130,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             WishEditPage(wishId: state.pathParameters['id']!),
       ),
+      GoRoute(
+        path: AppRoutes.wishListPath,
+        name: 'wishList',
+        builder: (context, state) =>
+            WishListPage(listId: state.pathParameters['id']!),
+      ),
 
       // --- Авторизованная часть: покупки (без shell) ---
-      GoRoute(
-        path: AppRoutes.newShoppingList,
-        name: 'newShoppingList',
-        builder: (context, state) => const ShoppingListFormPage(),
-      ),
       GoRoute(
         path: AppRoutes.shoppingListPath,
         name: 'shoppingList',
@@ -138,11 +152,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
 
       // --- Авторизованная часть: друзья (без shell) ---
-      GoRoute(
-        path: AppRoutes.friendAdd,
-        name: 'friendAdd',
-        builder: (context, state) => const FriendSearchPage(),
-      ),
       GoRoute(
         path: AppRoutes.friendWishPath,
         name: 'friendWish',
@@ -223,7 +232,9 @@ String? _redirectWhenReady(String loc) {
     AppRoutes.showcase,
   ];
   if (allowed.contains(loc)) return null;
+  if (loc.startsWith('/s/')) return null;
   if (loc.startsWith('/wishes/')) return null;
+  if (loc.startsWith('/wish-lists/')) return null;
   if (loc.startsWith('/shopping/')) return null;
   if (loc.startsWith('/friends/')) return null;
   if (loc.startsWith('/profile/')) return null;

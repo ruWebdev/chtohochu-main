@@ -10,6 +10,7 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../providers/friends_controller.dart';
 import '../utils/friends_formatters.dart';
+import '../widgets/add_friend_sheet.dart';
 import '../widgets/friend_card.dart';
 
 /// Экран «Друзья» — список близких пользователя.
@@ -36,7 +37,7 @@ class FriendsPage extends ConsumerWidget {
         actions: [
           AppBarAction(
             icon: PhosphorIconsRegular.userPlus,
-            onPressed: () => context.go(AppRoutes.friendAdd),
+            onPressed: () => showAddFriendSheet(context),
             semanticLabel: l10n.friendAdd,
             tooltip: l10n.friendAdd,
           ),
@@ -70,7 +71,7 @@ class FriendsPage extends ConsumerWidget {
                       action: AppButton(
                         label: l10n.friendAdd,
                         leading: const Icon(PhosphorIconsRegular.userPlus),
-                        onPressed: () => context.go(AppRoutes.friendAdd),
+                        onPressed: () => showAddFriendSheet(context),
                       ),
                     ),
                   ],

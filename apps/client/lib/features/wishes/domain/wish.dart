@@ -13,6 +13,8 @@ class Wish {
     this.price,
     this.link,
     this.imageUrl,
+    this.imageLocalPath,
+    this.listId,
     this.updatedAt,
   });
 
@@ -33,14 +35,27 @@ class Wish {
 
   /// Ссылка на изображение (опционально).
   ///
-  /// Может быть удалённым URL или локальным путём файла —
-  /// фото с камеры живёт локально до появления upload-эндпоинта.
+  /// Sync-facing поле: локальный путь до upload, remote URL после.
+  /// Для отображения используйте [imageDisplaySource].
   final String? imageUrl;
+
+  /// Путь к локальному файлу primary-изображения — иммутабельный.
+  /// Не перезаписывается remote URL: источник отображения не
+  /// переключается вживую (бесшовный local→remote после upload).
+  final String? imageLocalPath;
+
+  /// Источник изображения для отображения: локальный файл
+  /// приоритетнее — он уже на устройстве и не мигает.
+  String? get imageDisplaySource => imageLocalPath ?? imageUrl;
 
   /// `true`, если [ref] — удалённый URL (или отсутствует);
   /// `false` — локальный путь файла, который нельзя слать в API.
   static bool isRemoteImageRef(String? ref) =>
       ref == null || ref.startsWith('http://') || ref.startsWith('https://');
+
+  /// Список желаний, в котором лежит желание (`WishList.id`);
+  /// `null` — вне списков. Local-only: сервер связь пока не знает.
+  final String? listId;
 
   /// Дата создания.
   final DateTime createdAt;
@@ -60,6 +75,8 @@ class Wish {
     int? price,
     String? link,
     String? imageUrl,
+    String? imageLocalPath,
+    String? listId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -70,6 +87,8 @@ class Wish {
       price: price ?? this.price,
       link: link ?? this.link,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageLocalPath: imageLocalPath ?? this.imageLocalPath,
+      listId: listId ?? this.listId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -85,11 +104,22 @@ class Wish {
           price == other.price &&
           link == other.link &&
           imageUrl == other.imageUrl &&
+          imageLocalPath == other.imageLocalPath &&
+          listId == other.listId &&
           createdAt == other.createdAt;
 
   @override
-  int get hashCode =>
-      Object.hash(id, title, description, price, link, imageUrl, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    title,
+    description,
+    price,
+    link,
+    imageUrl,
+    imageLocalPath,
+    listId,
+    createdAt,
+  );
 
   @override
   String toString() => 'Wish(id: $id, title: $title)';

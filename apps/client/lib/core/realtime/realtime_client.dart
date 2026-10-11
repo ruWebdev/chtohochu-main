@@ -123,7 +123,10 @@ class RealtimeClient {
   }
 
   /// Отключение от аккаунта: отписка + закрытие соединения.
-  void detach() {
+  ///
+  /// [silent] — без записи статуса: при dispose контейнера писать
+  /// в разрушаемые провайдеры нельзя (Riverpod-assertion).
+  void detach({bool silent = false}) {
     _userId = null;
     _deduper.clear();
     unawaited(_channelSub?.cancel());
@@ -140,7 +143,7 @@ class RealtimeClient {
       unawaited(client.disconnect().catchError((_) {}));
       client.dispose();
     }
-    _setStatus(RealtimeStatus.disconnected);
+    if (!silent) _setStatus(RealtimeStatus.disconnected);
   }
 
   /// Фореграунд-триггер: при возврате в app досоединяемся,
@@ -325,7 +328,7 @@ final realtimeClientProvider = Provider<RealtimeClient>((ref) {
       ref.invalidate(appSessionControllerProvider);
     },
   );
-  ref.onDispose(client.detach);
+  ref.onDispose(() => client.detach(silent: true));
   return client;
 });
 

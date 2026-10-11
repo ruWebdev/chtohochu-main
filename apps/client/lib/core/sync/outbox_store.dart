@@ -74,8 +74,8 @@ class OutboxStore {
         if (pendingCreate != null) {
           // create + update → create с финальным состоянием.
           // Payload МЕРЖИТСЯ поверх create: update-payload не
-          // содержит identity-полей (`id`, `list_id`) — замена
-          // вчистую потеряла бы серверную identity и parent-link.
+          // содержит `id` (а у shopping_item и parent `list_id`) —
+          // замена вчистую потеряла бы серверную identity.
           final merged = <String, dynamic>{
             ...jsonDecode(pendingCreate.payloadJson ?? '{}')
                 as Map<String, dynamic>,

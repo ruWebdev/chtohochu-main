@@ -4,6 +4,7 @@ import 'package:chtohochu/core/database/app_database.dart';
 import 'package:chtohochu/core/database/legacy_migration.dart';
 import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/features/wishes/data/wish_repository.dart';
+import 'package:chtohochu/features/wishes/domain/wish.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -311,6 +312,83 @@ void main() {
     test('create без additional → wish_images пуст', () async {
       final wish = await repo.createWish(title: 'Текст');
       expect(await db.wishImagesOf(ownerA, wish.id), isEmpty);
+    });
+
+    test('imageDisplaySource: remote_url после upload не вытесняет '
+        'локальный файл (нет flicker)', () async {
+      final wish = await repo.createWish(
+        title: 'Дрель',
+        imageUrl: '/tmp/photo-0.jpg',
+      );
+      expect(wish.imageDisplaySource, '/tmp/photo-0.jpg');
+      expect((await rowOf(wish.id))!.imageLocalPath, '/tmp/photo-0.jpg');
+
+      // Media upload завершён: sync пишет remote URL в image_url
+      // (server-facing поле), локальный путь не трогает.
+      await db.setWishImageUploadState(
+        ownerA,
+        wish.id,
+        status: 'uploaded',
+        remoteUrl: 'https://cdn.test/img.png',
+      );
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageUrl, 'https://cdn.test/img.png');
+      expect(row.imageLocalPath, '/tmp/photo-0.jpg');
+
+      final domain = (await repo.getWishById(wish.id))!;
+      expect(domain.imageUrl, 'https://cdn.test/img.png');
+      // Инвариант: источник отображения не переключается — UI
+      // продолжает показывать тот же локальный файл.
+      expect(domain.imageDisplaySource, '/tmp/photo-0.jpg');
+    });
+
+    test('updateWish: remote image_url после upload сохраняет '
+        'image_local_path при правке других полей', () async {
+      final wish = await repo.createWish(
+        title: 'Дрель',
+        imageUrl: '/tmp/photo-0.jpg',
+      );
+      await db.setWishImageUploadState(
+        ownerA,
+        wish.id,
+        status: 'uploaded',
+        remoteUrl: 'https://cdn.test/img.png',
+      );
+
+      final stored = (await repo.getWishById(wish.id))!;
+      await repo.updateWish(stored.copyWith(title: 'Дрель+'));
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageLocalPath, '/tmp/photo-0.jpg');
+      expect(
+        (await repo.getWishById(wish.id))!.imageDisplaySource,
+        '/tmp/photo-0.jpg',
+      );
+    });
+
+    test('updateWish: смена image_url с локального на URL сбрасывает '
+        'image_local_path', () async {
+      final wish = await repo.createWish(
+        title: 'Дрель',
+        imageUrl: '/tmp/photo-0.jpg',
+      );
+      final stored = (await repo.getWishById(wish.id))!;
+      await repo.updateWish(
+        Wish(
+          id: stored.id,
+          title: stored.title,
+          createdAt: stored.createdAt,
+          imageUrl: 'https://cdn.test/new.png',
+        ),
+      );
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageLocalPath, isNull);
+      expect(
+        (await repo.getWishById(wish.id))!.imageDisplaySource,
+        'https://cdn.test/new.png',
+      );
     });
 
     test('outbox payload не несёт локальные пути ни в image_url, '

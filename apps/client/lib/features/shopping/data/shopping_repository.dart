@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -34,11 +36,13 @@ abstract interface class ShoppingRepository {
   /// Удалить список по id вместе с позициями.
   Future<void> deleteList(String id);
 
-  /// Добавить позицию в список.
+  /// Добавить позицию в список. [imagePath] — локальный файл
+  /// фото позиции (persistent, не попадает в API-payload).
   Future<ShoppingItem> addItem({
     required String listId,
     required String title,
     int quantity = 1,
+    String? imagePath,
   });
 
   /// Обновить позицию (название, количество, отметка «куплено»).
@@ -130,6 +134,7 @@ class DriftShoppingRepository implements ShoppingRepository {
     title: r.title,
     quantity: r.quantity,
     isChecked: r.isChecked,
+    imageLocalPath: r.imageLocalPath,
   );
 
   @override
@@ -281,6 +286,7 @@ class DriftShoppingRepository implements ShoppingRepository {
   @override
   Future<void> deleteList(String id) async {
     final ownerId = _ownerId;
+    final imagePaths = <String>[];
     await _db.transaction(() async {
       final outbox = OutboxStore(_db);
 
@@ -289,6 +295,7 @@ class DriftShoppingRepository implements ShoppingRepository {
       // item-операции не нужны, свои ops снимаем целиком.
       final items = await _db.shoppingItemsOf(ownerId, id);
       for (final item in items) {
+        if (item.imageLocalPath != null) imagePaths.add(item.imageLocalPath!);
         await (_db.delete(
           _db.shoppingItems,
         )..where((i) => i.id.equals(item.id) & i.ownerId.equals(ownerId))).go();
@@ -313,6 +320,9 @@ class DriftShoppingRepository implements ShoppingRepository {
         operation: OutboxOp.delete,
       );
     });
+    for (final path in imagePaths) {
+      _deleteLocalFile(path);
+    }
   }
 
   @override
@@ -320,13 +330,19 @@ class DriftShoppingRepository implements ShoppingRepository {
     required String listId,
     required String title,
     int quantity = 1,
+    String? imagePath,
   }) async {
     final ownerId = _ownerId;
     final list = await _db.shoppingListById(ownerId, listId);
     if (list == null) {
       throw const ShoppingListNotFoundError();
     }
-    final item = ShoppingItem(id: _uuid.v4(), title: title, quantity: quantity);
+    final item = ShoppingItem(
+      id: _uuid.v4(),
+      title: title,
+      quantity: quantity,
+      imageLocalPath: imagePath,
+    );
     await _db.transaction(() async {
       await _insertItem(
         OutboxStore(_db),
@@ -366,11 +382,26 @@ class DriftShoppingRepository implements ShoppingRepository {
   @override
   Future<void> deleteItem(String itemId, {required String listId}) async {
     final ownerId = _ownerId;
+    String? imagePath;
     await _db.transaction(() async {
       final existing = await _db.shoppingItemByIdAny(ownerId, itemId);
       if (existing == null || existing.listId != listId) return;
+      imagePath = existing.imageLocalPath;
       await _deleteItemRow(OutboxStore(_db), ownerId: ownerId, itemId: itemId);
     });
+    _deleteLocalFile(imagePath);
+  }
+
+  /// Удалить файл позиции (best-effort): файл может быть уже
+  /// удалён или недоступен — это не должно ломать операцию.
+  /// Sync IO: вызывается и из widget-тестов (FakeAsync-зона).
+  static void _deleteLocalFile(String? path) {
+    if (path == null) return;
+    try {
+      File(path).deleteSync();
+    } catch (_) {
+      // best-effort cleanup.
+    }
   }
 
   /// INSERT позиции + outbox create (внутри транзакции вызывающего).
@@ -391,6 +422,7 @@ class DriftShoppingRepository implements ShoppingRepository {
             title: Value(item.title),
             quantity: Value(item.quantity),
             isChecked: Value(item.isChecked),
+            imageLocalPath: Value(item.imageLocalPath),
             createdAt: Value(now),
             updatedAt: Value(now),
           ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
@@ -30,6 +32,12 @@ class Wishes extends Table {
 
   TextColumn get imageUrl => text().nullable()();
 
+  /// Путь к локальному файлу primary-изображения — иммутабельный
+  /// display-source. `image_url` переключается на remote URL после
+  /// upload, но UI продолжает показывать локальный файл — источник
+  /// изображения никогда не меняется вживую (бесшовный local→remote).
+  TextColumn get imageLocalPath => text().nullable()();
+
   /// Upload-статус primary-изображения (ADR-015):
   /// `null` — локального изображения нет или оно удалённое;
   /// pending → uploading → uploaded | failed.
@@ -38,6 +46,11 @@ class Wishes extends Table {
   /// Стабильный idempotency-ключ (`client_id` media upload) —
   /// retry запроса инструкций возвращает тот же upload на сервере.
   TextColumn get imageUploadId => text().nullable()();
+
+  /// Локальный список желаний, в котором лежит желание
+  /// (`wish_lists.id`); `null` — вне списков. Local-only связь:
+  /// сервер списков пока не знает, в outbox не попадает.
+  TextColumn get listId => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime()();
 
@@ -100,6 +113,35 @@ class WishImages extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Списки желаний — группировка wishes пользователя.
+///
+/// Те же правила, что у [Wishes]: `owner_id`-скоп, tombstone
+/// `deleted_at` до доставки DELETE, клиентский UUID как PK.
+/// Желание ссылается через `wishes.list_id` (максимум один
+/// список на желание); при удалении списка желания
+/// разгруппировываются (`list_id` → null), не удаляются.
+@TableIndex(name: 'wish_lists_owner_created', columns: {#ownerId, #createdAt})
+@DataClassName('WishListRow')
+class WishLists extends Table {
+  /// UUID списка — генерируется клиентом.
+  TextColumn get id => text()();
+
+  /// Владелец строки = текущий аккаунт (SQL-изоляция).
+  TextColumn get ownerId => text()();
+
+  TextColumn get title => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  /// Tombstone до доставки DELETE /wish-lists/{id}.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Списки покупок — source of truth для UI.
 ///
 /// Те же правила, что у [Wishes]: `owner_id`-скоп, tombstone
@@ -113,6 +155,12 @@ class ShoppingLists extends Table {
   TextColumn get id => text()();
 
   TextColumn get ownerId => text()();
+
+  /// Серверный владелец списка (UUID пользователя). Для собственных
+  /// списков совпадает с `ownerId`; для shared-списков — id
+  /// владельца. Определяет роль в UI: owner-only действия
+  /// (переименование, удаление, управление участниками).
+  TextColumn get ownerUserId => text().withDefault(const Constant(''))();
 
   TextColumn get title => text()();
 
@@ -148,6 +196,11 @@ class ShoppingItems extends Table {
 
   BoolColumn get isChecked => boolean().withDefault(const Constant(false))();
 
+  /// Путь к локальному фото позиции (media/shopping/).
+  /// Только локально: backend позиций изображения не хранит —
+  /// в outbox/API-payload колонка не попадает.
+  TextColumn get imageLocalPath => text().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
 
   DateTimeColumn get updatedAt => dateTime()();
@@ -156,6 +209,47 @@ class ShoppingItems extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Участники совместного списка покупок (owner-scoped проекция).
+///
+/// Снимок серверного состава списка: владелец (`role='owner'`) и
+/// members (`role='member'`). Профильные поля денормализованы —
+/// тот же набор, что у `PublicUserResource`. Локальные pending-
+/// мутации защищены outbox'ом entityType 'shopping_list_member':
+/// entityId = `'<listId>:<memberId>'`.
+@TableIndex(
+  name: 'shopping_list_members_owner_list',
+  columns: {#ownerId, #listId},
+)
+@DataClassName('ShoppingListMemberRow')
+class ShoppingListMembers extends Table {
+  /// Текущий аккаунт — владелец проекции.
+  TextColumn get ownerId => text()();
+
+  /// Список, к которому относится участник.
+  TextColumn get listId => text()();
+
+  /// UUID пользователя-участника (как в backend).
+  TextColumn get memberId => text()();
+
+  /// 'owner' | 'member'.
+  TextColumn get role => text().withDefault(const Constant('member'))();
+
+  TextColumn get name => text().nullable()();
+
+  TextColumn get username => text().nullable()();
+
+  TextColumn get avatarUrl => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Tombstone для pending-remove: reconcile не воскрешает
+  /// строку, пока DELETE не уехал на сервер.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {ownerId, listId, memberId};
 }
 
 /// Дружеские связи текущего аккаунта (owner-scoped проекция).
@@ -268,8 +362,8 @@ class OutboxEntries extends Table {
 
   TextColumn get ownerId => text()();
 
-  /// Тип сущности. Пока только 'wish'; extension point для
-  /// будущих shopping/friends.
+  /// Тип сущности: 'wish' | 'wish_list' | 'shopping_list' |
+  /// 'shopping_item' | 'friendship' | 'profile'.
   TextColumn get entityType => text()();
 
   TextColumn get entityId => text()();
@@ -321,8 +415,10 @@ class Profiles extends Table {
   tables: [
     Wishes,
     WishImages,
+    WishLists,
     ShoppingLists,
     ShoppingItems,
+    ShoppingListMembers,
     Friendships,
     CachedUsers,
     FriendWishes,
@@ -338,7 +434,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -379,6 +475,108 @@ class AppDatabase extends _$AppDatabase {
           "AND image_url NOT LIKE 'http%'",
         );
       }
+      if (from < 6) {
+        // Отдельный display-source primary-изображения: локальный
+        // путь перестаёт зависеть от переключения image_url → remote.
+        await migrator.addColumn(wishes, wishes.imageLocalPath);
+        await customStatement(
+          'UPDATE wishes SET image_local_path = image_url '
+          'WHERE image_url IS NOT NULL '
+          "AND image_url NOT LIKE 'http%'",
+        );
+      }
+      if (from >= 2 && from < 7) {
+        // Локальное фото позиции списка покупок (media/shopping/).
+        // Только local path — backend позиций изображения не хранит.
+        // При апгрейде v1→v7 таблица создана выше уже с этой колонкой.
+        await migrator.addColumn(shoppingItems, shoppingItems.imageLocalPath);
+      }
+      if (from < 8) {
+        // Списки желаний (local-only) + связь wishes.list_id.
+        await migrator.createTable(wishLists);
+        await migrator.addColumn(wishes, wishes.listId);
+      }
+      if (from == 8) {
+        // WishList — серверная сущность: tombstone-колонка.
+        // Списки, созданные local-only в v8, никогда не имели
+        // outbox-операций — backfill'им create, чтобы они
+        // доехали до сервера обычным push-циклом.
+        await migrator.addColumn(wishLists, wishLists.deletedAt);
+        final unsynced = await select(wishLists).get();
+        final migratedAt = DateTime.now();
+        for (final row in unsynced) {
+          await into(outboxEntries).insert(
+            OutboxEntriesCompanion(
+              ownerId: Value(row.ownerId),
+              entityType: const Value('wish_list'),
+              entityId: Value(row.id),
+              operation: const Value('create'),
+              payloadJson: Value(
+                jsonEncode({'id': row.id, 'title': row.title}),
+              ),
+              createdAt: Value(migratedAt),
+            ),
+          );
+        }
+      }
+      if (from < 10) {
+        // Membership стал серверным (wishes.list_id → API).
+        // Локальные привязки доезжают до сервера: встраиваем
+        // list_id в существующий pending payload желания или
+        // ставим отдельный update. Живой список-цель обязателен
+        // (иначе PATCH получил бы 422 — чужой/удалённый список
+        // сервером отклоняется).
+        final liveListIds = (await (select(
+          wishLists,
+        )..where((l) => l.deletedAt.isNull())).get()).map((l) => l.id).toSet();
+        final members = await (select(
+          wishes,
+        )..where((w) => w.listId.isNotNull() & w.deletedAt.isNull())).get();
+        final migratedAt = DateTime.now();
+        for (final w in members) {
+          if (!liveListIds.contains(w.listId)) continue;
+          final ops = await opsFor(w.ownerId, w.id);
+          // Удаляемое желание не трогаем: update после delete —
+          // висячий PATCH на уже удалённую сущность.
+          if (ops.any((o) => o.operation == 'delete')) continue;
+          final carried = ops.where((o) => o.payloadJson != null).toList();
+          if (carried.isEmpty) {
+            await into(outboxEntries).insert(
+              OutboxEntriesCompanion(
+                ownerId: Value(w.ownerId),
+                entityType: const Value('wish'),
+                entityId: Value(w.id),
+                operation: const Value('update'),
+                payloadJson: Value(jsonEncode({'list_id': w.listId})),
+                createdAt: Value(migratedAt),
+              ),
+            );
+          } else {
+            for (final op in carried) {
+              final payload =
+                  jsonDecode(op.payloadJson!) as Map<String, dynamic>;
+              payload['list_id'] = w.listId;
+              await (update(
+                outboxEntries,
+              )..where((o) => o.id.equals(op.id))).write(
+                OutboxEntriesCompanion(payloadJson: Value(jsonEncode(payload))),
+              );
+            }
+          }
+        }
+      }
+      if (from < 11) {
+        // Совместные списки покупок: участники + серверный
+        // owner_id списка. Существующие локальные списки —
+        // собственные: owner_user_id = owner_id аккаунта.
+        await migrator.createTable(shoppingListMembers);
+        if (from >= 2) {
+          await migrator.addColumn(shoppingLists, shoppingLists.ownerUserId);
+          await customStatement(
+            'UPDATE shopping_lists SET owner_user_id = owner_id',
+          );
+        }
+      }
     },
   );
 
@@ -401,6 +599,22 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<WishRow>> watchWishes(String ownerId) {
     return (select(wishes)
           ..where((w) => w.ownerId.equals(ownerId) & w.deletedAt.isNull())
+          ..orderBy([(w) => OrderingTerm.desc(w.createdAt)]))
+        .watch();
+  }
+
+  /// Реактивные желания конкретного списка (owner-scoped, без
+  /// tombstone) — экран списка желаний. Стрим реагирует на
+  /// изменение `list_id`: убранное желание исчезает,
+  /// добавленное появляется.
+  Stream<List<WishRow>> watchWishesInList(String ownerId, String listId) {
+    return (select(wishes)
+          ..where(
+            (w) =>
+                w.ownerId.equals(ownerId) &
+                w.listId.equals(listId) &
+                w.deletedAt.isNull(),
+          )
           ..orderBy([(w) => OrderingTerm.desc(w.createdAt)]))
         .watch();
   }
@@ -535,7 +749,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Локальные пути всех изображений аккаунта: `local_path`
-  /// дополнительных + `image_url` желаний, если это файл.
+  /// дополнительных + `image_local_path` желаний (fallback —
+  /// локальный `image_url` строк до миграции v6).
   /// Используется для best-effort очистки файлов при
   /// удалении аккаунта/желания.
   Future<List<String>> localWishImagePaths(String ownerId) async {
@@ -545,24 +760,51 @@ class AppDatabase extends _$AppDatabase {
     final wishRows = await (select(
       wishes,
     )..where((w) => w.ownerId.equals(ownerId))).get();
-    return [
+    bool isRemote(String ref) =>
+        ref.startsWith('http://') || ref.startsWith('https://');
+    return {
       for (final r in imageRows)
         if (r.localPath != null) r.localPath!,
       for (final w in wishRows)
-        if (w.imageUrl != null &&
-            !w.imageUrl!.startsWith('http://') &&
-            !w.imageUrl!.startsWith('https://'))
+        if (w.imageLocalPath != null)
+          w.imageLocalPath!
+        else if (w.imageUrl != null && !isRemote(w.imageUrl!))
           w.imageUrl!,
-    ];
+    }.toList();
+  }
+
+  // ── Wish lists ───────────────────────────────────────────
+
+  /// Реактивные списки желаний аккаунта с желаниями (join).
+  /// Возвращает строки `list + nullable wish` — группировка в
+  /// репозитории. Желания отфильтрованы по owner/tombstone в join.
+  Stream<List<TypedResult>> watchWishListsWithWishes(String ownerId) {
+    final w = wishes;
+    final query =
+        select(wishLists).join([
+            leftOuterJoin(
+              w,
+              w.listId.equalsExp(wishLists.id) &
+                  w.ownerId.equals(ownerId) &
+                  w.deletedAt.isNull(),
+            ),
+          ])
+          ..where(
+            wishLists.ownerId.equals(ownerId) & wishLists.deletedAt.isNull(),
+          )
+          ..orderBy([OrderingTerm.desc(wishLists.createdAt)]);
+    return query.watch();
   }
 
   // ── Shopping ─────────────────────────────────────────────
 
-  /// Реактивные списки покупок аккаунта с позициями (join).
-  /// Возвращает строки `list + nullable item` — группировка в
-  /// репозитории. Items отфильтрованы по owner/tombstone в join.
+  /// Реактивные списки покупок аккаунта с позициями и участниками
+  /// (join). Возвращает строки `list + nullable item + nullable
+  /// member` — декартово произведение группируется в репозитории
+  /// по id. Items и members отфильтрованы по owner/tombstone.
   Stream<List<TypedResult>> watchShoppingListsWithItems(String ownerId) {
     final items = shoppingItems;
+    final members = shoppingListMembers;
     final query =
         select(shoppingLists).join([
             leftOuterJoin(
@@ -570,6 +812,12 @@ class AppDatabase extends _$AppDatabase {
               items.listId.equalsExp(shoppingLists.id) &
                   items.ownerId.equals(ownerId) &
                   items.deletedAt.isNull(),
+            ),
+            leftOuterJoin(
+              members,
+              members.listId.equalsExp(shoppingLists.id) &
+                  members.ownerId.equals(ownerId) &
+                  members.deletedAt.isNull(),
             ),
           ])
           ..where(
@@ -579,8 +827,40 @@ class AppDatabase extends _$AppDatabase {
           ..orderBy([
             OrderingTerm.desc(shoppingLists.createdAt),
             OrderingTerm.asc(items.createdAt),
+            OrderingTerm.asc(members.createdAt),
           ]);
     return query.watch();
+  }
+
+  /// Живые участники списка (owner-scoped), в порядке добавления.
+  Future<List<ShoppingListMemberRow>> shoppingListMembersOf(
+    String ownerId,
+    String listId,
+  ) {
+    return (select(shoppingListMembers)
+          ..where(
+            (m) =>
+                m.ownerId.equals(ownerId) &
+                m.listId.equals(listId) &
+                m.deletedAt.isNull(),
+          )
+          ..orderBy([(m) => OrderingTerm.asc(m.createdAt)]))
+        .get();
+  }
+
+  /// Участник списка включая tombstone (для reconcile/outbox).
+  Future<ShoppingListMemberRow?> shoppingListMemberByIdAny(
+    String ownerId,
+    String listId,
+    String memberId,
+  ) {
+    return (select(shoppingListMembers)..where(
+          (m) =>
+              m.ownerId.equals(ownerId) &
+              m.listId.equals(listId) &
+              m.memberId.equals(memberId),
+        ))
+        .getSingleOrNull();
   }
 
   Future<ShoppingListRow?> shoppingListById(String ownerId, String id) {
@@ -760,6 +1040,29 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Убрать `list_id` удаляемого списка из payload'ов неотправленных
+  /// wish-операций: без этого PATCH/POST ушёл бы с уже несуществующим
+  /// списком на сервере и получил бы permanent 422.
+  Future<void> nullListIdInWishOps(String ownerId, String listId) async {
+    final ops =
+        await (select(outboxEntries)..where(
+              (o) =>
+                  o.ownerId.equals(ownerId) &
+                  o.entityType.equals('wish') &
+                  o.operation.equals('delete').not() &
+                  o.payloadJson.isNotNull(),
+            ))
+            .get();
+    for (final op in ops) {
+      final payload = jsonDecode(op.payloadJson!) as Map<String, dynamic>;
+      if (payload['list_id'] != listId) continue;
+      payload['list_id'] = null;
+      await (update(outboxEntries)..where((o) => o.id.equals(op.id))).write(
+        OutboxEntriesCompanion(payloadJson: Value(jsonEncode(payload))),
+      );
+    }
+  }
+
   /// Сущности с НЕЗАВЕРШЁННЫМИ outbox-операциями (pending + failed).
   /// Snapshot pull их не трогает: pending — локальное состояние новее
   /// серверного; failed — данные пользователя не должны молча
@@ -782,6 +1085,7 @@ class AppDatabase extends _$AppDatabase {
     await transaction(() async {
       await (delete(wishes)..where((w) => w.ownerId.equals(ownerId))).go();
       await (delete(wishImages)..where((i) => i.ownerId.equals(ownerId))).go();
+      await (delete(wishLists)..where((l) => l.ownerId.equals(ownerId))).go();
       await (delete(
         shoppingLists,
       )..where((l) => l.ownerId.equals(ownerId))).go();

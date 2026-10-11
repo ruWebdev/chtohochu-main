@@ -6,9 +6,12 @@ import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../shared/ui/images/app_image.dart';
 import '../../domain/shopping_item.dart';
 
 /// Строка позиции в списке покупок.
+///
+/// Компоновка: [фото/placeholder] — [название] — [checkbox «куплено»].
 ///
 /// * тап по строке — переключает «куплено»;
 /// * свайп влево — удаление ([Dismissible]);
@@ -64,7 +67,7 @@ class ShoppingItemRow extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _CheckBox(checked: item.isChecked),
+                _ItemThumbnail(imagePath: item.imageLocalPath),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text.rich(
@@ -96,9 +99,56 @@ class ShoppingItemRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                _CheckBox(checked: item.isChecked),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Превью фото позиции или ненавязчивый placeholder на его месте —
+/// одинаковая геометрия для всех строк.
+class _ItemThumbnail extends StatelessWidget {
+  const _ItemThumbnail({required this.imagePath});
+
+  static const _size = 40.0;
+
+  final String? imagePath;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    final placeholder = Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        PhosphorIconsRegular.basket,
+        color: colors.textMuted,
+        size: AppSizes.iconSize,
+      ),
+    );
+
+    if (imagePath == null) return placeholder;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadii.sm),
+      child: SizedBox(
+        width: _size,
+        height: _size,
+        child: AppImage(
+          src: imagePath!,
+          fit: BoxFit.cover,
+          errorWidget: placeholder,
         ),
       ),
     );

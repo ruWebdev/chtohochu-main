@@ -573,6 +573,16 @@ void main() {
         next_retry_at INTEGER,
         status TEXT NOT NULL DEFAULT 'pending'
       );
+      CREATE TABLE shopping_lists (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      INSERT INTO shopping_lists VALUES ('sl-1','user-a','Покупки',
+        1735689600,1735689600,NULL);
       INSERT INTO wish_lists VALUES ('wl-1','user-a','Старый список',
         1735689600,1735689600);
       INSERT INTO wishes (id,owner_id,title,list_id,created_at,
@@ -601,6 +611,10 @@ void main() {
     expect(ops.single.entityType, 'wish_list');
     expect(ops.single.operation, 'create');
     expect(ops.single.payloadJson, contains('Старый список'));
+
+    // v11: серверный owner_id списка покупок backfill'нут.
+    final shopList = (await db.select(db.shoppingLists).get()).single;
+    expect(shopList.ownerUserId, 'user-a');
     await db.close();
   });
 
@@ -647,6 +661,16 @@ void main() {
         next_retry_at INTEGER,
         status TEXT NOT NULL DEFAULT 'pending'
       );
+      CREATE TABLE shopping_lists (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      INSERT INTO shopping_lists VALUES ('sl-1','user-a','Покупки',
+        1735689600,1735689600,NULL);
       INSERT INTO wish_lists VALUES ('wl-1','user-a','Список',
         1735689600,1735689600,NULL);
       INSERT INTO wishes (id,owner_id,title,list_id,created_at,
@@ -687,6 +711,10 @@ void main() {
     // Без membership и с мёртвой ссылкой — без операций.
     expect(await db.opsFor('user-a', 'w-solo'), isEmpty);
     expect(await db.opsFor('user-a', 'w-dangling'), isEmpty);
+
+    // v11: серверный owner_id списка покупок backfill'нут.
+    final shopList = (await db.select(db.shoppingLists).get()).single;
+    expect(shopList.ownerUserId, 'user-a');
     await db.close();
   });
 

@@ -3,6 +3,7 @@ import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/core/sync/sync_engine.dart';
 import 'package:chtohochu/features/shopping/data/shopping_repository.dart';
 import 'package:chtohochu/features/shopping/domain/shopping_list.dart';
+import 'package:chtohochu/features/shopping/domain/shopping_list_member.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
@@ -869,5 +870,218 @@ void main() {
         expect((await listRowOf(listA.id))!.ownerId, ownerA);
       },
     );
+  });
+
+  group('members (collaborative list)', () {
+    const memberB = ShoppingListMember(
+      id: 'user-b',
+      role: 'member',
+      name: 'B Name',
+      username: 'b_name',
+    );
+
+    test('add member → POST nested + локальная строка видна сразу', () async {
+      final list = await repo.createList(title: 'L');
+      await sync();
+      api.requests.clear();
+
+      await repo.addMember(listId: list.id, member: memberB);
+
+      // Pending-участник виден в доменной модели до sync.
+      final local = await repo.getListById(list.id);
+      expect(local!.members.map((m) => m.id), contains('user-b'));
+      expect(local.isShared, isTrue);
+
+      await sync();
+
+      expect(mutatingRequests(), ['POST /shopping-lists/${list.id}/members']);
+      expect(await outboxOf(ownerA), isEmpty);
+      // Серверная проекция участника записана.
+      final server = api.shoppingListsOf(ownerA).single;
+      expect(
+        (server['members'] as List).map((m) => (m as Map)['id']),
+        contains('user-b'),
+      );
+    });
+
+    test('member add после create списка не уезжает раньше списка', () async {
+      api.failures['POST /shopping-lists'] = 500;
+      late String listId;
+      await offline(() async {
+        final list = await repo.createList(title: 'L');
+        listId = list.id;
+        await repo.addMember(listId: list.id, member: memberB);
+      });
+      api.requests.clear();
+      await sync();
+
+      // Список не доехал — member-операция deferred без попытки.
+      expect(api.requests.where((r) => r.contains('/members')), isEmpty);
+
+      api.failures.clear();
+      await (db.update(db.outboxEntries)
+            ..where((o) => o.ownerId.equals(ownerA)))
+          .write(const OutboxEntriesCompanion(nextRetryAt: Value(null)));
+      await sync();
+
+      final mutating = mutatingRequests();
+      expect(
+        mutating.indexOf('POST /shopping-lists'),
+        lessThan(mutating.indexOf('POST /shopping-lists/$listId/members')),
+      );
+      expect(await outboxOf(ownerA), isEmpty);
+    });
+
+    test('add + remove до sync → compaction, ноль HTTP по члену', () async {
+      final list = await repo.createList(title: 'L');
+      await sync();
+      api.requests.clear();
+
+      await offline(() async {
+        await repo.addMember(listId: list.id, member: memberB);
+        await repo.removeMember(listId: list.id, memberId: 'user-b');
+      });
+      await sync();
+
+      expect(api.requests.where((r) => r.contains('/members')), isEmpty);
+      expect(
+        (await repo.getListById(list.id))!.members.map((m) => m.id),
+        isNot(contains('user-b')),
+      );
+    });
+
+    test('remove synced member → DELETE nested', () async {
+      final list = await repo.createList(title: 'L');
+      await repo.addMember(listId: list.id, member: memberB);
+      await sync();
+      api.requests.clear();
+
+      await offline(
+        () => repo.removeMember(listId: list.id, memberId: 'user-b'),
+      );
+      await sync();
+
+      expect(mutatingRequests(), [
+        'DELETE /shopping-lists/${list.id}/members/user-b',
+      ]);
+      expect(await outboxOf(ownerA), isEmpty);
+    });
+
+    test('leave list → список исчезает локально + DELETE self', () async {
+      // Shared-список чужого владельца приехал pull'ом.
+      api.seedShoppingList(
+        ownerA,
+        'srv-shared',
+        'Shared',
+        ownerId: ownerB,
+        members: const [],
+      );
+      await sync();
+      expect(await repo.getListById('srv-shared'), isNotNull);
+      api.requests.clear();
+
+      await repo.leaveList('srv-shared');
+
+      // Список исчез из UI сразу.
+      expect(await repo.getListById('srv-shared'), isNull);
+
+      await sync();
+
+      expect(mutatingRequests(), [
+        'DELETE /shopping-lists/srv-shared/members/$ownerA',
+      ]);
+      expect(await outboxOf(ownerA), isEmpty);
+    });
+
+    test('pull: shared list — ownerUserId, роли, isOwnedBy', () async {
+      api.seedShoppingList(
+        ownerA,
+        'srv-shared',
+        'Shared',
+        ownerId: ownerB,
+        members: const [
+          {'id': 'user-c', 'name': 'C', 'username': 'cc', 'avatar_url': null},
+        ],
+        items: const [
+          {'id': 'i1', 'title': 'Молоко', 'is_checked': true},
+        ],
+      );
+      await sync();
+
+      final list = (await repo.getListById('srv-shared'))!;
+      expect(list.ownerUserId, ownerB);
+      expect(list.isOwnedBy(ownerA), isFalse);
+      expect(list.isShared, isTrue);
+      // Я — тоже участник: владелец-ownerId + члены из snapshot.
+      final roles = {for (final m in list.members) m.id: m.role};
+      expect(roles[ownerB], 'owner');
+      expect(roles['user-c'], 'member');
+      // Я в списке как member (мой id пришёл бы в members на
+      // сервере — fake отдаёт ровно то, что посеяно; проверяем
+      // что мои локальные строки не потеряны).
+      expect(list.items.single.isChecked, isTrue);
+    });
+
+    test('pull не создаёт outbox-операций (remote reconcile)', () async {
+      api.seedShoppingList(
+        ownerA,
+        'srv-remote',
+        'Remote',
+        ownerId: ownerB,
+        members: const [
+          {'id': 'user-c', 'name': 'C', 'username': 'cc'},
+        ],
+        items: const [
+          {'id': 'i1', 'title': 'Хлеб', 'is_checked': true},
+        ],
+      );
+      await sync();
+
+      // Список, позиция и участники появились — ни одной операции.
+      expect(await outboxOf(ownerA), isEmpty);
+      expect((await repo.getListById('srv-remote'))!.members, hasLength(2));
+    });
+
+    test('remote member removal: pull удаляет локальную строку', () async {
+      api.seedShoppingList(
+        ownerA,
+        'srv-shared',
+        'Shared',
+        ownerId: ownerB,
+        members: const [
+          {'id': 'user-c', 'name': 'C', 'username': 'cc'},
+        ],
+      );
+      await sync();
+      // owner-строка (из owner_id) + user-c из members.
+      expect((await repo.getListById('srv-shared'))!.members, hasLength(2));
+
+      // user-c снят сервером → reconcile удаляет строку.
+      api.seedShoppingList(ownerA, 'srv-shared', 'Shared', ownerId: ownerB);
+      await sync();
+
+      final members = (await repo.getListById('srv-shared'))!.members;
+      expect(members.map((m) => m.id), isNot(contains('user-c')));
+    });
+
+    test('pending member add защищён от pull reconcile', () async {
+      final list = await repo.createList(title: 'L');
+      await sync();
+
+      // Задерживаем push: member-операция в outbox, pull приезжает
+      // без user-b — локальную строку reconcile трогать не должен.
+      engine.detach();
+      await repo.addMember(listId: list.id, member: memberB);
+      api.seedShoppingList(ownerA, list.id, 'L'); // без members
+      engine.attach(ownerA);
+      await sync();
+
+      // Здесь engine.push отработает: POST /members на fake API
+      // добавит члена — финал: член и локально, и на «сервере».
+      expect(
+        (await repo.getListById(list.id))!.members.map((m) => m.id),
+        contains('user-b'),
+      );
+    });
   });
 }

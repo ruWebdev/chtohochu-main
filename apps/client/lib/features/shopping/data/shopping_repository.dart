@@ -10,6 +10,7 @@ import '../../../core/services/preferences_service.dart';
 import '../../../core/sync/outbox_store.dart';
 import '../domain/shopping_item.dart';
 import '../domain/shopping_list.dart';
+import '../domain/shopping_list_member.dart';
 
 /// Абстракция репозитория списков покупок.
 ///
@@ -50,6 +51,21 @@ abstract interface class ShoppingRepository {
 
   /// Удалить позицию.
   Future<void> deleteItem(String itemId, {required String listId});
+
+  /// Добавить участника в список (только владелец; сервер
+  /// дополнительно проверяет дружбу).
+  Future<void> addMember({
+    required String listId,
+    required ShoppingListMember member,
+  });
+
+  /// Удалить участника: владелец — любого member, member —
+  /// себя (выход из списка). Владельца удалить нельзя.
+  Future<void> removeMember({required String listId, required String memberId});
+
+  /// Покинуть совместный список (member удаляет себя и теряет
+  /// доступ — список исчезает локально сразу).
+  Future<void> leaveList(String listId);
 }
 
 /// Ошибка репозитория покупок.
@@ -101,6 +117,26 @@ final shoppingRepositoryProvider = Provider<ShoppingRepository>((ref) {
 abstract final class ShoppingEntityTypes {
   static const String list = 'shopping_list';
   static const String item = 'shopping_item';
+
+  /// Участник списка: entityId — составной `<listId>:<memberId>`
+  /// (у membership нет собственного UUID на проводе).
+  static const String member = 'shopping_list_member';
+
+  /// Составной entityId операции участника.
+  static String memberEntityId(String listId, String memberId) =>
+      '$listId:$memberId';
+
+  /// Разбор составного entityId → (listId, memberId).
+  static ({String listId, String memberId})? parseMemberEntityId(
+    String entityId,
+  ) {
+    final i = entityId.indexOf(':');
+    if (i <= 0 || i == entityId.length - 1) return null;
+    return (
+      listId: entityId.substring(0, i),
+      memberId: entityId.substring(i + 1),
+    );
+  }
 }
 
 /// Репозиторий покупок поверх Drift.
@@ -137,31 +173,53 @@ class DriftShoppingRepository implements ShoppingRepository {
     imageLocalPath: r.imageLocalPath,
   );
 
+  static ShoppingListMember _memberToDomain(ShoppingListMemberRow r) =>
+      ShoppingListMember(
+        id: r.memberId,
+        role: r.role,
+        name: r.name,
+        username: r.username,
+        avatarUrl: r.avatarUrl,
+      );
+
   @override
   Stream<List<ShoppingList>> watchLists() {
     return _db.watchShoppingListsWithItems(_ownerId).map((rows) {
-      // Группировка join-строк `list + item?` в доменную модель.
+      // Группировка join-строк `list + item? + member?` в доменную
+      // модель: декартово произведение дедуплицируется по id.
       final byId = <String, ShoppingList>{};
-      final itemsByList = <String, List<ShoppingItem>>{};
+      final itemsByList = <String, Map<String, ShoppingItem>>{};
+      final membersByList = <String, Map<String, ShoppingListMember>>{};
       final order = <String>[];
       for (final row in rows) {
         final l = row.readTable(_db.shoppingLists);
         final item = row.readTableOrNull(_db.shoppingItems);
+        final member = row.readTableOrNull(_db.shoppingListMembers);
         if (!byId.containsKey(l.id)) {
           byId[l.id] = ShoppingList(
             id: l.id,
             title: l.title,
             createdAt: l.createdAt,
+            ownerUserId: l.ownerUserId.isEmpty ? null : l.ownerUserId,
           );
           order.add(l.id);
         }
         if (item != null) {
-          itemsByList.putIfAbsent(l.id, () => []).add(_itemToDomain(item));
+          itemsByList.putIfAbsent(l.id, () => {})[item.id] = _itemToDomain(
+            item,
+          );
+        }
+        if (member != null) {
+          membersByList.putIfAbsent(l.id, () => {})[member.memberId] =
+              _memberToDomain(member);
         }
       }
       return [
         for (final id in order)
-          byId[id]!.copyWith(items: itemsByList[id] ?? const []),
+          byId[id]!.copyWith(
+            items: itemsByList[id]?.values.toList() ?? const [],
+            members: membersByList[id]?.values.toList() ?? const [],
+          ),
       ];
     });
   }
@@ -174,11 +232,14 @@ class DriftShoppingRepository implements ShoppingRepository {
     final row = await _db.shoppingListById(_ownerId, id);
     if (row == null) return null;
     final items = await _db.shoppingItemsOf(_ownerId, id);
+    final members = await _db.shoppingListMembersOf(_ownerId, id);
     return ShoppingList(
       id: row.id,
       title: row.title,
       createdAt: row.createdAt,
+      ownerUserId: row.ownerUserId.isEmpty ? null : row.ownerUserId,
       items: [for (final i in items) _itemToDomain(i)],
+      members: [for (final m in members) _memberToDomain(m)],
     );
   }
 
@@ -186,7 +247,12 @@ class DriftShoppingRepository implements ShoppingRepository {
   Future<ShoppingList> createList({required String title}) async {
     final ownerId = _ownerId;
     final now = DateTime.now();
-    final list = ShoppingList(id: _uuid.v4(), title: title, createdAt: now);
+    final list = ShoppingList(
+      id: _uuid.v4(),
+      title: title,
+      createdAt: now,
+      ownerUserId: ownerId,
+    );
 
     await _db.transaction(() async {
       await _db
@@ -195,9 +261,23 @@ class DriftShoppingRepository implements ShoppingRepository {
             ShoppingListsCompanion(
               id: Value(list.id),
               ownerId: Value(ownerId),
+              ownerUserId: Value(ownerId),
               title: Value(list.title),
               createdAt: Value(now),
               updatedAt: Value(now),
+            ),
+          );
+      // Владелец — участник неявно; локальная строка нужна для
+      // participants-блока до первого pull'а (API вернёт профиль).
+      await _db
+          .into(_db.shoppingListMembers)
+          .insertOnConflictUpdate(
+            ShoppingListMembersCompanion(
+              ownerId: Value(ownerId),
+              listId: Value(list.id),
+              memberId: Value(ownerId),
+              role: const Value('owner'),
+              createdAt: Value(now),
             ),
           );
       await OutboxStore(_db).enqueue(
@@ -302,6 +382,20 @@ class DriftShoppingRepository implements ShoppingRepository {
         await outbox.dropEntityOps(ownerId, item.id);
       }
 
+      // Участники списка тоже умирают каскадом: серверный
+      // DELETE каскадно сносит pivot-строки, member-операции
+      // теряют смысл.
+      final members = await _db.shoppingListMembersOf(ownerId, id);
+      for (final m in members) {
+        await outbox.dropEntityOps(
+          ownerId,
+          ShoppingEntityTypes.memberEntityId(id, m.memberId),
+        );
+      }
+      await (_db.delete(
+        _db.shoppingListMembers,
+      )..where((m) => m.listId.equals(id) & m.ownerId.equals(ownerId))).go();
+
       if (await outbox.hasUnsyncedCreate(ownerId, id)) {
         // Список никогда не доезжал до сервера — физическое
         // удаление, HTTP не нужен.
@@ -390,6 +484,129 @@ class DriftShoppingRepository implements ShoppingRepository {
       await _deleteItemRow(OutboxStore(_db), ownerId: ownerId, itemId: itemId);
     });
     _deleteLocalFile(imagePath);
+  }
+
+  @override
+  Future<void> addMember({
+    required String listId,
+    required ShoppingListMember member,
+  }) async {
+    final ownerId = _ownerId;
+    final list = await _db.shoppingListById(ownerId, listId);
+    if (list == null) {
+      throw const ShoppingListNotFoundError();
+    }
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      // Локальная строка сразу: pending-member виден в UI до sync.
+      // Re-add после tombstone: deletedAt снимается, строка живая.
+      await _db
+          .into(_db.shoppingListMembers)
+          .insertOnConflictUpdate(
+            ShoppingListMembersCompanion(
+              ownerId: Value(ownerId),
+              listId: Value(listId),
+              memberId: Value(member.id),
+              role: Value(member.role),
+              name: Value(member.name),
+              username: Value(member.username),
+              avatarUrl: Value(member.avatarUrl),
+              createdAt: Value(now),
+              deletedAt: const Value(null),
+            ),
+          );
+      await OutboxStore(_db).enqueue(
+        ownerId: ownerId,
+        entityType: ShoppingEntityTypes.member,
+        entityId: ShoppingEntityTypes.memberEntityId(listId, member.id),
+        operation: OutboxOp.create,
+        payload: {
+          'list_id': listId,
+          'user_id': member.id,
+          'name': member.name,
+          'username': member.username,
+          'avatar_url': member.avatarUrl,
+        },
+      );
+    });
+  }
+
+  @override
+  Future<void> removeMember({
+    required String listId,
+    required String memberId,
+  }) async {
+    final ownerId = _ownerId;
+    final entityId = ShoppingEntityTypes.memberEntityId(listId, memberId);
+    await _db.transaction(() async {
+      final outbox = OutboxStore(_db);
+      if (await outbox.hasUnsyncedCreate(ownerId, entityId)) {
+        // Добавлен и удалён до sync — сервер его никогда не видел.
+        await (_db.delete(_db.shoppingListMembers)..where(
+              (m) =>
+                  m.ownerId.equals(ownerId) &
+                  m.listId.equals(listId) &
+                  m.memberId.equals(memberId),
+            ))
+            .go();
+      } else {
+        await (_db.update(_db.shoppingListMembers)..where(
+              (m) =>
+                  m.ownerId.equals(ownerId) &
+                  m.listId.equals(listId) &
+                  m.memberId.equals(memberId),
+            ))
+            .write(
+              ShoppingListMembersCompanion(deletedAt: Value(DateTime.now())),
+            );
+      }
+      await outbox.enqueue(
+        ownerId: ownerId,
+        entityType: ShoppingEntityTypes.member,
+        entityId: entityId,
+        operation: OutboxOp.delete,
+        payload: {'list_id': listId, 'user_id': memberId},
+      );
+    });
+  }
+
+  @override
+  Future<void> leaveList(String listId) async {
+    final ownerId = _ownerId;
+    // Локально список исчезает сразу — членство на сервере
+    // снимется member-delete операцией; reconcile на всякий
+    // случай тоже вычистит список (его нет в моём index).
+    await _db.transaction(() async {
+      final outbox = OutboxStore(_db);
+      final items = await _db.shoppingItemsOf(ownerId, listId);
+      for (final item in items) {
+        await (_db.delete(
+          _db.shoppingItems,
+        )..where((i) => i.id.equals(item.id) & i.ownerId.equals(ownerId))).go();
+        await outbox.dropEntityOps(ownerId, item.id);
+      }
+      final members = await _db.shoppingListMembersOf(ownerId, listId);
+      for (final m in members) {
+        await outbox.dropEntityOps(
+          ownerId,
+          ShoppingEntityTypes.memberEntityId(listId, m.memberId),
+        );
+      }
+      await (_db.delete(_db.shoppingListMembers)
+            ..where((m) => m.listId.equals(listId) & m.ownerId.equals(ownerId)))
+          .go();
+      await (_db.delete(
+        _db.shoppingLists,
+      )..where((l) => l.id.equals(listId) & l.ownerId.equals(ownerId))).go();
+      await outbox.dropEntityOps(ownerId, listId);
+      await outbox.enqueue(
+        ownerId: ownerId,
+        entityType: ShoppingEntityTypes.member,
+        entityId: ShoppingEntityTypes.memberEntityId(listId, ownerId),
+        operation: OutboxOp.delete,
+        payload: {'list_id': listId, 'user_id': ownerId},
+      );
+    });
   }
 
   /// Удалить файл позиции (best-effort): файл может быть уже

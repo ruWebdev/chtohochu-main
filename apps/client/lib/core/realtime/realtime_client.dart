@@ -57,6 +57,7 @@ class RealtimeClient {
     this._onStatus,
     this._onEvent,
     this._onAuthFailure,
+    this._onReconnected,
   });
 
   final Dio _dio;
@@ -65,15 +66,26 @@ class RealtimeClient {
   final void Function(RealtimeEvent event)? _onEvent;
   final void Function()? _onAuthFailure;
 
+  /// Коллбек после восстановления разорванного соединения —
+  /// триггерит полный pull reconcile (пропущенные за offline-окно
+  /// события нельзя восстановить по транспорту, только через REST).
+  final void Function()? _onReconnected;
+
   String? _userId;
   PusherChannelsClient? _client;
   PrivateChannel? _userChannel;
+
+  /// Открытый сейчас ShoppingList — подписка на
+  /// `private-shopping-list.{id}` живёт, пока открыт экран.
+  String? _watchedListId;
+  PrivateChannel? _listChannel;
 
   final RealtimeEventDeduper _deduper = RealtimeEventDeduper();
 
   StreamSubscription<PusherChannelsClientLifeCycleState>? _lifecycleSub;
   StreamSubscription<void>? _connectionEstablishedSub;
   StreamSubscription<ChannelReadEvent>? _channelSub;
+  StreamSubscription<ChannelReadEvent>? _listChannelSub;
 
   bool get isAttached => _userId != null;
 
@@ -115,7 +127,7 @@ class RealtimeClient {
 
     _lifecycleSub = client.lifecycleStream.listen(_onLifecycle);
     _connectionEstablishedSub = client.onConnectionEstablished.listen(
-      (_) => _subscribeUserChannel(),
+      (_) => _subscribeChannels(),
     );
 
     _setStatus(RealtimeStatus.connecting);
@@ -128,7 +140,12 @@ class RealtimeClient {
   /// в разрушаемые провайдеры нельзя (Riverpod-assertion).
   void detach({bool silent = false}) {
     _userId = null;
+    _watchedListId = null;
     _deduper.clear();
+    unawaited(_listChannelSub?.cancel());
+    _listChannelSub = null;
+    _listChannel?.unsubscribe();
+    _listChannel = null;
     unawaited(_channelSub?.cancel());
     _channelSub = null;
     _userChannel?.unsubscribe();
@@ -154,9 +171,36 @@ class RealtimeClient {
     unawaited(client.reconnect().catchError((_) {}));
   }
 
+  /// Подписка на `private-shopping-list.{listId}` пока открыт
+  /// экран списка. Авторизация канала — membership-check на
+  /// backend (`Broadcast::channel` в routes/channels.php).
+  ///
+  /// Если сокет ещё не поднялся, намерение запоминается и
+  /// подписка выполнится из `_subscribeChannels`.
+  void watchShoppingList(String listId) {
+    if (_watchedListId == listId) return;
+    _watchedListId = listId;
+    _subscribeListChannel();
+  }
+
+  /// Отписка от канала списка при закрытии экрана.
+  void unwatchShoppingList(String listId) {
+    if (_watchedListId != listId) return;
+    _watchedListId = null;
+    unawaited(_listChannelSub?.cancel());
+    _listChannelSub = null;
+    _listChannel?.unsubscribe();
+    _listChannel = null;
+  }
+
   void _onLifecycle(PusherChannelsClientLifeCycleState state) {
     switch (state) {
       case PusherChannelsClientLifeCycleState.establishedConnection:
+        // Reconnect: транспорт не гарантирует доставку событий за
+        // offline-окно → полный pull reconcile через SyncEngine.
+        if (_lastStatus == RealtimeStatus.reconnecting) {
+          _onReconnected?.call();
+        }
         _setStatus(RealtimeStatus.connected);
       case PusherChannelsClientLifeCycleState.pendingConnection:
         _setStatus(RealtimeStatus.connecting);
@@ -172,34 +216,56 @@ class RealtimeClient {
     }
   }
 
-  /// Подписка на персональный канал `private-user.{userId}`.
+  /// Подписки при установленном соединении: персональный канал
+  /// `private-user.{userId}` + канал открытого списка (если есть).
   ///
   /// Авторизация — `POST {api}/api/v1/broadcasting/auth` через Dio
   /// (Bearer-токен подставляет interceptor apiClient). 401 → токен
   /// невалиден → onAuthFailure → пересчёт сессии. 403 → канал
-  /// недоступен, сессию не трогаем.
-  void _subscribeUserChannel() {
+  /// недоступен (например, удалён из участников), сессию не трогаем.
+  void _subscribeChannels() {
     final client = _client;
     final userId = _userId;
     if (client == null || userId == null) return;
 
-    final channelName = 'private-user.$userId';
-    final channel = client.privateChannel(
-      channelName,
-      authorizationDelegate: _BroadcastAuthDelegate(
-        dio: _dio,
-        endpoint: Uri.parse(
-          '${_env.apiBaseUrl}${ApiConstants.apiPrefix}/broadcasting/auth',
-        ),
-        onAuthFailed: _onChannelAuthFailed,
-      ),
+    final userChannel = client.privateChannel(
+      'private-user.$userId',
+      authorizationDelegate: _authDelegate(),
     );
-
-    _userChannel = channel;
+    _userChannel = userChannel;
     unawaited(_channelSub?.cancel());
-    _channelSub = channel.bindToAll().listen(_onChannelEvent);
+    _channelSub = userChannel.bindToAll().listen(_onChannelEvent);
+    userChannel.subscribe();
+
+    _subscribeListChannel();
+  }
+
+  /// Подписка на `private-shopping-list.{id}` открытого списка.
+  /// No-op, если экран списка не открыт или сокет не поднят —
+  /// в обоих случаях `_subscribeChannels`/`watchShoppingList`
+  /// доведут подписку до конца.
+  void _subscribeListChannel() {
+    final client = _client;
+    final listId = _watchedListId;
+    if (client == null || listId == null || _userId == null) return;
+
+    final channel = client.privateChannel(
+      'private-shopping-list.$listId',
+      authorizationDelegate: _authDelegate(),
+    );
+    _listChannel = channel;
+    unawaited(_listChannelSub?.cancel());
+    _listChannelSub = channel.bindToAll().listen(_onChannelEvent);
     channel.subscribe();
   }
+
+  _BroadcastAuthDelegate _authDelegate() => _BroadcastAuthDelegate(
+    dio: _dio,
+    endpoint: Uri.parse(
+      '${_env.apiBaseUrl}${ApiConstants.apiPrefix}/broadcasting/auth',
+    ),
+    onAuthFailed: _onChannelAuthFailed,
+  );
 
   void _onChannelAuthFailed(dynamic error, StackTrace trace) {
     if (error is DioException && error.response?.statusCode == 401) {
@@ -318,6 +384,11 @@ final realtimeClientProvider = Provider<RealtimeClient>((ref) {
     onEvent: (_) {
       // Событие = «что-то изменилось на сервере» → pull reconcile.
       // Дедупликация и guard-ы внутри requestSync защищают от лавины.
+      unawaited(ref.read(syncEngineProvider).requestSync());
+    },
+    onReconnected: () {
+      // Соединение восстановилось после разрыва — события за
+      // offline-окно могли быть потеряны → pull reconcile.
       unawaited(ref.read(syncEngineProvider).requestSync());
     },
     onAuthFailure: () {

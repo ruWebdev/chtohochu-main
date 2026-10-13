@@ -1216,6 +1216,108 @@ abstract class AppLocalizations {
   /// **'Позиция не найдена.'**
   String get itemNotFoundError;
 
+  /// Members row label and sheet title on a shared shopping list
+  ///
+  /// In ru, this message translates to:
+  /// **'Участники'**
+  String get listMembers;
+
+  /// Badge on a shopping list shared with other members
+  ///
+  /// In ru, this message translates to:
+  /// **'Совместный'**
+  String get listShared;
+
+  /// Role caption of the shopping list owner
+  ///
+  /// In ru, this message translates to:
+  /// **'Владелец'**
+  String get listMemberOwner;
+
+  /// Caption marking the current user in the members list
+  ///
+  /// In ru, this message translates to:
+  /// **'Вы'**
+  String get listMemberYou;
+
+  /// Action opening the friend picker for a shared list
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить участника'**
+  String get listMembersAdd;
+
+  /// Hint above the friend picker inside the members sheet
+  ///
+  /// In ru, this message translates to:
+  /// **'Добавить друга в список'**
+  String get listMembersAddHint;
+
+  /// Shown when every friend is already a member or there are no friends
+  ///
+  /// In ru, this message translates to:
+  /// **'Некого добавить'**
+  String get listMembersNoFriends;
+
+  /// Hint under the empty friend-picker state
+  ///
+  /// In ru, this message translates to:
+  /// **'Сначала добавьте человека в друзья на экране «Друзья».'**
+  String get listMembersNoFriendsHint;
+
+  /// Snack after a friend was added to the shopping list
+  ///
+  /// In ru, this message translates to:
+  /// **'{name} добавлен в список'**
+  String listMemberAdded(String name);
+
+  /// Error snack when adding a member fails
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось добавить участника.'**
+  String get listMemberAddFailed;
+
+  /// Action removing a member from a shared list
+  ///
+  /// In ru, this message translates to:
+  /// **'Убрать из списка'**
+  String get listMemberRemove;
+
+  /// Confirm dialog title for removing a member
+  ///
+  /// In ru, this message translates to:
+  /// **'Убрать участника?'**
+  String get listMemberRemoveTitle;
+
+  /// Confirm dialog message for removing a member
+  ///
+  /// In ru, this message translates to:
+  /// **'«{name}» потеряет доступ к списку.'**
+  String listMemberRemoveMessage(String name);
+
+  /// Action leaving a shared list as a member
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти из списка'**
+  String get listLeave;
+
+  /// Confirm dialog title for leaving a shared list
+  ///
+  /// In ru, this message translates to:
+  /// **'Выйти из списка?'**
+  String get listLeaveTitle;
+
+  /// Confirm dialog message for leaving a shared list
+  ///
+  /// In ru, this message translates to:
+  /// **'«{title}» исчезнет из ваших списков.'**
+  String listLeaveMessage(String title);
+
+  /// Accessibility label for the members management row
+  ///
+  /// In ru, this message translates to:
+  /// **'Участники списка'**
+  String get listMembersManage;
+
   /// Title of the friends screen
   ///
   /// In ru, this message translates to:

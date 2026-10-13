@@ -517,6 +517,9 @@ class FakeApiAdapter implements HttpClientAdapter {
       final list = <String, dynamic>{
         'id': id,
         'title': body['title'],
+        'owner_id': uid,
+        'members': <Map<String, dynamic>>[],
+        'revision': 0,
         'created_at': now,
         'updated_at': now,
         'items': <String, Map<String, dynamic>>{},
@@ -600,7 +603,50 @@ class FakeApiAdapter implements HttpClientAdapter {
     } else if (path.startsWith('/shopping-lists/')) {
       final uid = _userIdForToken(token);
       final rest = path.substring(16);
-      if (rest.endsWith('/items') && method == 'POST') {
+      // Участники: GET/POST /{id}/members, DELETE /{id}/members/{userId}.
+      if (rest.endsWith('/members') && method == 'POST') {
+        final listId = rest.substring(0, rest.length - 8);
+        final list = (_shoppingLists[uid] ?? {})[listId];
+        if (list == null) throw _error(404, 'Not found.');
+        final memberId = body!['user_id'] as String;
+        final members = (list['members'] as List).cast<Map<String, dynamic>>();
+        if (!members.any((m) => m['id'] == memberId)) {
+          // Seed'ы могут отдать const/unmodifiable — переприсваиваем.
+          list['members'] = [...members, _serializeUser(memberId)];
+          list['revision'] = (list['revision'] as int? ?? 0) + 1;
+          status = 201;
+        } else {
+          status = 200; // идемпотентно, как backend
+        }
+        data = _serializeUser(memberId);
+      } else if (rest.endsWith('/members') && method == 'GET') {
+        final listId = rest.substring(0, rest.length - 8);
+        final list = (_shoppingLists[uid] ?? {})[listId];
+        if (list == null) throw _error(404, 'Not found.');
+        return _json(options, {
+          'data': [
+            _serializeUser(list['owner_id'] as String),
+            ...(list['members'] as List).cast<Map<String, dynamic>>(),
+          ],
+        });
+      } else if (rest.contains('/members/') && method == 'DELETE') {
+        final i = rest.indexOf('/members/');
+        final listId = rest.substring(0, i);
+        final memberId = rest.substring(i + 9);
+        final list = (_shoppingLists[uid] ?? {})[listId];
+        if (list == null) throw _error(404, 'Not found.');
+        // Владельца удалить нельзя.
+        if (memberId == list['owner_id']) throw _error(404, 'Not found.');
+        final members = (list['members'] as List).cast<Map<String, dynamic>>();
+        // Seed'ы могут отдать const/unmodifiable — переприсваиваем.
+        list['members'] = [
+          for (final m in members)
+            if (m['id'] != memberId) m,
+        ];
+        list['revision'] = (list['revision'] as int? ?? 0) + 1;
+        status = 204;
+        data = null;
+      } else if (rest.endsWith('/items') && method == 'POST') {
         final list =
             (_shoppingLists[uid] ?? {})[rest.substring(0, rest.length - 6)];
         if (list == null) throw _error(404, 'Not found.');
@@ -757,11 +803,33 @@ class FakeApiAdapter implements HttpClientAdapter {
   Map<String, dynamic> _serializeList(Map<String, dynamic> list) => {
     'id': list['id'],
     'title': list['title'],
+    'owner_id': list['owner_id'],
+    'owner': _serializeUser(list['owner_id'] as String),
+    'members': list['members'] ?? const [],
+    'revision': list['revision'] ?? 0,
     'created_at': list['created_at'],
     'updated_at': list['updated_at'],
     'items': (list['items'] as Map<String, Map<String, dynamic>>).values
         .toList(),
   };
+
+  /// PublicUserResource-проекция пользователя.
+  Map<String, dynamic> _serializeUser(String id) {
+    Map<String, dynamic>? u;
+    for (final candidate in _users.values) {
+      if (candidate['id'] == id) {
+        u = candidate;
+        break;
+      }
+    }
+    return {
+      'id': id,
+      'name': u?['name'] as String? ?? id,
+      'username': u?['username'] as String? ?? id,
+      'avatar_url': u?['avatar_url'],
+      'is_friend': true,
+    };
+  }
 
   /// Найти позицию по id среди списков пользователя.
   (Map<String, dynamic>, Map<String, dynamic>)? _findItem(
@@ -829,16 +897,23 @@ class FakeApiAdapter implements HttpClientAdapter {
 
   /// Посеять список покупок на «сервере» (remote-изменение).
   /// [items] — список map'ов позиций (id/title/quantity/is_checked).
+  /// [ownerId] — серверный владелец (для shared-списка чужой id);
+  /// [members] — участники (PublicUserResource-формы {id,name,...}).
   void seedShoppingList(
     String uid,
     String id,
     String title, {
     List<Map<String, dynamic>> items = const [],
+    String? ownerId,
+    List<Map<String, dynamic>> members = const [],
   }) {
     final now = DateTime.now().toIso8601String();
     _shoppingLists.putIfAbsent(uid, () => {})[id] = {
       'id': id,
       'title': title,
+      'owner_id': ownerId ?? uid,
+      'members': members,
+      'revision': 0,
       'created_at': now,
       'updated_at': now,
       'items': {

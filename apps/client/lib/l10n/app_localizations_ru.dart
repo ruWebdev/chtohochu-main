@@ -629,6 +629,64 @@ class AppLocalizationsRu extends AppLocalizations {
   String get itemNotFoundError => 'Позиция не найдена.';
 
   @override
+  String get listMembers => 'Участники';
+
+  @override
+  String get listShared => 'Совместный';
+
+  @override
+  String get listMemberOwner => 'Владелец';
+
+  @override
+  String get listMemberYou => 'Вы';
+
+  @override
+  String get listMembersAdd => 'Добавить участника';
+
+  @override
+  String get listMembersAddHint => 'Добавить друга в список';
+
+  @override
+  String get listMembersNoFriends => 'Некого добавить';
+
+  @override
+  String get listMembersNoFriendsHint =>
+      'Сначала добавьте человека в друзья на экране «Друзья».';
+
+  @override
+  String listMemberAdded(String name) {
+    return '$name добавлен в список';
+  }
+
+  @override
+  String get listMemberAddFailed => 'Не удалось добавить участника.';
+
+  @override
+  String get listMemberRemove => 'Убрать из списка';
+
+  @override
+  String get listMemberRemoveTitle => 'Убрать участника?';
+
+  @override
+  String listMemberRemoveMessage(String name) {
+    return '«$name» потеряет доступ к списку.';
+  }
+
+  @override
+  String get listLeave => 'Выйти из списка';
+
+  @override
+  String get listLeaveTitle => 'Выйти из списка?';
+
+  @override
+  String listLeaveMessage(String title) {
+    return '«$title» исчезнет из ваших списков.';
+  }
+
+  @override
+  String get listMembersManage => 'Участники списка';
+
+  @override
   String get friendsTitle => 'Друзья';
 
   @override

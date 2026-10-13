@@ -57,11 +57,12 @@ class ShoppingListController extends Controller
 
         $list->setRelation('items', collect());
         $list->setRelation('members', collect());
+        $list->setRelation('owner', $request->user());
 
         event(ShoppingListEvent::forList(
             $list,
             'shopping_list.created',
-            (new ShoppingListResource($list))->resolve(),
+            $this->listPayload($list),
             $request->user()->id,
         ));
 
@@ -100,11 +101,30 @@ class ShoppingListController extends Controller
         event(ShoppingListEvent::forList(
             $shoppingList,
             'shopping_list.updated',
-            (new ShoppingListResource($shoppingList))->resolve(),
+            $this->listPayload($shoppingList),
             $request->user()->id,
         ));
 
         return new ShoppingListResource($shoppingList);
+    }
+
+    /**
+     * Полностью разрешённый snapshot списка для event payload.
+     *
+     * `JsonResource::resolve()` не раскрывает вложенные ресурсы
+     * (owner/members/items остаются объектами) — BroadcastEvent
+     * сериализовал бы живые модели. Проход через toResponse
+     * даёт ровно API-форму, включая `data`-обёртку.
+     *
+     * @return array<string, mixed>
+     */
+    private function listPayload(ShoppingList $list): array
+    {
+        $response = (new ShoppingListResource($list))
+            ->toResponse(request());
+        $decoded = json_decode($response->getContent(), true);
+
+        return is_array($decoded) ? ($decoded['data'] ?? $decoded) : [];
     }
 
     /**

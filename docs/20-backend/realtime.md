@@ -115,23 +115,30 @@ performed in `routes/channels.php`:
 Broadcast::channel('user.{id}', fn ($user, $id) => (int) $user->id === (int) $id);
 ```
 
-### 4.2 Presence channels
+### 4.2 Entity-scoped private channels
 
-Used for collaborative domains (shared shopping lists) where participants need to know
-who else is connected. Authorization reuses the same policy that governs REST access:
+Shared shopping lists use a private channel `private-shopping-list.{listId}`,
+subscribed while the list screen is open. Authorization checks actual membership
+(same rule as REST access) — implemented in `routes/channels.php`:
 
 ```php
 Broadcast::channel('shopping-list.{listId}', function ($user, $listId) {
     $list = ShoppingList::find($listId);
-    if (!$list || !$user->can('view', $list)) {
-        return false;
-    }
-    return [
-        'id' => $user->id,
-        'name' => $user->name,
-    ];
+    return $list !== null && $list->hasMember($user);
 });
 ```
+
+In addition to the list channel, shopping events fan out to `private-user.{id}`
+of every current participant, so members learn about membership changes even when
+the list screen is not open. The removed member is included in `participant.left`
+delivery so their client drops the list on the next reconcile.
+
+### 4.3 Presence channels
+
+Presence channels (`presence-shopping-list.{listId}`) remain an option for
+collaborative domains when "who is online" metadata is needed. The current
+shopping-list implementation does not need presence — the private channel covers
+state synchronization.
 
 ## 5. Event Flow
 

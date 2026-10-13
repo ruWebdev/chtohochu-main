@@ -9,14 +9,17 @@ import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/realtime/realtime_client.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
+import '../../../session/presentation/providers/app_session_controller.dart';
 import '../../data/shopping_repository.dart';
 import '../../domain/shopping_item.dart';
 import '../../domain/shopping_list.dart';
 import '../providers/shopping_lists_controller.dart';
 import '../widgets/shopping_item_composer.dart';
 import '../widgets/shopping_item_row.dart';
+import '../widgets/shopping_list_members_sheet.dart';
 
 /// Экран конкретного списка покупок — позиции списка.
 ///
@@ -34,6 +37,26 @@ class ShoppingListPage extends ConsumerStatefulWidget {
 }
 
 class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
+  /// Пока экран списка открыт, клиент подписан на
+  /// `private-shopping-list.{id}` — события участников триггерят
+  /// pull reconcile через SyncEngine (transport-only realtime).
+  /// Кэшируется в поле: `ref` нельзя трогать из `dispose`.
+  late final RealtimeClient _realtime;
+
+  @override
+  void initState() {
+    super.initState();
+    _realtime = ref.read(realtimeClientProvider);
+    _realtime.watchShoppingList(widget.listId);
+  }
+
+  @override
+  void dispose() {
+    // ref в dispose нельзя — клиент закеширован при initState.
+    _realtime.unwatchShoppingList(widget.listId);
+    super.dispose();
+  }
+
   void _back() {
     if (context.canPop()) {
       context.pop();
@@ -136,12 +159,39 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
     );
   }
 
+  /// Выход участника из совместного списка: локально список
+  /// исчезает сразу, member-delete уедет через outbox.
+  Future<void> _confirmLeaveList(ShoppingList list) async {
+    final l10n = context.l10n;
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: l10n.listLeaveTitle,
+      message: l10n.listLeaveMessage(list.title),
+      confirmLabel: l10n.listLeave,
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref
+          .read(shoppingListsControllerProvider.notifier)
+          .leaveList(list.id);
+      if (mounted) context.go(AppRoutes.shopping);
+    } on ShoppingError catch (e) {
+      if (mounted) _showMutationError(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final l10n = context.l10n;
     final isLoading = ref.watch(shoppingListsControllerProvider).isLoading;
     final list = ref.watch(shoppingListByIdProvider(widget.listId));
+    final currentUserId = ref.watch(currentUserProvider)?.id;
+    // Пока профиль не отдал id — считаем своим (сервер всё равно
+    // проверит права; это лишь вопрос видимых действий).
+    final isOwner =
+        list == null || currentUserId == null || list.isOwnedBy(currentUserId);
 
     return PopScope(
       // Страница открыта через `go()` — системный Back ведёт к списку
@@ -163,19 +213,28 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
           ),
           actions: [
             if (list != null) ...[
-              AppBarAction(
-                icon: PhosphorIconsRegular.pencilSimple,
-                onPressed: () =>
-                    context.go(AppRoutes.shoppingListEdit(list.id)),
-                semanticLabel: l10n.listRename,
-                tooltip: l10n.listRenameTooltip,
-              ),
-              AppBarAction(
-                icon: PhosphorIconsRegular.trash,
-                onPressed: () => _confirmDeleteList(list),
-                semanticLabel: l10n.listDeleteSemantic,
-                tooltip: l10n.listDeleteSemantic,
-              ),
+              if (isOwner) ...[
+                // Управление составом и метаданными — только владельцу.
+                AppBarAction(
+                  icon: PhosphorIconsRegular.pencilSimple,
+                  onPressed: () =>
+                      context.go(AppRoutes.shoppingListEdit(list.id)),
+                  semanticLabel: l10n.listRename,
+                  tooltip: l10n.listRenameTooltip,
+                ),
+                AppBarAction(
+                  icon: PhosphorIconsRegular.trash,
+                  onPressed: () => _confirmDeleteList(list),
+                  semanticLabel: l10n.listDeleteSemantic,
+                  tooltip: l10n.listDeleteSemantic,
+                ),
+              ] else
+                AppBarAction(
+                  icon: PhosphorIconsRegular.signOut,
+                  onPressed: () => _confirmLeaveList(list),
+                  semanticLabel: l10n.listLeave,
+                  tooltip: l10n.listLeave,
+                ),
             ],
           ],
         ),
@@ -190,7 +249,14 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
               ? _NotFound(onBack: _back)
               : Column(
                   children: [
-                    Expanded(child: _buildList(context, list)),
+                    Expanded(
+                      child: _buildList(
+                        context,
+                        list,
+                        currentUserId: currentUserId,
+                        isOwner: isOwner,
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.screenPaddingHorizontal,
@@ -207,7 +273,16 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
     );
   }
 
-  Widget _buildList(BuildContext context, ShoppingList list) {
+  Widget _buildList(
+    BuildContext context,
+    ShoppingList list, {
+    required String? currentUserId,
+    required bool isOwner,
+  }) {
+    // Блок участников показываем, когда список уже совместный,
+    // либо владельцу — как вход в управление составом.
+    final showMembers = currentUserId != null && (list.isShared || isOwner);
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: ListView(
@@ -218,6 +293,18 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
           _ListHeader(list: list),
+          if (showMembers) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _MembersRow(
+              list: list,
+              currentUserId: currentUserId,
+              onTap: () => showShoppingListMembersSheet(
+                context,
+                listId: list.id,
+                currentUserId: currentUserId,
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
 
           if (list.items.isEmpty)
@@ -289,6 +376,88 @@ class _ListHeader extends StatelessWidget {
           _ProgressBar(value: total == 0 ? 0 : checked / total),
         ],
       ],
+    );
+  }
+}
+
+/// Компактная строка участников совместного списка:
+/// перекрывающиеся аватары + подпись «Участники: N». Тап открывает
+/// sheet управления составом (для member — только просмотр).
+class _MembersRow extends StatelessWidget {
+  const _MembersRow({
+    required this.list,
+    required this.currentUserId,
+    required this.onTap,
+  });
+
+  final ShoppingList list;
+  final String currentUserId;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+    final l10n = context.l10n;
+    // Владелец первым, затем остальные; максимум 4 аватара в ряду.
+    final ordered = [...list.members]
+      ..sort((a, b) => (b.isOwner ? 1 : 0) - (a.isOwner ? 1 : 0));
+    final shown = ordered.take(4).toList();
+    const avatarSize = AppAvatarSize.sm;
+    const overlap = 8.0;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.xs,
+            horizontal: AppSpacing.xxs,
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: shown.isEmpty
+                    ? 0
+                    : 24 + (shown.length - 1) * (24 - overlap) + 0,
+                height: 24,
+                child: Stack(
+                  children: [
+                    for (var i = 0; i < shown.length; i++)
+                      Positioned(
+                        left: i * (24 - overlap),
+                        child: AppAvatar(
+                          imageUrl: shown[i].avatarUrl,
+                          initials: shown[i].initials,
+                          size: avatarSize,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  list.isShared
+                      ? '${l10n.listShared} · ${l10n.listMembers}: '
+                            '${list.members.length}'
+                      : l10n.listMembers,
+                  style: t.caption.copyWith(color: colors.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(
+                PhosphorIconsRegular.caretRight,
+                size: AppSizes.iconSizeSm,
+                color: colors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

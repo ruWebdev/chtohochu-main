@@ -10,6 +10,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/session/presentation/providers/app_session_controller.dart';
+import '../../features/shopping/data/shopping_repository.dart'
+    show ShoppingEntityTypes;
 import '../../features/wishes/data/wish_photo_picker.dart';
 import '../../features/wishes/domain/wish.dart';
 import '../database/app_database.dart';
@@ -187,6 +189,8 @@ class SyncEngine {
     // payload — это и есть намерение операции.
     final listId = switch (op.entityType) {
       'shopping_item' => await _itemListId(op),
+      // Участник не может уехать раньше родительского списка.
+      'shopping_list_member' => _payload(op)['list_id'] as String?,
       'wish' => _payload(op)['list_id'] as String?,
       _ => null,
     };
@@ -216,17 +220,31 @@ class SyncEngine {
     _ => '/wishes',
   };
 
-  /// Endpoint создания: позиция создаётся внутри родительского
-  /// списка `POST /shopping-lists/{listId}/items`.
-  String _createPath(OutboxEntry op) => op.entityType == 'shopping_item'
-      ? '/shopping-lists/${_payload(op)['list_id']}/items'
-      : _collection(op);
+  /// Endpoint создания: позиция и участник создаются внутри
+  /// родительского списка.
+  String _createPath(OutboxEntry op) => switch (op.entityType) {
+    'shopping_item' => '/shopping-lists/${_payload(op)['list_id']}/items',
+    'shopping_list_member' =>
+      '/shopping-lists/${_payload(op)['list_id']}/members',
+    _ => _collection(op),
+  };
+
+  /// Тело запроса: для member-операции локальный payload несёт
+  /// профильные поля для Drift-проекции — в API уходит только
+  /// серверный контракт (`user_id`).
+  Map<String, dynamic> _requestPayload(OutboxEntry op) {
+    final payload = _payload(op);
+    if (op.entityType == 'shopping_list_member') {
+      return {'user_id': payload['user_id']};
+    }
+    return payload;
+  }
 
   Future<void> _pushCreate(OutboxEntry op) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         _createPath(op),
-        data: _payload(op),
+        data: _requestPayload(op),
       );
       await _db.transaction(() async {
         // Ответ пришёл после detach/смены аккаунта — ничего не
@@ -368,6 +386,19 @@ class SyncEngine {
   String _updatePath(OutboxEntry op) =>
       op.entityType == 'profile' ? '/me' : '${_collection(op)}/${op.entityId}';
 
+  /// Endpoint удаления: member — вложенный ресурс списка
+  /// `DELETE /shopping-lists/{listId}/members/{userId}`;
+  /// entityId составной `<listId>:<memberId>`.
+  String _deletePath(OutboxEntry op) {
+    if (op.entityType == 'shopping_list_member') {
+      final parsed = ShoppingEntityTypes.parseMemberEntityId(op.entityId);
+      final listId = parsed?.listId ?? _payload(op)['list_id'];
+      final memberId = parsed?.memberId ?? _payload(op)['user_id'];
+      return '/shopping-lists/$listId/members/$memberId';
+    }
+    return '${_collection(op)}/${op.entityId}';
+  }
+
   Future<void> _pushUpdate(OutboxEntry op) async {
     try {
       final res = await _dio.patch<Map<String, dynamic>>(
@@ -413,7 +444,7 @@ class SyncEngine {
 
   Future<void> _pushDelete(OutboxEntry op) async {
     try {
-      await _dio.delete<void>('${_collection(op)}/${op.entityId}');
+      await _dio.delete<void>(_deletePath(op));
       // Пока DELETE летел, сущность могла быть re-created локально:
       // compaction снял нашу операцию и поставил create/update.
       // Тогда dropLocalEntity снёс бы и строку, и свежие ops —
@@ -458,6 +489,21 @@ class SyncEngine {
                 .go();
             await _outbox.dropEntityOps(op.ownerId, item.id);
           }
+          // Membership-строки и их операции тоже.
+          final members = await (_db.select(
+            _db.shoppingListMembers,
+          )..where((m) => m.listId.equals(op.entityId))).get();
+          for (final m in members) {
+            await _outbox.dropEntityOps(
+              op.ownerId,
+              ShoppingEntityTypes.memberEntityId(op.entityId, m.memberId),
+            );
+          }
+          await (_db.delete(_db.shoppingListMembers)..where(
+                (m) =>
+                    m.listId.equals(op.entityId) & m.ownerId.equals(op.ownerId),
+              ))
+              .go();
           await (_db.delete(_db.shoppingLists)..where(
                 (l) => l.id.equals(op.entityId) & l.ownerId.equals(op.ownerId),
               ))
@@ -467,6 +513,17 @@ class SyncEngine {
                 (i) => i.id.equals(op.entityId) & i.ownerId.equals(op.ownerId),
               ))
               .go();
+        case 'shopping_list_member':
+          final parsed = ShoppingEntityTypes.parseMemberEntityId(op.entityId);
+          if (parsed != null) {
+            await (_db.delete(_db.shoppingListMembers)..where(
+                  (m) =>
+                      m.ownerId.equals(op.ownerId) &
+                      m.listId.equals(parsed.listId) &
+                      m.memberId.equals(parsed.memberId),
+                ))
+                .go();
+          }
         case 'wish_list':
           // Список желаний удаляется БЕЗ каскада: его wishes
           // остаются, разгруппировываясь (list_id → null).
@@ -736,6 +793,31 @@ class SyncEngine {
                 updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
               ),
             );
+      case 'shopping_list_member':
+        // Ответ POST /members — PublicUserResource добавленного.
+        final parsed = ShoppingEntityTypes.parseMemberEntityId(op.entityId);
+        if (parsed == null) return;
+        await (_db.delete(_db.shoppingListMembers)..where(
+              (m) =>
+                  m.ownerId.equals(op.ownerId) &
+                  m.listId.equals(parsed.listId) &
+                  m.memberId.equals(parsed.memberId),
+            ))
+            .go();
+        await _db
+            .into(_db.shoppingListMembers)
+            .insert(
+              ShoppingListMembersCompanion(
+                ownerId: Value(op.ownerId),
+                listId: Value(parsed.listId),
+                memberId: Value(data['id'] as String),
+                role: const Value('member'),
+                name: Value(data['name'] as String?),
+                username: Value(data['username'] as String?),
+                avatarUrl: Value(data['avatar_url'] as String?),
+                createdAt: Value(DateTime.now()),
+              ),
+            );
       case 'shopping_item':
         // is_checked не принимается при POST /items (server default
         // false): если compaction схлопнул create+check в один create,
@@ -903,6 +985,19 @@ class SyncEngine {
                 ))
                 .getSingleOrNull() !=
             null,
+      'shopping_list_member' => await () async {
+        final parsed = ShoppingEntityTypes.parseMemberEntityId(op.entityId);
+        if (parsed == null) return false;
+        return await (_db.select(_db.shoppingListMembers)..where(
+                  (m) =>
+                      m.ownerId.equals(op.ownerId) &
+                      m.listId.equals(parsed.listId) &
+                      m.memberId.equals(parsed.memberId) &
+                      m.deletedAt.isNull(),
+                ))
+                .getSingleOrNull() !=
+            null;
+      }(),
       'friendship' =>
         await (_db.select(_db.friendships)..where(
                   (f) =>
@@ -1044,6 +1139,32 @@ class SyncEngine {
               (l) => l.id.equals(op.entityId) & l.ownerId.equals(op.ownerId),
             ))
             .write(const WishListsCompanion(deletedAt: Value(null)));
+      case 'shopping_list_member':
+        final parsed = ShoppingEntityTypes.parseMemberEntityId(op.entityId);
+        if (parsed != null) {
+          // Список мог быть физически удалён локально (leaveList) —
+          // воскрешать строку membership без списка нельзя.
+          final list = await _db.shoppingListById(op.ownerId, parsed.listId);
+          if (list == null) {
+            await (_db.delete(_db.shoppingListMembers)..where(
+                  (m) =>
+                      m.ownerId.equals(op.ownerId) &
+                      m.listId.equals(parsed.listId) &
+                      m.memberId.equals(parsed.memberId),
+                ))
+                .go();
+            return;
+          }
+          await (_db.update(_db.shoppingListMembers)..where(
+                (m) =>
+                    m.ownerId.equals(op.ownerId) &
+                    m.listId.equals(parsed.listId) &
+                    m.memberId.equals(parsed.memberId),
+              ))
+              .write(
+                const ShoppingListMembersCompanion(deletedAt: Value(null)),
+              );
+        }
       case 'friendship':
         await (_db.update(_db.friendships)..where(
               (f) =>
@@ -1125,11 +1246,14 @@ class SyncEngine {
     final remoteItems = <ShoppingItemsCompanion>[];
     final remoteItemIds = <String>{};
     final remoteItemListIds = <String, String>{};
+    // Участники списков: composite '<listId>:<memberId>' → строка.
+    final remoteMembers = <String, ShoppingListMembersCompanion>{};
     for (final raw in rawLists) {
-      final list = _parseShoppingListRow(raw as Map<String, dynamic>);
+      final map = raw as Map<String, dynamic>;
+      final list = _parseShoppingListRow(map);
       remoteLists.add(list);
       remoteListIds.add(list.id.value);
-      final items = raw['items'];
+      final items = map['items'];
       if (items is List) {
         for (final rawItem in items) {
           final item = _parseShoppingItemRow(
@@ -1139,6 +1263,31 @@ class SyncEngine {
           remoteItems.add(item);
           remoteItemIds.add(item.id.value);
           remoteItemListIds[item.id.value] = list.id.value;
+        }
+      }
+      // Владелец — участник с ролью 'owner'; members — 'member'.
+      final listOwnerId = map['owner_id'] as String?;
+      final owner = map['owner'];
+      if (listOwnerId != null) {
+        remoteMembers['${list.id.value}:$listOwnerId'] = _parseMemberRow(
+          owner is Map<String, dynamic> ? owner : null,
+          list.id.value,
+          listOwnerId,
+          'owner',
+        );
+      }
+      final members = map['members'];
+      if (members is List) {
+        for (final rawMember in members) {
+          final m = rawMember as Map<String, dynamic>;
+          final memberId = m['id'] as String?;
+          if (memberId == null) continue;
+          remoteMembers['${list.id.value}:$memberId'] = _parseMemberRow(
+            m,
+            list.id.value,
+            memberId,
+            'member',
+          );
         }
       }
     }
@@ -1205,6 +1354,23 @@ class SyncEngine {
               .insertOnConflictUpdate(row.copyWith(ownerId: Value(ownerId)));
         }
       }
+      // Участники списков: pending/failed member-операция
+      // (entityId '<listId>:<memberId>') или незавершённая
+      // операция самого списка защищают локальное состояние.
+      for (final entry in remoteMembers.entries) {
+        final row = entry.value;
+        if (pending.contains(entry.key) || pending.contains(row.listId.value)) {
+          continue;
+        }
+        await _db
+            .into(_db.shoppingListMembers)
+            .insertOnConflictUpdate(
+              row.copyWith(
+                ownerId: Value(ownerId),
+                deletedAt: const Value(null),
+              ),
+            );
+      }
 
       // Remote-delete detection: локальная чистая сущность, которой
       // нет в snapshot → удалена на другом устройстве → удалить и тут.
@@ -1233,9 +1399,59 @@ class SyncEngine {
       )..where((l) => l.ownerId.equals(ownerId))).get();
       for (final l in localLists) {
         if (!remoteListIds.contains(l.id) && !pending.contains(l.id)) {
+          // Списка нет в моём index — удалён владельцем ИЛИ я
+          // больше не участник (removed/leave на другом устройстве).
+          // Позиции и участники удаляем каскадом вместе со строкой.
+          // Pending item/member-операции обречены (404 на несуществующий
+          // список) — снимаем их, иначе вечный retry.
+          final deadItems =
+              await (_db.select(_db.shoppingItems)..where(
+                    (i) => i.listId.equals(l.id) & i.ownerId.equals(ownerId),
+                  ))
+                  .get();
+          for (final i in deadItems) {
+            await _outbox.dropEntityOps(ownerId, i.id);
+          }
+          await (_db.delete(_db.shoppingItems)..where(
+                (i) => i.listId.equals(l.id) & i.ownerId.equals(ownerId),
+              ))
+              .go();
+          final deadMembers =
+              await (_db.select(_db.shoppingListMembers)..where(
+                    (m) => m.listId.equals(l.id) & m.ownerId.equals(ownerId),
+                  ))
+                  .get();
+          for (final m in deadMembers) {
+            await _outbox.dropEntityOps(
+              ownerId,
+              ShoppingEntityTypes.memberEntityId(l.id, m.memberId),
+            );
+          }
+          await (_db.delete(_db.shoppingListMembers)..where(
+                (m) => m.listId.equals(l.id) & m.ownerId.equals(ownerId),
+              ))
+              .go();
           await (_db.delete(
             _db.shoppingLists,
           )..where((x) => x.id.equals(l.id))).go();
+        }
+      }
+      // Remote-delete участников: список жив, а строки нет в
+      // snapshot → членство снято на другом устройстве/владельцем.
+      final localMembers = await (_db.select(
+        _db.shoppingListMembers,
+      )..where((m) => m.ownerId.equals(ownerId))).get();
+      for (final m in localMembers) {
+        if (!remoteListIds.contains(m.listId)) continue;
+        final key = '${m.listId}:${m.memberId}';
+        if (!remoteMembers.containsKey(key) && !pending.contains(key)) {
+          await (_db.delete(_db.shoppingListMembers)..where(
+                (x) =>
+                    x.ownerId.equals(ownerId) &
+                    x.listId.equals(m.listId) &
+                    x.memberId.equals(m.memberId),
+              ))
+              .go();
         }
       }
       final localItems = await (_db.select(
@@ -1333,8 +1549,30 @@ class SyncEngine {
     return ShoppingListsCompanion(
       id: Value(m['id'] as String),
       title: Value(m['title'] as String),
+      ownerUserId: Value(m['owner_id'] as String? ?? ''),
       createdAt: Value(DateTime.parse(m['created_at'] as String)),
       updatedAt: Value(DateTime.parse(m['updated_at'] as String)),
+    );
+  }
+
+  /// Строка участника списка из PublicUserResource (+ роль).
+  /// `cachedAt` здесь не существует — ordering по createdAt
+  /// локальный (now) и стабилен между pull'ами благодаря
+  /// insertOnConflictUpdate.
+  ShoppingListMembersCompanion _parseMemberRow(
+    Map<String, dynamic>? m,
+    String listId,
+    String memberId,
+    String role,
+  ) {
+    return ShoppingListMembersCompanion(
+      listId: Value(listId),
+      memberId: Value(memberId),
+      role: Value(role),
+      name: Value(m?['name'] as String?),
+      username: Value(m?['username'] as String?),
+      avatarUrl: Value(m?['avatar_url'] as String?),
+      createdAt: Value(DateTime.now()),
     );
   }
 

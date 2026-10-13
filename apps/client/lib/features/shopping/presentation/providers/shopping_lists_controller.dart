@@ -4,6 +4,7 @@ import '../../../../core/sync/sync_engine.dart';
 import '../../data/shopping_repository.dart';
 import '../../domain/shopping_item.dart';
 import '../../domain/shopping_list.dart';
+import '../../domain/shopping_list_member.dart';
 
 /// Контроллер списков покупок.
 ///
@@ -24,6 +25,21 @@ class ShoppingListsController extends StreamNotifier<List<ShoppingList>> {
   /// Удалить список вместе с позициями (локально + outbox).
   Future<void> deleteList(String id) =>
       ref.read(shoppingRepositoryProvider).deleteList(id);
+
+  /// Добавить друга в участники списка (локально + outbox;
+  /// сервер проверит владельца и дружбу).
+  Future<void> addMember(String listId, ShoppingListMember member) => ref
+      .read(shoppingRepositoryProvider)
+      .addMember(listId: listId, member: member);
+
+  /// Удалить участника из списка (только владелец).
+  Future<void> removeMember(String listId, String memberId) => ref
+      .read(shoppingRepositoryProvider)
+      .removeMember(listId: listId, memberId: memberId);
+
+  /// Покинуть совместный список (member удаляет себя).
+  Future<void> leaveList(String listId) =>
+      ref.read(shoppingRepositoryProvider).leaveList(listId);
 
   /// Добавить позицию в список. Возвращает обновлённый список.
   /// [imagePath] — локальный файл фото (offline-first, не сеть).

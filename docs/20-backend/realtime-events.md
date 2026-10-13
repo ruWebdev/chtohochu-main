@@ -102,20 +102,20 @@ Event types follow the pattern `<domain>.<entity>.<action>`. Actions are lowerca
 
 ### 4.3 Shopping Lists
 
-Shopping lists are the reference collaborative domain. Events go to a presence channel so all participants receive them and see presence.
+Shopping lists are the reference collaborative domain. Implemented with a private channel `private-shopping-list.{listId}` (subscribed while the list screen is open) plus fan-out to `private-user.{userId}` of every participant, so membership/item changes reach members even when the list screen is not open. The client deduplicates by `event_id` — the same event on two channels is processed once. A presence channel can be added later without changing the event contract.
 
 | `event_type` | `entity_type` | Payload | Channel |
 |--------------|---------------|---------|---------|
-| `shopping_list.created` | `shopping_list` | snapshot | `private-user.{userId}` |
-| `shopping_list.updated` | `shopping_list` | snapshot or delta | `presence-shopping-list.{listId}` |
-| `shopping_list.deleted` | `shopping_list` | `{ "deleted": true }` | `presence-shopping-list.{listId}` |
-| `shopping_list.item.created` | `shopping_list_item` | snapshot | `presence-shopping-list.{listId}` |
-| `shopping_list.item.updated` | `shopping_list_item` | snapshot or delta | `presence-shopping-list.{listId}` |
-| `shopping_list.item.deleted` | `shopping_list_item` | `{ "deleted": true }` | `presence-shopping-list.{listId}` |
-| `shopping_list.item.checked` | `shopping_list_item` | `{ "checked": true, "checked_by": "<userId>" }` | `presence-shopping-list.{listId}` |
-| `shopping_list.item.unchecked` | `shopping_list_item` | `{ "checked": false }` | `presence-shopping-list.{listId}` |
-| `shopping_list.participant.joined` | `shopping_list` | `{ "user_id": "...", "role": "..." }` | `presence-shopping-list.{listId}` |
-| `shopping_list.participant.left` | `shopping_list` | `{ "user_id": "..." }` | `presence-shopping-list.{listId}` |
+| `shopping_list.created` | `shopping_list` | snapshot | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.updated` | `shopping_list` | snapshot or delta | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.deleted` | `shopping_list` | `{ "deleted": true }` | `private-shopping-list.{listId}` + `private-user.{participantId}` (snapshot taken before delete) |
+| `shopping_list.item.created` | `shopping_list_item` | snapshot | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.item.updated` | `shopping_list_item` | snapshot or delta | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.item.deleted` | `shopping_list_item` | `{ "deleted": true }` | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.item.checked` | `shopping_list_item` | item snapshot | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.item.unchecked` | `shopping_list_item` | item snapshot | `private-shopping-list.{listId}` + `private-user.{participantId}` |
+| `shopping_list.participant.joined` | `shopping_list` | `{ "user": {...}, "role": "member" }` | `private-shopping-list.{listId}` + `private-user.{participantId}` (incl. the new member) |
+| `shopping_list.participant.left` | `shopping_list` | `{ "user_id": "..." }` | `private-shopping-list.{listId}` + `private-user.{participantId}` (incl. the removed member — they must learn they lost access) |
 
 ### 4.4 Friends
 
@@ -155,8 +155,8 @@ presence-<scope>.<id>
 | `private-user.{userId}` | private | The user themselves |
 | `private-wishlist.{wishlistId}` | private | Wishlist owner + viewers with access |
 | `private-friends.{userId}` | private | The user themselves |
-| `private-shopping-list.{listId}` | private | (fallback, used when presence not needed) |
-| `presence-shopping-list.{listId}` | presence | All current participants |
+| `private-shopping-list.{listId}` | private | List owner + current members (membership authorization, `routes/channels.php`) |
+| `presence-shopping-list.{listId}` | presence | All current participants (optional, when presence UI is needed) |
 
 Rules:
 
@@ -236,26 +236,25 @@ User A checks an item in a shared shopping list while User B is viewing the same
 ```text
 User A taps "check"
         ↓
-Flutter: optimistic local write (Drift) + sync queue entry
+Flutter: optimistic local write (Drift) + outbox entry
         ↓
-REST: PATCH /api/v1/shopping-lists/{listId}/items/{itemId}  (Idempotency-Key: <operation_id>)
+REST: PATCH /api/v1/shopping-items/{itemId}
         ↓
 Laravel: authorize A is participant, validate, transaction:
-           - UPDATE shopping_list_items SET checked=true, revision=revision+1
+           - UPDATE shopping_items SET is_checked=true, revision=revision+1
            - COMMIT
         ↓
-Broadcast: shopping_list.item.checked  (revision=42, actor_id=A)
+Broadcast (after commit): shopping_list.item.checked
+           (revision=42, actor_id=A, payload=item snapshot)
         ↓
-Reverb → presence-shopping-list.{listId}
+Reverb → private-shopping-list.{listId} + private-user.{participantId}
         ↓
-User B's client receives event
+User B's client receives event → dedupe by event_id
         ↓
-Dedupe (new event_id) → revision 42 > local 41 → apply
-        ↓
-Drift upsert → provider → UI shows item checked by A
+SyncEngine.requestSync() → REST pull → Drift upsert → UI shows checked
 ```
 
-User A's own client receives the same event (it is subscribed to the presence channel). `actor_id === A`, so A's client MAY skip re-application (its optimistic update already set the state). If it applies anyway, the revision guard makes it a no-op.
+The client treats events as transport-only: the event wakes the sync engine, and convergence happens through the REST pull — state is never applied from the payload directly. User A's own client receives the same event (echo) plus a copy on `private-user.{A}` — the `event_id` dedupe drops the duplicate, and the pull is a no-op against its already-optimistic local state.
 
 ---
 

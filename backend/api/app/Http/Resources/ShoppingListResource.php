@@ -27,6 +27,7 @@ class ShoppingListResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'owner_id' => $this->owner_id,
+            'owner' => new PublicUserResource($this->whenLoaded('owner')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
             'items' => ShoppingItemResource::collection($this->whenLoaded('items')),

@@ -1092,6 +1092,9 @@ class AppDatabase extends _$AppDatabase {
       await (delete(
         shoppingItems,
       )..where((i) => i.ownerId.equals(ownerId))).go();
+      await (delete(
+        shoppingListMembers,
+      )..where((m) => m.ownerId.equals(ownerId))).go();
       await (delete(friendships)..where((f) => f.ownerId.equals(ownerId))).go();
       await (delete(
         friendWishes,

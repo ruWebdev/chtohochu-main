@@ -66,11 +66,33 @@ class ShoppingListCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  progressText,
-                  style: t.caption.copyWith(color: progressColor),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    if (list.isShared) ...[
+                      Icon(
+                        PhosphorIconsRegular.usersThree,
+                        size: AppSizes.iconSizeSm,
+                        color: colors.textMuted,
+                      ),
+                      const SizedBox(width: AppSpacing.xxs),
+                      Text(
+                        l10n.listShared,
+                        style: t.caption.copyWith(color: colors.textMuted),
+                      ),
+                      Text(
+                        ' · ',
+                        style: t.caption.copyWith(color: colors.textMuted),
+                      ),
+                    ],
+                    Flexible(
+                      child: Text(
+                        progressText,
+                        style: t.caption.copyWith(color: progressColor),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

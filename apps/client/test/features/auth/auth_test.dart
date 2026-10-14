@@ -51,7 +51,7 @@ void main() {
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Введите корректный email'), findsOneWidget);
+    expect(find.text('Введи корректный email'), findsOneWidget);
   });
 
   testWidgets('Password validation shows error on short input', (tester) async {
@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Пароль не короче 8 символов'), findsOneWidget);
+    expect(find.text('Пароль должен быть не короче 8 символов'), findsOneWidget);
   });
 
   testWidgets('Successful login navigates to first wish flow', (tester) async {

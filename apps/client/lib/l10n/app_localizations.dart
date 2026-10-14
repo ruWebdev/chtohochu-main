@@ -199,7 +199,7 @@ abstract class AppLocalizations {
   /// Generic retry hint text
   ///
   /// In ru, this message translates to:
-  /// **'Попробуйте ещё раз.'**
+  /// **'Попробуй ещё раз.'**
   String get tryAgain;
 
   /// Title shown when a list fails to load
@@ -211,7 +211,7 @@ abstract class AppLocalizations {
   /// Hint under the load-failed title
   ///
   /// In ru, this message translates to:
-  /// **'Потяните вниз, чтобы обновить.'**
+  /// **'Потяни вниз, чтобы обновить.'**
   String get pullToRefresh;
 
   /// Inline suffix in wishes subtitle shown when local changes have not been synced
@@ -235,7 +235,7 @@ abstract class AppLocalizations {
   /// Error shown when a local mutation fails
   ///
   /// In ru, this message translates to:
-  /// **'Не удалось сохранить. Проверьте интернет.'**
+  /// **'Не удалось сохранить. Проверь интернет.'**
   String get errorSaveFailed;
 
   /// Error shown when an action requires a signed-in user
@@ -253,7 +253,7 @@ abstract class AppLocalizations {
   /// Fallback for unexpected errors
   ///
   /// In ru, this message translates to:
-  /// **'Произошла ошибка. Попробуйте ещё раз.'**
+  /// **'Произошла ошибка. Попробуй ещё раз.'**
   String get errorGeneric;
 
   /// Bottom navigation label for the wishes section
@@ -379,7 +379,7 @@ abstract class AppLocalizations {
   /// Description under the generic load-failed title on the share viewer
   ///
   /// In ru, this message translates to:
-  /// **'Проверьте подключение к интернету и попробуйте ещё раз.'**
+  /// **'Проверь подключение к интернету и попробуй ещё раз.'**
   String get shareLoadErrorDescription;
 
   /// Retry button on failed load states
@@ -427,13 +427,13 @@ abstract class AppLocalizations {
   /// Subtitle under the logo in login mode
   ///
   /// In ru, this message translates to:
-  /// **'Войдите, чтобы продолжить'**
+  /// **'Войди, чтобы продолжить'**
   String get authSubtitleLogin;
 
   /// Subtitle under the logo in registration mode
   ///
   /// In ru, this message translates to:
-  /// **'Создайте аккаунт за минуту'**
+  /// **'Создай аккаунт за минуту'**
   String get authSubtitleRegister;
 
   /// Login tab in the mode toggle
@@ -457,7 +457,7 @@ abstract class AppLocalizations {
   /// Name field placeholder in registration mode
   ///
   /// In ru, this message translates to:
-  /// **'Как вас зовут'**
+  /// **'Как тебя зовут?'**
   String get authNameHint;
 
   /// Accessibility label for the name field
@@ -493,7 +493,7 @@ abstract class AppLocalizations {
   /// Password field placeholder
   ///
   /// In ru, this message translates to:
-  /// **'Минимум 6 символов'**
+  /// **'Минимум 8 символов'**
   String get passwordHint;
 
   /// Accessibility label for the password field
@@ -541,13 +541,13 @@ abstract class AppLocalizations {
   /// Validation error under the email field
   ///
   /// In ru, this message translates to:
-  /// **'Введите корректный email'**
+  /// **'Введи корректный email'**
   String get emailInvalid;
 
   /// Validation error under the password field
   ///
   /// In ru, this message translates to:
-  /// **'Пароль не короче 8 символов'**
+  /// **'Пароль должен быть не короче 8 символов'**
   String get passwordTooShort;
 
   /// Error after a 401 response on login
@@ -565,13 +565,13 @@ abstract class AppLocalizations {
   /// Error when the auth request cannot reach the server
   ///
   /// In ru, this message translates to:
-  /// **'Проверьте подключение к интернету'**
+  /// **'Проверь подключение к интернету'**
   String get authNetwork;
 
   /// Unexpected auth failure
   ///
   /// In ru, this message translates to:
-  /// **'Произошла ошибка. Попробуйте ещё раз.'**
+  /// **'Произошла ошибка. Попробуй ещё раз.'**
   String get authGeneric;
 
   /// Unexpected failure of the VK OAuth flow
@@ -604,6 +604,36 @@ abstract class AppLocalizations {
   /// **'Вход через соцсети скоро будет доступен'**
   String get oauthUnavailableTitle;
 
+  /// OAuth login rejected with 409: email matches an existing account, confirmed linking required
+  ///
+  /// In ru, this message translates to:
+  /// **'Аккаунт с такой почтой уже существует. Войди по email и привяжи {provider} в профиле.'**
+  String oauthLinkRequired(String provider);
+
+  /// Snackbar after a provider account is linked in profile
+  ///
+  /// In ru, this message translates to:
+  /// **'{provider} привязан.'**
+  String oauthLinked(String provider);
+
+  /// Failure of the confirmed provider linking flow
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось привязать {provider}. Попробуй ещё раз.'**
+  String oauthLinkFailed(String provider);
+
+  /// Profile action: link VK account
+  ///
+  /// In ru, this message translates to:
+  /// **'Привязать VK'**
+  String get oauthConnectVk;
+
+  /// Profile action: link Yandex account
+  ///
+  /// In ru, this message translates to:
+  /// **'Привязать Яндекс'**
+  String get oauthConnectYandex;
+
   /// Skip button in the onboarding top bar
   ///
   /// In ru, this message translates to:
@@ -631,7 +661,7 @@ abstract class AppLocalizations {
   /// Description of onboarding slide 1
   ///
   /// In ru, this message translates to:
-  /// **'Записывайте свои желания в одном месте, чтобы ничего не потерялось.'**
+  /// **'Записывай желания в одном месте, чтобы ничего не потерялось.'**
   String get onboardingSlide1Description;
 
   /// Title of onboarding slide 2
@@ -643,7 +673,7 @@ abstract class AppLocalizations {
   /// Description of onboarding slide 2
   ///
   /// In ru, this message translates to:
-  /// **'Добавляйте идеи подарков, вещи и мечты — они всегда будут под рукой.'**
+  /// **'Добавляй идеи подарков, вещи и мечты — они всегда будут под рукой.'**
   String get onboardingSlide2Description;
 
   /// Title of onboarding slide 3
@@ -655,7 +685,7 @@ abstract class AppLocalizations {
   /// Description of onboarding slide 3
   ///
   /// In ru, this message translates to:
-  /// **'Поделитесь списком — и получите именно то, чего вы действительно хотите.'**
+  /// **'Поделись списком — и получишь именно то, чего хочешь.'**
   String get onboardingSlide3Description;
 
   /// Title of the wishes list screen
@@ -745,7 +775,7 @@ abstract class AppLocalizations {
   /// Wish title field label
   ///
   /// In ru, this message translates to:
-  /// **'Что вы хотите?'**
+  /// **'Что ты хочешь?'**
   String get wishTitleLabel;
 
   /// Wish title field placeholder
@@ -820,6 +850,18 @@ abstract class AppLocalizations {
   /// **'Купить'**
   String get wishCardAction;
 
+  /// Badge on the home masonry card for a wish not in any list
+  ///
+  /// In ru, this message translates to:
+  /// **'Личное'**
+  String get wishBadgePersonal;
+
+  /// Badge on the home masonry card for a wish placed in a list
+  ///
+  /// In ru, this message translates to:
+  /// **'Поделился'**
+  String get wishBadgeShared;
+
   /// Priority selector label on the wish form
   ///
   /// In ru, this message translates to:
@@ -865,7 +907,7 @@ abstract class AppLocalizations {
   /// Validation error when the wish title is empty
   ///
   /// In ru, this message translates to:
-  /// **'Введите название желания'**
+  /// **'Введи название желания'**
   String get wishTitleRequired;
 
   /// Validation error when the wish title exceeds the limit
@@ -877,7 +919,7 @@ abstract class AppLocalizations {
   /// Validation error for a non-numeric price
   ///
   /// In ru, this message translates to:
-  /// **'Введите цену числом'**
+  /// **'Введи цену числом'**
   String get wishPriceInvalid;
 
   /// Generic open action label
@@ -901,7 +943,7 @@ abstract class AppLocalizations {
   /// Shown when link metadata extraction failed; form stays usable
   ///
   /// In ru, this message translates to:
-  /// **'Не удалось загрузить данные по ссылке — заполните вручную.'**
+  /// **'Не удалось загрузить данные по ссылке — заполни вручную.'**
   String get wishImportFailed;
 
   /// Snackbar when a new share arrives while the wish form is open
@@ -919,7 +961,7 @@ abstract class AppLocalizations {
   /// Title of the delete-wish confirmation dialog
   ///
   /// In ru, this message translates to:
-  /// **'Вы уверены?'**
+  /// **'Удалить желание?'**
   String get wishDeleteTitle;
 
   /// Body of the delete-wish confirmation dialog
@@ -985,7 +1027,7 @@ abstract class AppLocalizations {
   /// Description of the first-wish onboarding step
   ///
   /// In ru, this message translates to:
-  /// **'Запишите то, чего вы хотите — чтобы не забыть самим и помочь близким выбрать правильный подарок.'**
+  /// **'Запиши то, чего хочешь, — чтобы не забыть самому и помочь близким выбрать подарок.'**
   String get firstWishDescription;
 
   /// Placeholder of the main field in the quick add-wish sheet
@@ -1111,7 +1153,7 @@ abstract class AppLocalizations {
   /// Empty state description on the shopping screen
   ///
   /// In ru, this message translates to:
-  /// **'Создавайте списки покупок — продукты на неделю, в поездку, для дома — и отмечайте купленное.'**
+  /// **'Создавай списки покупок — продукты на неделю, в поездку, для дома — и отмечай купленное.'**
   String get listsEmptyDescription;
 
   /// Primary button when creating a shopping list
@@ -1159,7 +1201,7 @@ abstract class AppLocalizations {
   /// Validation error when the list title is empty
   ///
   /// In ru, this message translates to:
-  /// **'Введите название списка'**
+  /// **'Введи название списка'**
   String get listTitleRequired;
 
   /// Validation error when the list title exceeds the limit
@@ -1309,7 +1351,7 @@ abstract class AppLocalizations {
   /// Caption marking the current user in the members list
   ///
   /// In ru, this message translates to:
-  /// **'Вы'**
+  /// **'Ты'**
   String get listMemberYou;
 
   /// Action opening the friend picker for a shared list
@@ -1333,7 +1375,7 @@ abstract class AppLocalizations {
   /// Hint under the empty friend-picker state
   ///
   /// In ru, this message translates to:
-  /// **'Сначала добавьте человека в друзья на экране «Друзья».'**
+  /// **'Сначала добавь человека в друзья на экране «Друзья».'**
   String get listMembersNoFriendsHint;
 
   /// Snack after a friend was added to the shopping list
@@ -1381,7 +1423,7 @@ abstract class AppLocalizations {
   /// Confirm dialog message for leaving a shared list
   ///
   /// In ru, this message translates to:
-  /// **'«{title}» исчезнет из ваших списков.'**
+  /// **'«{title}» исчезнет из твоих списков.'**
   String listLeaveMessage(String title);
 
   /// Accessibility label for the members management row
@@ -1417,7 +1459,7 @@ abstract class AppLocalizations {
   /// Empty state description on the friends screen
   ///
   /// In ru, this message translates to:
-  /// **'Добавьте близких, чтобы видеть их желания и проще выбирать подарки.'**
+  /// **'Добавь близких, чтобы видеть их желания и проще выбирать подарки.'**
   String get friendsEmptyDescription;
 
   /// Placeholder of the friend search field
@@ -1429,13 +1471,13 @@ abstract class AppLocalizations {
   /// Hint title before the first search query
   ///
   /// In ru, this message translates to:
-  /// **'Найдите друга'**
+  /// **'Найди друга'**
   String get friendSearchEmptyTitle;
 
   /// Hint description before the first search query
   ///
   /// In ru, this message translates to:
-  /// **'Введите имя или @username — человек появится в результатах поиска.'**
+  /// **'Введи имя или @username — человек появится в результатах поиска.'**
   String get friendSearchEmptyDescription;
 
   /// Title shown when friend search fails
@@ -1453,7 +1495,7 @@ abstract class AppLocalizations {
   /// Empty state description when search returns no users
   ///
   /// In ru, this message translates to:
-  /// **'По запросу «{query}» нет пользователей. Проверьте имя или username.'**
+  /// **'По запросу «{query}» нет пользователей. Проверь имя или username.'**
   String friendSearchNoResultsHint(String query);
 
   /// Trailing label for a user added during this session
@@ -1477,7 +1519,7 @@ abstract class AppLocalizations {
   /// SnackBar shown when adding a friend fails
   ///
   /// In ru, this message translates to:
-  /// **'Не удалось добавить друга. Попробуйте ещё раз.'**
+  /// **'Не удалось добавить друга. Попробуй ещё раз.'**
   String get friendAddFailed;
 
   /// SnackBar when removing a friend fails
@@ -1495,7 +1537,7 @@ abstract class AppLocalizations {
   /// Body of the remove-friend confirmation dialog
   ///
   /// In ru, this message translates to:
-  /// **'{name} исчезнет из вашего списка друзей. Вы сможете добавить его снова через поиск.'**
+  /// **'{name} исчезнет из твоего списка друзей. Снова добавить его можно через поиск.'**
   String friendRemoveMessage(String name);
 
   /// Semantic label for the remove-friend action
@@ -1543,7 +1585,7 @@ abstract class AppLocalizations {
   /// Empty state inside a friend profile
   ///
   /// In ru, this message translates to:
-  /// **'{name} ещё не добавил(а) желания, которые вам видны.'**
+  /// **'{name} ещё не добавил(а) желаний, которые тебе видны.'**
   String friendNoWishes(String name);
 
   /// Error when the searched user does not exist
@@ -1627,7 +1669,7 @@ abstract class AppLocalizations {
   /// Body of the logout confirmation dialog
   ///
   /// In ru, this message translates to:
-  /// **'Вы сможете войти снова позже.'**
+  /// **'Сможешь войти снова позже.'**
   String get logoutMessage;
 
   /// Title of the destructive logout dialog when outbox is not empty
@@ -1663,13 +1705,13 @@ abstract class AppLocalizations {
   /// Name field placeholder in the profile editor
   ///
   /// In ru, this message translates to:
-  /// **'Как вас видят друзья'**
+  /// **'Как тебя видят друзья'**
   String get nameHintProfile;
 
   /// Validation error when the profile name is empty
   ///
   /// In ru, this message translates to:
-  /// **'Укажите имя'**
+  /// **'Укажи имя'**
   String get nameRequired;
 
   /// Username field label
@@ -1693,7 +1735,7 @@ abstract class AppLocalizations {
   /// Caption under the username field
   ///
   /// In ru, this message translates to:
-  /// **'По username вас смогут найти друзья.'**
+  /// **'По username тебя смогут найти друзья.'**
   String get usernameHelp;
 
   /// Title of the avatar picker bottom sheet

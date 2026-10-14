@@ -489,7 +489,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Произошла ошибка. Попробуйте ещё раз.'),
+        find.text('Произошла ошибка. Попробуй ещё раз.'),
         findsOneWidget,
       );
       expect(shareCalls, isEmpty);
@@ -628,7 +628,7 @@ void main() {
       expect(find.byType(WishGridCard), findsOneWidget);
       expect(find.text('Наушники'), findsOneWidget);
       expect(
-        find.text('Произошла ошибка. Попробуйте ещё раз.'),
+        find.text('Произошла ошибка. Попробуй ещё раз.'),
         findsOneWidget,
       );
       expect(

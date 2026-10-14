@@ -13,7 +13,10 @@ import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../../../session/presentation/providers/app_session_controller.dart';
 import '../../data/auth_repository.dart';
+import '../../data/oauth_config.dart';
+import '../../domain/oauth_provider.dart';
 import '../providers/auth_controller.dart';
+import 'oauth_page.dart';
 
 /// Длительность коротких layout-анимаций экрана.
 const _kAnimDuration = Duration(milliseconds: 180);
@@ -74,6 +77,38 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
 
     return ok;
+  }
+
+  /// Guard от повторного открытия WebView при быстрых тапах.
+  bool _oauthInProgress = false;
+
+  /// OAuth-флоу провайдера: authorize-страница в WebView →
+  /// [OAuthCredentials] из redirect-фрагмента → обмен на backend.
+  ///
+  /// Провайдер без client id в сборке → info «скоро будет
+  /// доступно». Закрытие WebView без токена — тихая отмена.
+  Future<void> _startOAuth(OAuthProvider provider) async {
+    if (_oauthInProgress) return;
+    final controller = ref.read(authControllerProvider.notifier);
+    final config = ref.read(oauthProviderConfigProvider)[provider]!;
+    if (!config.isConfigured) {
+      controller.notifyOAuthUnavailable(provider.code);
+      return;
+    }
+    _oauthInProgress = true;
+    try {
+      final credentials = await Navigator.of(context).push<OAuthCredentials>(
+        MaterialPageRoute(builder: (_) => OAuthPage(config: config)),
+      );
+      if (credentials == null || !mounted) return;
+      if (provider == OAuthProvider.vk) {
+        await controller.loginWithVk(credentials);
+      } else {
+        await controller.loginWithYandex(credentials);
+      }
+    } finally {
+      _oauthInProgress = false;
+    }
   }
 
   Future<void> _submit() async {
@@ -321,17 +356,13 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                   ),
                                   const SizedBox(height: AppSpacing.lg),
 
-                                  // OAuth (пока не реализован — info feedback)
+                                  // OAuth (implicit token flow в WebView)
                                   _OAuthButton(
                                     label: l10n.authVkButton,
                                     assetPath: 'assets/images/vk.png',
                                     onPressed: isLoading
                                         ? null
-                                        : () => ref
-                                              .read(
-                                                authControllerProvider.notifier,
-                                              )
-                                              .loginWithVk(),
+                                        : () => _startOAuth(OAuthProvider.vk),
                                   ),
                                   const SizedBox(
                                     height: AppSpacing.betweenFields,
@@ -341,11 +372,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                                     assetPath: 'assets/images/yandex.png',
                                     onPressed: isLoading
                                         ? null
-                                        : () => ref
-                                              .read(
-                                                authControllerProvider.notifier,
-                                              )
-                                              .loginWithYandex(),
+                                        : () =>
+                                              _startOAuth(OAuthProvider.yandex),
                                   ),
                                   const SizedBox(height: AppSpacing.lg),
                                 ],

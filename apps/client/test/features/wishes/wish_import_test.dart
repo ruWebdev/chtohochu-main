@@ -156,7 +156,7 @@ void main() {
     await _openImportForm(tester, preview: null, fetchedImage: null);
 
     expect(
-      find.text('Не удалось загрузить данные по ссылке — заполните вручную.'),
+      find.text('Не удалось загрузить данные по ссылке — заполни вручную.'),
       findsOneWidget,
     );
     expect(_fieldAt(tester, 2).controller!.text, _productUrl);

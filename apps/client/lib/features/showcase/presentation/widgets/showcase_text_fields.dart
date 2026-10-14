@@ -36,7 +36,7 @@ class ShowcaseTextFields extends StatelessWidget {
         const ShowcaseSubLabel('Error'),
         const AppTextField(
           hint: 'Email',
-          errorText: 'Введите корректный email',
+          errorText: 'Введи корректный email',
         ),
         const ShowcaseSubLabel('Disabled'),
         const AppTextField(hint: 'Недоступное поле', enabled: false),

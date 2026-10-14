@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/auth_repository.dart';
 import '../../domain/auth_session.dart';
+import '../../domain/oauth_provider.dart';
 
 /// Режим экрана авторизации.
 enum AuthMode { login, register }
@@ -86,32 +87,45 @@ class AuthController extends Notifier<AuthFormState> {
     }
   }
 
-  /// OAuth-вход через VK.
-  Future<void> loginWithVk() async {
+  /// OAuth-вход через VK: [credentials] получены из WebView-флоу
+  /// на экране авторизации и обмениваются на сессию у backend.
+  Future<void> loginWithVk(OAuthCredentials credentials) => _oauth(
+    'vk',
+    () => ref
+        .read(authRepositoryProvider)
+        .loginWithVk(credentials: credentials),
+  );
+
+  /// OAuth-вход через Yandex.
+  Future<void> loginWithYandex(OAuthCredentials credentials) => _oauth(
+    'yandex',
+    () => ref
+        .read(authRepositoryProvider)
+        .loginWithYandex(credentials: credentials),
+  );
+
+  /// Общий OAuth-обмен: loading → success/error, guard от повтора.
+  Future<void> _oauth(
+    String provider,
+    Future<AuthSession> Function() call,
+  ) async {
     if (state is AuthFormLoading) return;
     state = const AuthFormLoading();
     try {
-      final session = await ref.read(authRepositoryProvider).loginWithVk();
-      state = AuthFormSuccess(session);
+      state = AuthFormSuccess(await call());
     } on AuthError catch (e) {
       state = AuthFormIdle(error: e);
     } catch (_) {
-      state = const AuthFormIdle(error: OAuthFailedError('vk'));
+      state = AuthFormIdle(error: OAuthFailedError(provider));
     }
   }
 
-  /// OAuth-вход через Yandex.
-  Future<void> loginWithYandex() async {
+  /// Провайдер не сконфигурирован для этой сборки (нет client id
+  /// в dart-define) — показываем информационное «скоро будет
+  /// доступно» вместо запуска флоу.
+  void notifyOAuthUnavailable(String provider) {
     if (state is AuthFormLoading) return;
-    state = const AuthFormLoading();
-    try {
-      final session = await ref.read(authRepositoryProvider).loginWithYandex();
-      state = AuthFormSuccess(session);
-    } on AuthError catch (e) {
-      state = AuthFormIdle(error: e);
-    } catch (_) {
-      state = const AuthFormIdle(error: OAuthFailedError('yandex'));
-    }
+    state = AuthFormIdle(error: OAuthUnavailableError(provider));
   }
 }
 

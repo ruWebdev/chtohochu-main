@@ -81,9 +81,19 @@ class FakeApiAdapter implements HttpClientAdapter {
       'name': name,
       'username': username,
       'avatar_url': null,
+      'vk_id': null,
+      'yandex_id': null,
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     };
+  }
+
+  /// Пользователь по provider-колонке (`vk_id`/`yandex_id`).
+  Map<String, dynamic>? _userByProvider(String column, String providerId) {
+    for (final u in _users.values) {
+      if (u[column] == providerId) return u;
+    }
+    return null;
   }
 
   String _userIdForToken(String? token) {
@@ -110,13 +120,14 @@ class FakeApiAdapter implements HttpClientAdapter {
     int code,
     String message, {
     Map<String, dynamic>? errors,
+    String? errorCode,
   }) {
     return DioException(
       requestOptions: RequestOptions(),
       response: Response(
         requestOptions: RequestOptions(),
         statusCode: code,
-        data: {'message': message, 'errors': ?errors},
+        data: {'message': message, 'errors': ?errors, 'code': ?errorCode},
       ),
       type: DioExceptionType.badResponse,
     );
@@ -236,6 +247,87 @@ class FakeApiAdapter implements HttpClientAdapter {
       _tokens.remove(token);
       data = null;
       status = 204;
+    } else if ((path == '/auth/vk/link' || path == '/auth/yandex/link') &&
+        method == 'POST') {
+      // Подтверждённая привязка (auth:sanctum) — контракт
+      // SocialAuthController::link.
+      final provider = path.split('/')[2];
+      final uid = _userIdForToken(token);
+      final user = _users.values.firstWhere((u) => u['id'] == uid);
+      final accessToken = body!['access_token'] as String?;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw _error(
+          422,
+          'The given data was invalid.',
+          errors: {
+            'access_token': ['The access token field is required.'],
+          },
+        );
+      }
+      final pidCol = '${provider}_id';
+      final pid = 'pid_$accessToken';
+      if (_users.values.any((u) => u['id'] != uid && u[pidCol] == pid)) {
+        throw _error(
+          409,
+          'Provider account is taken.',
+          errorCode: 'oauth_provider_taken',
+        );
+      }
+      if (user[pidCol] != null && user[pidCol] != pid) {
+        throw _error(
+          409,
+          'Another account is already linked.',
+          errorCode: 'oauth_already_linked',
+        );
+      }
+      user[pidCol] = pid;
+      user['updated_at'] = DateTime.now().toIso8601String();
+      data = {'user': user};
+    } else if ((path == '/auth/vk' || path == '/auth/yandex') &&
+        method == 'POST') {
+      // Обмен provider-токена на сессию — контракт
+      // SocialAuthController::{vk,yandex}. 'bad-token' имитирует
+      // отказ провайдера.
+      final provider = path.split('/').last;
+      final accessToken = body!['access_token'] as String?;
+      if (accessToken == null ||
+          accessToken.isEmpty ||
+          accessToken == 'bad-token') {
+        throw _error(
+          422,
+          'The given data was invalid.',
+          errors: {
+            'access_token': ['Failed to verify the provider token.'],
+          },
+        );
+      }
+      final pidCol = '${provider}_id';
+      final pid = 'pid_$accessToken';
+      var user = _userByProvider(pidCol, pid);
+      if (user == null) {
+        var email = body['email'] as String?;
+        // У Яндекса email приходит «от провайдера» — в фейке
+        // детерминированно выводим из токена.
+        email ??= provider == 'yandex' ? 'ya_$accessToken@yandex.ru' : null;
+        if (email != null && _users.containsKey(email)) {
+          throw _error(
+            409,
+            'Account link required.',
+            errorCode: 'oauth_link_required',
+          );
+        }
+        final emailForCreate =
+            email ?? '${provider}_${pid.substring(4)}@$provider.local';
+        user = _newUser(emailForCreate);
+        user[pidCol] = pid;
+        _users[emailForCreate] = user;
+        _wishes.putIfAbsent(user['id'] as String, () => {});
+        _shoppingLists.putIfAbsent(user['id'] as String, () => {});
+        _wishLists.putIfAbsent(user['id'] as String, () => {});
+      }
+      final token2 = _uuid.v4();
+      _tokens[token2] = user['id'] as String;
+      data = {'token': token2, 'user': user};
     } else if (path == '/me' && method == 'GET') {
       final uid = _userIdForToken(token);
       final user = _users.values.firstWhere((u) => u['id'] == uid);

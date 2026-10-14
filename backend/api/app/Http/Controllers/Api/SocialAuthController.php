@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,84 +15,41 @@ use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
 {
+    private const PROVIDER_COLUMN = [
+        'vk' => 'vk_id',
+        'yandex' => 'yandex_id',
+    ];
+
+    private const PROVIDER_LABEL = [
+        'vk' => 'VK',
+        'yandex' => 'Яндекс',
+    ];
+
     /**
      * Вход через VK по access_token.
+     *
+     * `email` — адрес из redirect-фрагмента провайдера (scope `email`);
+     * `users.get` email не возвращает, поэтому клиент передаёт его явно.
      */
     public function vk(Request $request)
     {
         $data = $request->validate([
             'access_token' => ['required', 'string'],
+            'email' => ['nullable', 'email', 'max:255'],
         ]);
 
-        $accessToken = $data['access_token'];
+        $profile = $this->fetchVkProfile($data['access_token']);
 
-        $vkProfile = $this->fetchVkProfile($accessToken);
-
-        if (! $vkProfile) {
+        if (! $profile) {
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'VK'])],
             ]);
         }
 
-        $providerId = $vkProfile['id'] ?? null;
-        $email = $vkProfile['email'] ?? null;
-        $name = trim(($vkProfile['first_name'] ?? '').' '.($vkProfile['last_name'] ?? ''));
-        $vkDomain = $vkProfile['domain'] ?? null;
+        // Email у VK приходит из redirect-фрагмента, не из users.get.
+        $profile['email'] ??= isset($data['email']) ? mb_strtolower($data['email']) : null;
 
-        if (! $providerId) {
-            throw ValidationException::withMessages([
-                'access_token' => [trans('auth.social_no_id', ['provider' => 'VK'])],
-            ]);
-        }
-
-        if (! $name) {
-            $name = 'Пользователь VK';
-        }
-
-        $user = User::query()
-            ->where('vk_id', $providerId)
-            ->when($email, fn ($q) => $q->orWhere('email', $email))
-            ->first();
-
-        $user = DB::transaction(function () use ($user, $providerId, $email, $name, $vkDomain) {
-            if (! $user) {
-                $emailForCreate = $email;
-
-                if (! $emailForCreate) {
-                    $emailForCreate = 'vk_'.$providerId.'@vk.local';
-                }
-
-                $username = $this->generateUniqueUsername($this->normalizeUsernameBase($vkDomain ?: $emailForCreate));
-
-                return User::query()->create([
-                    'name' => $name,
-                    'username' => $username,
-                    'email' => $emailForCreate,
-                    'password' => bcrypt(Str::random(32)),
-                    'vk_id' => (string) $providerId,
-                ]);
-            }
-
-            $user->forceFill(array_filter([
-                'name' => $name ?: null,
-                'email' => $email ?: null,
-                'vk_id' => $user->vk_id ?: (string) $providerId,
-            ]))->save();
-
-            if (! $user->username) {
-                $username = $this->generateUniqueUsername($this->normalizeUsernameBase($vkDomain ?: ($email ?: 'vk_'.$providerId)));
-                $user->forceFill(['username' => $username])->save();
-            }
-
-            return $user;
-        });
-
-        $token = $user->createToken('vk_login')->plainTextToken;
-
-        return response()->json([
-            'user' => $user,
-            'token' => $token,
-        ]);
+        return $this->loginVia('vk', $profile, $request);
     }
 
     /**
@@ -103,78 +61,206 @@ class SocialAuthController extends Controller
             'access_token' => ['required', 'string'],
         ]);
 
-        $accessToken = $data['access_token'];
+        $profile = $this->fetchYandexProfile($data['access_token']);
 
-        try {
-            $socialUser = Socialite::driver('yandex')->userFromToken($accessToken);
-        } catch (\Throwable $e) {
-            Log::error('Yandex Auth Failed: '.$e->getMessage());
+        if (! $profile) {
             throw ValidationException::withMessages([
                 'access_token' => [trans('auth.social_failed', ['provider' => 'Яндекс'])],
             ]);
         }
 
-        $providerId = $socialUser->getId();
-        $email = $socialUser->getEmail();
-        $name = $this->resolveYandexName($socialUser);
-        $yandexLogin = $socialUser->getNickname() ?: ($socialUser->user['login'] ?? null);
+        return $this->loginVia('yandex', $profile, $request);
+    }
+
+    /**
+     * Подтверждённая привязка VK к текущему аккаунту (auth:sanctum).
+     */
+    public function linkVk(Request $request)
+    {
+        return $this->link('vk', $request);
+    }
+
+    /**
+     * Подтверждённая привязка Яндекса к текущему аккаунту (auth:sanctum).
+     */
+    public function linkYandex(Request $request)
+    {
+        return $this->link('yandex', $request);
+    }
+
+    /**
+     * Общий сценарий входа через провайдера:
+     * найти по provider_id → создать → Sanctum-токен.
+     *
+     * Автоматической привязки по email НЕТ: совпадение адреса с
+     * существующим аккаунтом завершается 409 — привязка выполняется
+     * только подтверждённо из авторизованной сессии через
+     * POST /auth/{provider}/link. Иначе чужой провайдер-аккаунт
+     * с тем же email открыл бы доступ к аккаунту пользователя.
+     */
+    private function loginVia(string $provider, array $profile, Request $request)
+    {
+        $label = self::PROVIDER_LABEL[$provider];
+        $column = self::PROVIDER_COLUMN[$provider];
+        $providerId = $profile['id'] ?? null;
 
         if (! $providerId) {
             throw ValidationException::withMessages([
-                'access_token' => [trans('auth.social_no_id', ['provider' => 'Яндекс'])],
+                'access_token' => [trans('auth.social_no_id', ['provider' => $label])],
             ]);
         }
+        $providerId = (string) $providerId;
+        $email = $profile['email'] ?? null;
 
-        $user = User::query()
-            ->where('yandex_id', $providerId)
-            ->when($email, fn ($q) => $q->orWhere('email', $email))
-            ->first();
+        $user = User::query()->where($column, $providerId)->first();
 
-        $user = DB::transaction(function () use ($user, $providerId, $email, $name, $yandexLogin) {
-            if (! $user) {
-                $emailForCreate = $email;
-
-                if (! $emailForCreate) {
-                    $emailForCreate = 'yandex_'.$providerId.'@yandex.local';
-                }
-
-                $usernameBase = $this->normalizeUsernameBase($yandexLogin ?: $emailForCreate);
-                $username = $this->generateUniqueUsername($usernameBase);
-
-                return User::query()->create([
-                    'name' => $name,
-                    'username' => $username,
-                    'email' => $emailForCreate,
-                    'password' => bcrypt(Str::random(32)),
-                    'yandex_id' => (string) $providerId,
-                ]);
+        if (! $user) {
+            if ($email && User::query()->where('email', $email)->exists()) {
+                return response()->json([
+                    'message' => trans('auth.social_link_required', ['provider' => $label]),
+                    'code' => 'oauth_link_required',
+                ], 409);
             }
 
-            $user->forceFill(array_filter([
-                'name' => $name ?: null,
-                'email' => $email ?: null,
-                'yandex_id' => $user->yandex_id ?: (string) $providerId,
-            ]))->save();
+            $user = DB::transaction(
+                fn () => $this->createSocialUser($provider, $profile, $email),
+            );
+        } else {
+            $this->backfillProfile($user, $profile);
+        }
 
-            if (! $user->username) {
-                $usernameBase = $this->normalizeUsernameBase($yandexLogin ?: ($email ?: 'yandex_'.$providerId));
-                $username = $this->generateUniqueUsername($usernameBase);
-                $user->forceFill(['username' => $username])->save();
-            }
-
-            return $user;
-        });
-
-        $token = $user->createToken('yandex_login')->plainTextToken;
+        $token = $user->createToken($provider.'_login')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
-            'token' => $token,
+            'data' => [
+                'token' => $token,
+                'user' => (new UserResource($user))->toArray($request),
+            ],
         ]);
     }
 
     /**
+     * Привязка провайдера к авторизованному пользователю.
+     * Идемпотентна: повторная привязка того же provider-аккаунта —
+     * успешный no-op. Перепривязка на другой provider-аккаунт и
+     * захват provider-аккаунта чужого пользователя отклоняются 409.
+     */
+    private function link(string $provider, Request $request)
+    {
+        $data = $request->validate([
+            'access_token' => ['required', 'string'],
+            'email' => ['nullable', 'email', 'max:255'],
+        ]);
+
+        $label = self::PROVIDER_LABEL[$provider];
+
+        $profile = $provider === 'vk'
+            ? $this->fetchVkProfile($data['access_token'])
+            : $this->fetchYandexProfile($data['access_token']);
+
+        if (! $profile) {
+            throw ValidationException::withMessages([
+                'access_token' => [trans('auth.social_failed', ['provider' => $label])],
+            ]);
+        }
+
+        $providerId = $profile['id'] ?? null;
+
+        if (! $providerId) {
+            throw ValidationException::withMessages([
+                'access_token' => [trans('auth.social_no_id', ['provider' => $label])],
+            ]);
+        }
+        $providerId = (string) $providerId;
+
+        $column = self::PROVIDER_COLUMN[$provider];
+        $user = $request->user();
+
+        $taken = User::query()
+            ->where($column, $providerId)
+            ->where('id', '!=', $user->id)
+            ->exists();
+
+        if ($taken) {
+            return response()->json([
+                'message' => trans('auth.social_provider_taken', ['provider' => $label]),
+                'code' => 'oauth_provider_taken',
+            ], 409);
+        }
+
+        if ($user->{$column} && $user->{$column} !== $providerId) {
+            return response()->json([
+                'message' => trans('auth.social_already_linked', ['provider' => $label]),
+                'code' => 'oauth_already_linked',
+            ], 409);
+        }
+
+        if ($user->{$column} !== $providerId) {
+            $user->forceFill([$column => $providerId])->save();
+        }
+
+        $this->backfillProfile($user->refresh(), $profile);
+
+        return response()->json([
+            'data' => [
+                'user' => (new UserResource($user))->toArray($request),
+            ],
+        ]);
+    }
+
+    /**
+     * Создание аккаунта по данным провайдера. Без реального email —
+     * синтетический `{provider}_{id}@{provider}.local`, уникальный
+     * по построению и не доставляемый по определению.
+     */
+    private function createSocialUser(string $provider, array $profile, ?string $email): User
+    {
+        $column = self::PROVIDER_COLUMN[$provider];
+        $providerId = (string) $profile['id'];
+        $emailForCreate = $email ?: "{$provider}_{$providerId}@{$provider}.local";
+        $usernameBase = $profile['login'] ?? $emailForCreate;
+
+        return User::query()->create([
+            'name' => $profile['name'] ?: self::PROVIDER_LABEL[$provider],
+            'username' => $this->generateUniqueUsername(
+                $this->normalizeUsernameBase($usernameBase),
+            ),
+            'email' => $emailForCreate,
+            'password' => bcrypt(Str::random(32)),
+            'avatar_url' => $profile['avatar'] ?? null,
+            $column => $providerId,
+        ]);
+    }
+
+    /**
+     * Дозаполнение пустых полей профиля у существующего
+     * пользователя. Провайдер никогда не перезаписывает
+     * отредактированный профиль и не меняет email аккаунта.
+     */
+    private function backfillProfile(User $user, array $profile): void
+    {
+        $fill = [];
+
+        if (! $user->name && ! empty($profile['name'])) {
+            $fill['name'] = $profile['name'];
+        }
+        if (! $user->avatar_url && ! empty($profile['avatar'])) {
+            $fill['avatar_url'] = $profile['avatar'];
+        }
+        if (! $user->username) {
+            $fill['username'] = $this->generateUniqueUsername(
+                $this->normalizeUsernameBase($profile['login'] ?? $user->email),
+            );
+        }
+
+        if ($fill) {
+            $user->forceFill($fill)->save();
+        }
+    }
+
+    /**
      * Запрашивает профиль пользователя у VK по access_token.
+     * Email здесь не появляется — его отдаёт redirect-фрагмент.
      */
     protected function fetchVkProfile(string $accessToken): ?array
     {
@@ -209,12 +295,36 @@ class SocialAuthController extends Controller
         }
 
         $user = $body['response'][0];
+        $name = trim(($user['first_name'] ?? '').' '.($user['last_name'] ?? ''));
 
         return [
-            'id' => $user['id'],
-            'first_name' => $user['first_name'] ?? null,
-            'last_name' => $user['last_name'] ?? null,
-            'domain' => $user['domain'] ?? null,
+            'id' => $user['id'] ?? null,
+            'name' => $name ?: null,
+            'login' => $user['domain'] ?? null,
+            'avatar' => $user['photo_200'] ?? null,
+        ];
+    }
+
+    /**
+     * Профиль Яндекса через Socialite userFromToken.
+     * `null` — провайдер отклонил токен (→ 422 social_failed).
+     */
+    protected function fetchYandexProfile(string $accessToken): ?array
+    {
+        try {
+            $socialUser = Socialite::driver('yandex')->userFromToken($accessToken);
+        } catch (\Throwable $e) {
+            Log::error('Yandex Auth Failed: '.$e->getMessage());
+
+            return null;
+        }
+
+        return [
+            'id' => $socialUser->getId(),
+            'email' => $socialUser->getEmail(),
+            'name' => $this->resolveYandexName($socialUser),
+            'login' => $socialUser->getNickname() ?: ($socialUser->user['login'] ?? null),
+            'avatar' => $socialUser->getAvatar(),
         ];
     }
 

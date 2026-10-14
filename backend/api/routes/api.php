@@ -21,10 +21,17 @@ Route::domain(env('APP_DOMAIN_API'))
         // Health check
         Route::get('/health', fn () => response()->json(['status' => 'ok']));
 
-        // Аутентификация (Sanctum)
-        Route::post('/auth/register', [AuthController::class, 'register'])->name('api.auth.register');
-        Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])->name('api.auth.username.check');
-        Route::post('/auth/login', [AuthController::class, 'login'])->name('api.auth.login');
+        // Аутентификация (Sanctum). Все auth-endpoints лимитированы —
+        // brute-force защита паролей и provider-токенов.
+        Route::post('/auth/register', [AuthController::class, 'register'])
+            ->middleware('throttle:20,1')
+            ->name('api.auth.register');
+        Route::get('/auth/username/check', [AuthController::class, 'checkUsername'])
+            ->middleware('throttle:30,1')
+            ->name('api.auth.username.check');
+        Route::post('/auth/login', [AuthController::class, 'login'])
+            ->middleware('throttle:20,1')
+            ->name('api.auth.login');
         Route::post('/auth/vk', [SocialAuthController::class, 'vk'])
             ->middleware('throttle:10,1');
         Route::post('/auth/yandex', [SocialAuthController::class, 'yandex'])
@@ -39,6 +46,16 @@ Route::domain(env('APP_DOMAIN_API'))
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/auth/logout', [AuthController::class, 'logout'])->name('api.auth.logout');
             Route::post('/auth/logout-all', [AuthController::class, 'logoutAll'])->name('api.auth.logout_all');
+
+            // Подтверждённая привязка OAuth-провайдера к текущему
+            // аккаунту — только из авторизованной сессии, никогда
+            // неявно по совпадению email.
+            Route::post('/auth/vk/link', [SocialAuthController::class, 'linkVk'])
+                ->middleware('throttle:10,1')
+                ->name('api.auth.vk.link');
+            Route::post('/auth/yandex/link', [SocialAuthController::class, 'linkYandex'])
+                ->middleware('throttle:10,1')
+                ->name('api.auth.yandex.link');
 
             // Текущий пользователь
             Route::get('/me', [MeController::class, 'show'])->name('api.me.show');

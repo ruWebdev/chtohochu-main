@@ -111,11 +111,11 @@ void main() {
       );
       expect(
         authErrorMessage(ru, const AuthNetworkError()),
-        'Проверьте подключение к интернету',
+        'Проверь подключение к интернету',
       );
       expect(
         authErrorMessage(ru, const UnknownAuthError()),
-        'Произошла ошибка. Попробуйте ещё раз.',
+        'Произошла ошибка. Попробуй ещё раз.',
       );
       // OAuth — текст зависит от кода провайдера.
       expect(

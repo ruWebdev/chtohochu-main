@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
@@ -313,6 +315,313 @@ class _WishCover extends StatelessWidget {
           errorWidget: placeholder,
           loadingWidget: placeholder,
         ),
+      ),
+    );
+  }
+}
+
+/// Masonry-карточка желания для главного экрана.
+///
+/// Отличие от [WishGridCard] (пользовательские списки): высота
+/// естественная — обложка держит исходные пропорции изображения
+/// (зажаты в [coverMinHeight]…[coverMaxHeight]), под ней —
+/// название до 3 строк, цена и мета-строка (бэдж «Личное»/
+/// «Поделился» + название списка). Одинаковая высота карточек
+/// не резервируется — сетка выравнивает колонки сама.
+class WishMasonryCard extends StatelessWidget {
+  const WishMasonryCard({
+    super.key,
+    required this.wish,
+    this.onTap,
+    this.highMarker = false,
+    this.listTitle,
+  });
+
+  /// Нижняя/верхняя граница высоты области изображения —
+  /// слишком вытянутые фото не ломают композицию.
+  static const double coverMinHeight = 120;
+  static const double coverMaxHeight = 280;
+
+  /// Высота области изображения до резолва аспекта и в
+  /// состояниях «нет изображения»/ошибка.
+  static const double coverPlaceholderHeight = 140;
+
+  final Wish wish;
+  final VoidCallback? onTap;
+
+  /// Ненавязчивый маркер «Очень хочу» (сердечко в углу
+  /// обложки) — группировка по приоритету живёт на главном.
+  final bool highMarker;
+
+  /// Название списка, в котором лежит желание (`wish.listId`);
+  /// `null` — желание личное либо список не загружен.
+  final String? listTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+    final l10n = context.l10n;
+    final inList = wish.listId != null;
+
+    return AppCard(
+      variant: AppCardVariant.elevated,
+      onTap: onTap,
+      radius: AppRadii.xl,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              _MasonryCover(imageUrl: wish.imageDisplaySource),
+              if (highMarker && wish.priority == WishPriority.high)
+                const Positioned(
+                  top: AppSpacing.xs,
+                  right: AppSpacing.xs,
+                  child: _HighPriorityBadge(),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            wish.title,
+            style: t.title.copyWith(fontSize: 16),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (wish.price != null) ...[
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              formatPrice(wish.price!),
+              style: t.secondary.copyWith(color: colors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            children: [
+              _MasonryBadge(
+                label: inList ? l10n.wishBadgeShared : l10n.wishBadgePersonal,
+              ),
+              if (inList && listTitle != null) ...[
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    listTitle!,
+                    style: t.caption.copyWith(color: colors.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Маленький плоский бэдж («Личное»/«Поделился») в мета-строке
+/// masonry-карточки.
+class _MasonryBadge extends StatelessWidget {
+  const _MasonryBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadii.full),
+      ),
+      child: Text(
+        label,
+        style: t.caption.copyWith(color: colors.textSecondary),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// Обложка masonry-карточки: исходные пропорции изображения.
+///
+/// Аспект (width/height) резолвится через [ImageProvider] и
+/// кэшируется в [_aspectCache] по src: после первого показа
+/// повторные сборки, прокрутка и перерисовка групп получают
+/// высоту сразу — карточки не прыгают. Высота области —
+/// `width / aspect`, зажатая в min/max; изображение заполняет
+/// область (`BoxFit.cover`) без полос, поэтому все обложки
+/// начинаются у верхнего края карточки. Кроп происходит только
+/// у пропорций, выходящих за допустимый диапазон высоты.
+class _MasonryCover extends StatefulWidget {
+  const _MasonryCover({required this.imageUrl});
+
+  final String? imageUrl;
+
+  /// Разрешённые аспекты по src; `0` — ошибка резолва (показываем
+  /// placeholder без повторных попыток до смены src).
+  static final Map<String, double> _aspectCache = {};
+
+  @override
+  State<_MasonryCover> createState() => _MasonryCoverState();
+}
+
+class _MasonryCoverState extends State<_MasonryCover> {
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  double? _aspect;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_MasonryCover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _unsubscribe();
+      _aspect = null;
+      _resolve();
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe();
+    super.dispose();
+  }
+
+  void _unsubscribe() {
+    final listener = _listener;
+    if (listener != null) _stream?.removeListener(listener);
+    _stream = null;
+    _listener = null;
+  }
+
+  void _resolve() {
+    final src = widget.imageUrl;
+    if (src == null || src.isEmpty) return;
+    final cached = _MasonryCover._aspectCache[src];
+    if (cached != null) {
+      _aspect = cached;
+      return;
+    }
+    final ImageProvider provider = AppImage.isRemote(src)
+        ? NetworkImage(src)
+        : FileImage(File(src));
+    final stream = provider.resolve(ImageConfiguration.empty);
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener((info, _) {
+      final image = info.image;
+      _complete(src, image.width / image.height);
+    }, onError: (_, _) => _complete(src, 0));
+    _stream = stream;
+    _listener = listener;
+    stream.addListener(listener);
+  }
+
+  void _complete(String src, double aspect) {
+    if (_MasonryCover._aspectCache.length > 500) {
+      _MasonryCover._aspectCache.clear();
+    }
+    _MasonryCover._aspectCache[src] = aspect;
+    if (!mounted || widget.imageUrl != src) return;
+    setState(() => _aspect = aspect);
+  }
+
+  /// Плоская заглушка обложки. С [height] — самостоятельный
+  /// блок фиксированной высоты (нет изображения / резолв
+  /// аспекта / ошибка резолва); без — заполняет родителя
+  /// (error/loading состояния внутри уже размеченной области).
+  Widget _placeholder({double? height}) {
+    final colors = context.appColors;
+    return Container(
+      height: height,
+      width: double.infinity,
+      decoration: height != null
+          ? BoxDecoration(
+              color: colors.secondary,
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+            )
+          : BoxDecoration(color: colors.secondary),
+      alignment: Alignment.center,
+      child: Icon(
+        PhosphorIconsRegular.gift,
+        color: colors.secondaryForeground,
+        size: AppSizes.iconSizeLg,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadii.lg);
+
+    final src = widget.imageUrl;
+    final aspect = _aspect;
+    if (src == null || src.isEmpty || aspect != null && aspect <= 0) {
+      return _placeholder(height: WishMasonryCard.coverPlaceholderHeight);
+    }
+
+    if (aspect == null) {
+      // Аспект ещё резолвится — держим нейтральную высоту, чтобы
+      // карточка не схлопывалась и прыгнула один раз.
+      return ClipRRect(
+        borderRadius: radius,
+        child: _placeholder(height: WishMasonryCard.coverPlaceholderHeight),
+      );
+    }
+
+    final cacheWidth =
+        (MediaQuery.sizeOf(context).width *
+                MediaQuery.devicePixelRatioOf(context) /
+                2)
+            .round();
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // Высота бокса = высота изображения при его пропорциях,
+          // зажатая в min/max. Бокс всегда совпадает с размером
+          // изображения по ширине — без letterbox-полос сверху и
+          // снизу, фото начинается ровно у верхнего края карточки.
+          // Кроп (cover) возможен только у пропорций, выходящих за
+          // допустимый диапазон высоты.
+          final height = (width / aspect).clamp(
+            WishMasonryCard.coverMinHeight,
+            WishMasonryCard.coverMaxHeight,
+          );
+          return SizedBox(
+            width: width,
+            height: height,
+            child: AppImage(
+              src: src,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.cover,
+              cacheWidth: cacheWidth,
+              errorWidget: _placeholder(),
+              loadingWidget: _placeholder(),
+            ),
+          );
+        },
       ),
     );
   }

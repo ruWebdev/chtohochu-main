@@ -10,6 +10,10 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/constants/app_info.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
+import '../../../auth/data/auth_repository.dart';
+import '../../../auth/data/oauth_config.dart';
+import '../../../auth/domain/oauth_provider.dart';
+import '../../../auth/presentation/pages/oauth_page.dart';
 import '../../../session/presentation/providers/app_session_controller.dart';
 import '../../../showcase/presentation/providers/theme_controller.dart';
 import '../utils/profile_formatters.dart';
@@ -74,6 +78,41 @@ class ProfilePage extends ConsumerWidget {
           );
     if (confirmed == true) {
       await session.logout();
+    }
+  }
+
+  /// Подтверждённая привязка OAuth-провайдера: та же WebView-флоу,
+  /// что на экране входа, но токен уходит в `POST /auth/{p}/link`
+  /// из авторизованной сессии — backend не делает автопривязку
+  /// по совпадению email (docs/20-backend/oauth.md §5).
+  Future<void> _linkOAuth(
+    BuildContext context,
+    WidgetRef ref,
+    OAuthProvider provider,
+  ) async {
+    final config = ref.read(oauthProviderConfigProvider)[provider]!;
+    final credentials = await Navigator.of(context).push<OAuthCredentials>(
+      MaterialPageRoute(builder: (_) => OAuthPage(config: config)),
+    );
+    if (credentials == null || !context.mounted) return;
+
+    final l10n = context.l10n;
+    try {
+      final repo = ref.read(authRepositoryProvider);
+      if (provider == OAuthProvider.vk) {
+        await repo.linkWithVk(credentials: credentials);
+      } else {
+        await repo.linkWithYandex(credentials: credentials);
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.oauthLinked(config.label))),
+      );
+    } on AuthError catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authErrorMessage(l10n, e))),
+      );
     }
   }
 
@@ -177,11 +216,58 @@ class ProfilePage extends ConsumerWidget {
                         const SizedBox(height: AppSpacing.xs),
                         AppCard(
                           padding: EdgeInsets.zero,
-                          child: AppListItem(
-                            leading: const Icon(PhosphorIconsRegular.signOut),
-                            title: l10n.logout,
-                            destructive: true,
-                            onTap: () => _confirmLogout(context, ref),
+                          child: Column(
+                            children: [
+                              // Привязка провайдеров — только когда
+                              // client id задан в сборке (иначе кнопки
+                              // выглядели бы рабочими, но вели никуда).
+                              if (ref
+                                  .watch(
+                                    oauthProviderConfigProvider,
+                                  )[OAuthProvider.vk]!
+                                  .isConfigured)
+                                AppListItem(
+                                  leading: Image.asset(
+                                    'assets/images/vk.png',
+                                    width: 20,
+                                    height: 20,
+                                  ),
+                                  title: l10n.oauthConnectVk,
+                                  showDivider: true,
+                                  onTap: () => _linkOAuth(
+                                    context,
+                                    ref,
+                                    OAuthProvider.vk,
+                                  ),
+                                ),
+                              if (ref
+                                  .watch(
+                                    oauthProviderConfigProvider,
+                                  )[OAuthProvider.yandex]!
+                                  .isConfigured)
+                                AppListItem(
+                                  leading: Image.asset(
+                                    'assets/images/yandex.png',
+                                    width: 20,
+                                    height: 20,
+                                  ),
+                                  title: l10n.oauthConnectYandex,
+                                  showDivider: true,
+                                  onTap: () => _linkOAuth(
+                                    context,
+                                    ref,
+                                    OAuthProvider.yandex,
+                                  ),
+                                ),
+                              AppListItem(
+                                leading: const Icon(
+                                  PhosphorIconsRegular.signOut,
+                                ),
+                                title: l10n.logout,
+                                destructive: true,
+                                onTap: () => _confirmLogout(context, ref),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: AppSpacing.lg),

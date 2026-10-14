@@ -42,9 +42,16 @@ String authErrorMessage(AppLocalizations l10n, AuthError error) =>
             : l10n.authVkUnavailable,
       OAuthFailedError(:final provider) =>
         provider == 'yandex' ? l10n.authYandexFailed : l10n.authVkFailed,
+      OAuthLinkRequiredError(:final provider) =>
+        l10n.oauthLinkRequired(_oauthProviderLabel(provider)),
+      OAuthLinkFailedError(:final provider) =>
+        l10n.oauthLinkFailed(_oauthProviderLabel(provider)),
       AuthNetworkError() => l10n.authNetwork,
       UnknownAuthError() => l10n.authGeneric,
     };
+
+/// Отображаемое имя провайдера по коду (`vk` | `yandex`).
+String _oauthProviderLabel(String code) => code == 'yandex' ? 'Яндекс' : 'VK';
 
 /// Backend может отдать необработанный ключ перевода Laravel
 /// (`validation.required`, `validation.min.string` и т.п.) — такой

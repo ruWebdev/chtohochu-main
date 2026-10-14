@@ -7,4 +7,7 @@ return [
     'logged_out_all' => 'Вы вышли из системы на всех устройствах.',
     'social_failed' => 'Не удалось выполнить вход через :provider.',
     'social_no_id' => 'Провайдер :provider не вернул идентификатор пользователя.',
+    'social_link_required' => 'Аккаунт с такой почтой уже существует. Войдите по email и привяжите :provider в профиле.',
+    'social_provider_taken' => 'Этот аккаунт :provider уже привязан к другому пользователю.',
+    'social_already_linked' => 'К вашему аккаунту уже привязан другой аккаунт :provider.',
 ];

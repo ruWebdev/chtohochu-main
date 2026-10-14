@@ -15,6 +15,7 @@ import 'package:chtohochu/features/wishes/presentation/pages/wish_details_page.d
 import 'package:chtohochu/features/wishes/presentation/pages/wish_form_page.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_card.dart';
 import 'package:chtohochu/app/theme/app_colors.dart';
+import 'package:chtohochu/app/theme/app_sizes.dart';
 import 'package:chtohochu/app/theme/app_spacing.dart';
 import 'package:chtohochu/shared/ui/buttons/app_add_action_button.dart';
 import 'package:chtohochu/shared/ui/avatars/app_avatar.dart';
@@ -23,6 +24,7 @@ import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -122,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2 желания'), findsOneWidget);
-    expect(find.byType(WishGridCard), findsNWidgets(2));
+    expect(find.byType(WishMasonryCard), findsNWidgets(2));
     // Карточки стали выше — слот «добавить» за пределами
     // viewport и ещё не смонтирован: прокручиваем до него.
     await tester.scrollUntilVisible(find.byType(AddWishRow), 100);
@@ -168,7 +170,7 @@ void main() {
 
     // Основная группа: high → normal в порядке монтирования сетки.
     final cards = tester
-        .widgetList<WishGridCard>(find.byType(WishGridCard))
+        .widgetList<WishMasonryCard>(find.byType(WishMasonryCard))
         .toList();
     expect(cards.map((c) => c.wish.title), [
       'Срочное желание',
@@ -177,7 +179,7 @@ void main() {
     // High-карточка несёт маркер сердечка.
     expect(
       find.descendant(
-        of: find.widgetWithText(WishGridCard, 'Срочное желание'),
+        of: find.widgetWithText(WishMasonryCard, 'Срочное желание'),
         matching: find.byIcon(PhosphorIconsFill.heart),
       ),
       findsOneWidget,
@@ -216,7 +218,7 @@ void main() {
 
     // Отложенных нет — группы нет.
     expect(find.text('Не сейчас · 1'), findsNothing);
-    expect(find.byType(WishGridCard), findsOneWidget);
+    expect(find.byType(WishMasonryCard), findsOneWidget);
 
     // Офлайн-мутация через репозиторий: watch-стрим перестраивает
     // группы автоматически, без переноса записи.
@@ -551,7 +553,7 @@ void main() {
     expect(find.text('Ноутбук'), findsOneWidget);
     expect(find.text('120 000 ₽'), findsOneWidget);
 
-    await tester.tap(find.byType(WishGridCard));
+    await tester.tap(find.byType(WishMasonryCard));
     await tester.pumpAndSettle();
 
     expect(find.byType(WishDetailsPage), findsOneWidget);
@@ -568,16 +570,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Поездка на море'), findsOneWidget);
-    expect(find.byType(WishGridCard), findsOneWidget);
-    final cardSize = tester.getSize(find.byType(WishGridCard));
-    // Высота grid-карточки вычисляется от ширины колонки —
-    // обложка 4:3 + текстовый блок (WishGridCard.extentForColumnWidth).
+    expect(find.byType(WishMasonryCard), findsOneWidget);
+    final cardSize = tester.getSize(find.byType(WishMasonryCard));
+    // Masonry-карточка без изображения: обложка-плейсхолдер
+    // coverPlaceholderHeight + контент — ширина колонки,
+    // естественная высота (без фиксированного extent).
+    // Тестовый viewport 800 ≥ breakpoint → сетка зажата
+    // в contentMaxWidth.
+    final screenWidth = MediaQuery.sizeOf(
+      tester.element(find.byType(WishMasonryCard)),
+    ).width;
+    final contentWidth = screenWidth >= AppSizes.wideLayoutBreakpoint
+        ? AppSizes.contentMaxWidth
+        : screenWidth;
     final columnWidth =
-        (MediaQuery.sizeOf(tester.element(find.byType(WishGridCard))).width -
+        (contentWidth -
             AppSpacing.screenPaddingHorizontal * 2 -
             AppSpacing.betweenCards) /
         2;
-    expect(cardSize.height, WishGridCard.extentForColumnWidth(columnWidth));
+    expect(cardSize.width, columnWidth);
+    expect(
+      cardSize.height,
+      greaterThan(WishMasonryCard.coverPlaceholderHeight),
+    );
   });
 
   testWidgets('Wish with long imported title + price: no overflow', (
@@ -596,7 +611,28 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('3 217 ₽'), findsOneWidget);
-    expect(find.byType(WishGridCard), findsOneWidget);
+    expect(find.byType(WishMasonryCard), findsOneWidget);
+  });
+
+  testWidgets('Masonry: карточки имеют естественную высоту — '
+      'длинный заголовок даёт более высокую карточку', (tester) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook,$_wishLongTitle]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final short = tester.getSize(find.widgetWithText(WishMasonryCard, 'Книга'));
+    final long = tester.getSize(
+      find.widgetWithText(
+        WishMasonryCard,
+        'Портативная кофемашина автоматическая с нагревом',
+      ),
+    );
+    // Заголовок до 3 строк: «Книга» — одна строка, длинное
+    // название переносится → карточка выше; общий extent нет.
+    expect(long.height, greaterThan(short.height));
   });
 
   testWidgets('List extends under glass bar; last row clears it at end', (
@@ -717,8 +753,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // 800 logical px → wide layout: та же сетка в центрированной колонке.
-    expect(find.byType(SliverGrid), findsOneWidget);
-    expect(find.byType(WishGridCard), findsNWidgets(3));
+    expect(find.byType(SliverMasonryGrid), findsOneWidget);
+    expect(find.byType(WishMasonryCard), findsNWidgets(3));
     expect(find.byType(AddWishRow), findsOneWidget);
   });
 
@@ -793,10 +829,19 @@ void main() {
     expect(find.text('Мои списки'), findsOneWidget);
     expect(find.text('Мои желания'), findsOneWidget);
     expect(find.byType(WishListCard), findsOneWidget);
-    expect(find.text('Подарки'), findsOneWidget);
+    // «Подарки» — заголовок карточки списка; то же название
+    // показывают бэджи «Поделился» на карточках желаний.
+    expect(
+      find.descendant(
+        of: find.byType(WishListCard),
+        matching: find.text('Подарки'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('2 желания'), findsOneWidget);
     // Две двухколоночные сетки: списки + желания.
-    expect(find.byType(SliverGrid), findsNWidgets(2));
+    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.byType(SliverMasonryGrid), findsOneWidget);
     // Списки выше желаний.
     final listsY = tester.getTopLeft(find.text('Мои списки')).dy;
     final wishesY = tester.getTopLeft(find.text('Мои желания')).dy;
@@ -813,7 +858,7 @@ void main() {
 
     expect(find.text('Мои списки'), findsNothing);
     expect(find.text('Мои желания'), findsOneWidget);
-    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.byType(SliverMasonryGrid), findsOneWidget);
   });
 
   testWidgets('Two wish lists render as 2-col grid row', (tester) async {
@@ -883,8 +928,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // 360 logical px → узкий layout: те же двухколоночные сетки.
-    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.byType(SliverMasonryGrid), findsOneWidget);
     expect(find.byType(ListView), findsNothing);
-    expect(find.byType(WishGridCard), findsNWidgets(2));
+    expect(find.byType(WishMasonryCard), findsNWidgets(2));
   });
 }

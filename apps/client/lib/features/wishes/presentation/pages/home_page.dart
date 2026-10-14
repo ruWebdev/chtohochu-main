@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
@@ -226,8 +227,11 @@ class HomePage extends ConsumerWidget {
   }
 }
 
-/// Ленивый контент Home: секции «Мои списки» и «Мои желания» —
-/// обе двухколоночные сетки. Последний элемент — [AddWishRow].
+/// Ленивый контент Home: секция «Мои списки» (фиксированная
+/// двухколоночная сетка) + «Мои желания» — Pinterest-style
+/// Masonry: карточки в колонках размещаются независимо, высота
+/// каждой — естественная (аспект обложки + контент).
+/// Последний элемент — [AddWishRow].
 ///
 /// Группировка по приоритету (единственный экран, где она есть):
 /// основная группа — «Очень хочу» выше, затем «Хочу» (порядок
@@ -248,20 +252,13 @@ class _HomeSectionsState extends State<_HomeSections> {
   bool _laterExpanded = false;
 
   /// Высота карточки списка — токен дизайн-системы (shared с
-  /// WishListPage). Высота WishGridCard вычисляется от ширины —
-  /// см. [WishGridCard.extentForColumnWidth].
+  /// WishListPage). Карточки желаний в Masonry-сетке имеют
+  /// естественную высоту — extent не вычисляется.
   static const double _listCardExtent = AppSizes.wishListCardExtent;
 
   static const _horizontal = EdgeInsets.symmetric(
     horizontal: AppSpacing.screenPaddingHorizontal,
   );
-
-  /// Ширина колонки двухколоночной сетки желаний.
-  static double _wishColumnWidth(BuildContext context) =>
-      (MediaQuery.sizeOf(context).width -
-          AppSpacing.screenPaddingHorizontal * 2 -
-          AppSpacing.betweenCards) /
-      2;
 
   @override
   Widget build(BuildContext context) {
@@ -279,6 +276,8 @@ class _HomeSectionsState extends State<_HomeSections> {
       for (final w in widget.wishes)
         if (w.priority == WishPriority.later) w,
     ];
+    // Название списка для бэджа «Поделился» на карточке.
+    final listTitles = {for (final list in widget.lists) list.id: list.title};
 
     return CustomScrollView(
       slivers: [
@@ -311,19 +310,15 @@ class _HomeSectionsState extends State<_HomeSections> {
             ),
           )
         else ...[
-          _grid(
-            extent: WishGridCard.extentForColumnWidth(
-              _wishColumnWidth(context),
-            ),
-            children: [
-              for (final wish in main)
-                WishGridCard(
-                  wish: wish,
-                  highMarker: true,
-                  onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
-                ),
-            ],
-          ),
+          _wishMasonry([
+            for (final wish in main)
+              WishMasonryCard(
+                wish: wish,
+                highMarker: true,
+                listTitle: listTitles[wish.listId],
+                onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
+              ),
+          ]),
           // «Не сейчас» — отдельная сворачиваемая секция ниже
           // основной; пустая группа не рендерится вовсе.
           if (later.isNotEmpty) ...[
@@ -333,18 +328,15 @@ class _HomeSectionsState extends State<_HomeSections> {
               onTap: () => setState(() => _laterExpanded = !_laterExpanded),
             ),
             if (_laterExpanded)
-              _grid(
-                extent: WishGridCard.extentForColumnWidth(
-                  _wishColumnWidth(context),
-                ),
-                children: [
-                  for (final wish in later)
-                    WishGridCard(
-                      wish: wish,
-                      onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
-                    ),
-                ],
-              ),
+              _wishMasonry([
+                for (final wish in later)
+                  WishMasonryCard(
+                    wish: wish,
+                    highMarker: true,
+                    listTitle: listTitles[wish.listId],
+                    onTap: () => context.go(AppRoutes.wishDetails(wish.id)),
+                  ),
+              ]),
           ],
         ],
         const SliverToBoxAdapter(
@@ -378,6 +370,22 @@ class _HomeSectionsState extends State<_HomeSections> {
           crossAxisSpacing: AppSpacing.betweenCards,
           mainAxisExtent: extent,
         ),
+      ),
+    );
+  }
+
+  /// Двухколоночная Masonry-раскладка желаний: ленивые sliver-
+  /// колонки независимы, высота каждой карточки — по контенту.
+  /// Размещение waterfall: элемент идёт в более короткую колонку.
+  Widget _wishMasonry(List<Widget> children) {
+    return SliverPadding(
+      padding: _horizontal,
+      sliver: SliverMasonryGrid.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: AppSpacing.betweenCards,
+        crossAxisSpacing: AppSpacing.betweenCards,
+        childCount: children.length,
+        itemBuilder: (context, index) => children[index],
       ),
     );
   }

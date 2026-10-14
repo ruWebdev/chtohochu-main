@@ -153,7 +153,7 @@ void main() {
     await _openImportSheet(tester, preview: null, fetchedImage: null);
 
     expect(
-      find.text('Не удалось загрузить данные по ссылке — заполните вручную.'),
+      find.text('Не удалось загрузить данные по ссылке — заполни вручную.'),
       findsOneWidget,
     );
     // Поля: название + ссылка.

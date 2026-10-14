@@ -136,3 +136,25 @@ No UI or logic changes are needed — all strings already resolve through `conte
 3. Use `context.l10n.<key>` in the widget.
 
 Do not add Russian literals to widget code — analyzer-visible keys are the only contract.
+
+---
+
+## 10. Tone of voice: обращение на «ты»
+
+All user-facing Russian copy addresses the user with informal **«ты»** — mandatory for every new screen, feature, error, empty state, dialog, and notification.
+
+Rules:
+
+- Imperatives use the singular form: «Добавь», «Введи», «Попробуй ещё раз» — never «Добавьте», «Попробуйте».
+- Possessives: «твои списки», «тебя», «тебе» — never «ваши», «вас», «вам».
+- Prefer short phrases. Omit the pronoun «ты» itself when grammar doesn't require it: «Что хочешь?» reads better than «Что ты хочешь?» where context is clear.
+- Friendly and natural, without familiarity: no slang, no «пожалуйста» stuffing, no exclamation marks as decoration.
+- Dialog titles prefer a question about the action: «Удалить желание?», «Выйти из аккаунта?» — not «Вы уверены?».
+
+Exceptions — texts the app does not control or must not rewrite:
+
+- Legal texts (terms of use, privacy policy).
+- Quotations and user-generated content.
+- Third-party / system messages (OS dialogs, OAuth provider screens, backend-supplied text that arrives already localized — see §4).
+
+Length check: after editing copy, verify the longest variants don't overflow — bottom-bar labels, segmented selectors, dialog buttons, and app-bar titles are the tightest spots.

@@ -11,6 +11,7 @@ import '../../../core/sync/outbox_store.dart';
 import '../../../core/services/preferences_service.dart';
 import '../../../core/services/secure_storage_service.dart';
 import '../domain/auth_session.dart';
+import '../domain/oauth_provider.dart';
 import '../domain/user.dart';
 
 /// Абстракция репозитория авторизации.
@@ -28,11 +29,22 @@ abstract interface class AuthRepository {
   /// Вход по email/password.
   Future<AuthSession> login({required String email, required String password});
 
-  /// OAuth-вход через VK.
-  Future<AuthSession> loginWithVk();
+  /// OAuth-вход через VK: обмен provider-токена на сессию.
+  ///
+  /// [credentials] — токен из redirect-фрагмента WebView-флоу
+  /// ([OAuthPage]); у VK в фрагменте может быть `email` —
+  /// передаётся на backend (users.get его не возвращает).
+  Future<AuthSession> loginWithVk({required OAuthCredentials credentials});
 
   /// OAuth-вход через Yandex.
-  Future<AuthSession> loginWithYandex();
+  Future<AuthSession> loginWithYandex({required OAuthCredentials credentials});
+
+  /// Подтверждённая привязка VK к текущему аккаунту (авторизованный
+  /// запрос из профиля). Возвращает обновлённого пользователя.
+  Future<User> linkWithVk({required OAuthCredentials credentials});
+
+  /// Подтверждённая привязка Yandex к текущему аккаунту.
+  Future<User> linkWithYandex({required OAuthCredentials credentials});
 
   /// Текущая сессия из хранилища или `null`, если пользователь не авторизован.
   ///
@@ -99,6 +111,26 @@ class OAuthUnavailableError extends AuthError {
 /// Непредвиденный сбой OAuth-входа.
 class OAuthFailedError extends AuthError {
   const OAuthFailedError(this.provider) : super('oauth_failed');
+
+  /// Код провайдера: `vk` | `yandex`.
+  final String provider;
+}
+
+/// Email из провайдера совпал с существующим аккаунтом.
+///
+/// Автопривязки по email нет — backend отвечает
+/// `409 oauth_link_required`: пользователь входит по email
+/// и привязывает провайдера подтверждённо в профиле.
+class OAuthLinkRequiredError extends AuthError {
+  const OAuthLinkRequiredError(this.provider) : super('oauth_link_required');
+
+  /// Код провайдера: `vk` | `yandex`.
+  final String provider;
+}
+
+/// Не удалось привязать провайдера к аккаунту.
+class OAuthLinkFailedError extends AuthError {
+  const OAuthLinkFailedError(this.provider) : super('oauth_link_failed');
 
   /// Код провайдера: `vk` | `yandex`.
   final String provider;
@@ -316,11 +348,107 @@ class ApiAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthSession> loginWithVk() => throw const OAuthUnavailableError('vk');
+  Future<AuthSession> loginWithVk({required OAuthCredentials credentials}) =>
+      _socialLogin('vk', credentials);
 
   @override
-  Future<AuthSession> loginWithYandex() =>
-      throw const OAuthUnavailableError('yandex');
+  Future<AuthSession> loginWithYandex({required OAuthCredentials credentials}) =>
+      _socialLogin('yandex', credentials);
+
+  /// Обмен provider access_token на Sanctum-токен:
+  /// `POST /auth/{provider}` → `{data: {token, user}}`.
+  /// Тот же конверт ответа, что у register/login.
+  Future<AuthSession> _socialLogin(
+    String provider,
+    OAuthCredentials credentials,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/$provider',
+        data: {
+          'access_token': credentials.accessToken,
+          if (credentials.email != null) 'email': credentials.email,
+        },
+      );
+      final data = _data(res);
+      return await _persist(
+        data['token'] as String,
+        data['user'] as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      throw _mapOAuthError(provider, e);
+    }
+  }
+
+  @override
+  Future<User> linkWithVk({required OAuthCredentials credentials}) =>
+      _linkProvider('vk', credentials);
+
+  @override
+  Future<User> linkWithYandex({required OAuthCredentials credentials}) =>
+      _linkProvider('yandex', credentials);
+
+  /// Подтверждённая привязка: `POST /auth/{provider}/link`
+  /// (auth:sanctum). Идемпотентна — повторная привязка того же
+  /// provider-аккаунта успешна. Ответ — обновлённый профиль;
+  /// синхронизируем его в Drift (аватар/имя могли дозаполниться).
+  Future<User> _linkProvider(
+    String provider,
+    OAuthCredentials credentials,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/$provider/link',
+        data: {
+          'access_token': credentials.accessToken,
+          if (credentials.email != null) 'email': credentials.email,
+        },
+      );
+      final json = _data(res)['user'] as Map<String, dynamic>;
+      final user = _userFromJson(json);
+      await _db.upsertProfile(
+        ProfilesCompanion(
+          id: Value(user.id),
+          email: Value(user.email),
+          name: Value(user.name),
+          username: Value(user.username),
+          avatarUrl: Value(user.avatarUrl),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return user;
+    } on DioException catch (e) {
+      throw _mapOAuthLinkError(provider, e);
+    }
+  }
+
+  /// Ошибки обмена provider-токена: 409 + `oauth_link_required` —
+  /// совпадение email, нужна подтверждённая привязка; 422 — backend
+  /// не смог подтвердить токен у провайдера.
+  AuthError _mapOAuthError(String provider, DioException e) {
+    final res = e.response;
+    final code = res?.statusCode;
+    if (code == 409) {
+      final body = res?.data;
+      if (body is Map && body['code'] == 'oauth_link_required') {
+        return OAuthLinkRequiredError(provider);
+      }
+      return OAuthFailedError(provider);
+    }
+    if (code == 422) return OAuthFailedError(provider);
+    if (code == 401) return const InvalidCredentialsError();
+    return const AuthNetworkError();
+  }
+
+  AuthError _mapOAuthLinkError(String provider, DioException e) {
+    final code = e.response?.statusCode;
+    // 409: provider занят другим аккаунтом / у пользователя уже
+    // привязан другой аккаунт провайдера. 422: токен не подтверждён.
+    if (code == 409 || code == 422 || code == 401) {
+      return OAuthLinkFailedError(provider);
+    }
+    return const AuthNetworkError();
+  }
 
   AuthError _mapError(
     DioException e, {

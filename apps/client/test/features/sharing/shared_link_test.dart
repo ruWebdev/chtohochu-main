@@ -194,7 +194,7 @@ void main() {
       await _openShareLink(tester, token);
       expect(find.text('Не удалось загрузить'), findsOneWidget);
       expect(
-        find.text('Проверьте подключение к интернету и попробуйте ещё раз.'),
+        find.text('Проверь подключение к интернету и попробуй ещё раз.'),
         findsOneWidget,
       );
 

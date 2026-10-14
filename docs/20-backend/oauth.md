@@ -22,19 +22,24 @@ keeps the backend stateless with respect to OAuth redirects.
 
 ### 1.1 Endpoints
 
-| Method | Path | Throttle | Purpose |
-|--------|------|----------|---------|
-| `POST` | `/api/v1/auth/vk` | `throttle:10,1` | Exchange VK access token for a Sanctum token |
-| `POST` | `/api/v1/auth/yandex` | `throttle:10,1` | Exchange Yandex access token for a Sanctum token |
+| Method | Path | Auth | Throttle | Purpose |
+|--------|------|------|----------|---------|
+| `POST` | `/api/v1/auth/vk` | — | `throttle:10,1` | Exchange VK access token for a Sanctum token |
+| `POST` | `/api/v1/auth/yandex` | — | `throttle:10,1` | Exchange Yandex access token for a Sanctum token |
+| `POST` | `/api/v1/auth/vk/link` | Sanctum | `throttle:10,1` | Confirmed linking of a VK account to the current user |
+| `POST` | `/api/v1/auth/yandex/link` | Sanctum | `throttle:10,1` | Confirmed linking of a Yandex account to the current user |
 
-Both are unauthenticated (no Bearer token required) and are rate-limited to 10 requests per
-minute per IP to brute-force provider tokens.
+The exchange endpoints are unauthenticated (no Bearer token required); the link endpoints
+require an authenticated session and are the **only** way to connect a provider to an
+existing account — see [§5](#5-account-linking-and-email-collision). All endpoints are
+rate-limited to resist provider-token brute-forcing.
 
 ## 2. VK OAuth Flow
 
 ### 2.1 Client side (Flutter)
 
-1. The Flutter app opens a `WebViewWidget` to VK's authorize URL:
+1. The Flutter app opens `OAuthPage` — an incognito `InAppWebView`
+   (`flutter_inappwebview`, already used for link previews) — to VK's authorize URL:
    ```
    https://oauth.vk.com/authorize
      ?client_id={VK_APP_ID}
@@ -42,34 +47,45 @@ minute per IP to brute-force provider tokens.
      &response_type=token
      &scope=email
      &v=5.199
+     &display=mobile
+     &state={STATE}
    ```
-2. VK authenticates the user and redirects to `{VK_REDIRECT_URI}#access_token=...&user_id=...&email=...`.
+   `VK_APP_ID` is supplied via `--dart-define` (public identifier, not a secret).
+   `STATE` is a one-time random value generated per flow.
+2. VK authenticates the user and redirects to `{VK_REDIRECT_URI}#access_token=...&user_id=...&email=...&state=...`.
    The access token is returned in the **URL fragment**, not as a query parameter, so the
    redirect target does not receive it server-side.
-3. The WebView's navigation listener intercepts the redirect, parses the fragment, extracts
-   `access_token`, and closes the WebView.
-4. The Flutter app POSTs `{"access_token": "..."}` to `POST /api/v1/auth/vk`.
-5. On success it stores the returned Sanctum token in `flutter_secure_storage` and navigates
-   to the home route. On failure it shows the OAuth error card with a retry button.
+3. The WebView's navigation delegate intercepts the redirect, verifies `state` matches the
+   value issued in step 1 (a mismatch or provider `error=` is a failure, not a login),
+   parses the fragment, extracts `access_token` and `email`, and closes the WebView.
+4. The Flutter app POSTs `{"access_token": "...", "email": "..."}` to
+   `POST /api/v1/auth/vk` (`email` is forwarded when present — see §2.2).
+5. On success it stores the returned Sanctum token in `flutter_secure_storage` and the
+   router redirect navigates to the app. On failure it shows the error feedback with retry;
+   closing the WebView without a token is a silent cancel.
 
 ### 2.2 Backend side (`SocialAuthController::vk`)
 
-1. Validate the request: `access_token` is required, string.
+1. Validate the request: `access_token` required string, `email` nullable `email|max:255`.
 2. Call `fetchVkProfile($accessToken)`, which requests
    `https://api.vk.com/method/users.get` with `fields=id,first_name,last_name,photo_200,domain`
    and the configured API version (`VK_API_VERSION`, default `5.199`).
 3. If the response is not OK, contains `error`, or has no `response[0]`, return `null` →
    throw a `ValidationException` with `auth.social_failed` for provider `VK` (→ `422`).
-4. Extract `id`, `first_name`, `last_name`, `domain`. VK does not always return `email` via
-   `users.get`; if email is absent, a synthetic local email `vk_{id}@vk.local` is used so the
-   `users.email` unique constraint is satisfied.
-5. Look up an existing user by `vk_id`, or by `email` when email is present and real.
-6. Inside a `DB::transaction`:
-   - If no existing user: create one with `name`, generated unique `username`, `email`,
-     random bcrypt password, and `vk_id`.
-   - If an existing user: update `name`, `email`, and `vk_id` (only non-null values via
-     `array_filter`); backfill `username` if missing.
-7. Issue a Sanctum token named `vk_login` and return `200 {"user": ..., "token": "..."}`.
+4. Extract `id`, name (`first_name last_name`), `domain`, `photo_200` (→ `avatar_url`).
+   `users.get` never returns `email`; the client forwards the email from the redirect
+   fragment. If email is absent entirely, a synthetic local email `vk_{id}@vk.local` is used
+   so the `users.email` unique constraint is satisfied.
+5. Look up an existing user **only** by `vk_id` — never by email (see §5).
+   - No match and the (real) email already belongs to an account → `409`
+     `{"message": ..., "code": "oauth_link_required"}` — confirmed linking required.
+   - No match → create a user inside `DB::transaction` with `name`, generated unique
+     `username`, `email` (real or synthetic), random bcrypt password, `vk_id`, `avatar_url`.
+   - Match → **backfill only empty fields** (`name`, `avatar_url`, `username`). The
+     provider never overwrites an edited profile and never changes the account email.
+6. Issue a Sanctum token named `vk_login` and return `200 {"data": {"token": ..., "user": ...}}` —
+   the same envelope as `register`/`login` (`UserResource` fields; provider ids are not
+   leaked).
 
 ### 2.3 Username generation
 
@@ -87,40 +103,40 @@ email/password registration.
 
 ### 3.1 Client side (Flutter)
 
-1. The Flutter app opens a `WebViewWidget` to Yandex's authorize URL:
+1. The Flutter app opens `OAuthPage` (incognito `InAppWebView`) to Yandex's authorize URL:
    ```
    https://oauth.yandex.ru/authorize
      ?client_id={YANDEX_CLIENT_ID}
      &response_type=token
+     &redirect_uri={YANDEX_REDIRECT_URI}
      &scope=login:email login:info
+     &state={STATE}
    ```
-2. Yandex authenticates the user and redirects to `{YANDEX_REDIRECT_URI}#access_token=...`.
+   `YANDEX_CLIENT_ID` is supplied via `--dart-define`.
+2. Yandex authenticates the user and redirects to `{YANDEX_REDIRECT_URI}#access_token=...&state=...`.
    The token is in the URL fragment.
-3. The WebView navigation listener intercepts the redirect, parses the fragment, extracts
-   `access_token`, and closes the WebView.
+3. The WebView navigation delegate intercepts the redirect, verifies `state`, parses the
+   fragment, extracts `access_token`, and closes the WebView. The Yandex fragment carries
+   no `email` — the backend obtains it from the provider profile.
 4. The Flutter app POSTs `{"access_token": "..."}` to `POST /api/v1/auth/yandex`.
-5. On success it stores the Sanctum token and navigates home; on failure it shows the error
-   card with retry.
+5. Same as VK: store the Sanctum token; error feedback with retry; silent cancel on close.
 
 ### 3.2 Backend side (`SocialAuthController::yandex`)
 
 1. Validate the request: `access_token` is required, string.
 2. Resolve the Yandex profile via `Socialite::driver('yandex')->userFromToken($accessToken)`.
-   Socialite calls Yandex's user info endpoint and returns a `User` object with `id`,
-   `email`, `nickname`, `name`, and the raw `user` array.
-3. On any throwable from Socialite, log the error message (not the token) and throw
-   `ValidationException` with `auth.social_failed` for provider `Яндекс` (→ `422`).
-4. Extract `id`, `email`, `name` (resolved via `resolveYandexName`, which tries `name`,
-   `real_name`, `display_name`, `first_name+last_name`, then email local part), and
-   `yandex_login` (nickname or `login`).
-5. If `id` is missing, throw `auth.social_no_id` (→ `422`).
-6. Look up an existing user by `yandex_id`, or by `email` when present and real.
-7. Inside a `DB::transaction`:
-   - If no existing user: create one with `name`, generated unique `username`, `email`
-     (or `yandex_{id}@yandex.local` synthetic), random bcrypt password, and `yandex_id`.
-   - If an existing user: update `name`, `email`, `yandex_id` (non-null only); backfill
-     `username` if missing.
-8. Issue a Sanctum token named `yandex_login` and return `200 {"user": ..., "token": "..."}`.
+   On any throwable, log the error message (not the token) and throw `ValidationException`
+   with `auth.social_failed` (→ `422`).
+3. Extract `id`, `email`, `name` (resolved via `resolveYandexName`), `login` (nickname or
+   `login`), `avatar`. If `id` is missing → `auth.social_no_id` (→ `422`).
+4. Look up an existing user **only** by `yandex_id` — never by email (see §5).
+   - No match and the provider email already belongs to an account → `409`
+     `oauth_link_required`.
+   - No match → create a user with `name`, generated unique `username`, `email` (real or
+     `yandex_{id}@yandex.local` synthetic), random password, `yandex_id`, `avatar_url`.
+   - Match → backfill empty fields only (name/avatar/username); email never changes.
+5. Issue a Sanctum token named `yandex_login` and return the same `{data: {token, user}}`
+   envelope as `register`/`login`.
 
 ## 4. Token Exchange Contract
 
@@ -130,8 +146,12 @@ email/password registration.
 POST /api/v1/auth/vk HTTP/1.1
 Content-Type: application/json
 
-{ "access_token": "vk1.a.MjA..." }
+{ "access_token": "vk1.a.MjA...", "email": "ivan@mail.ru" }
 ```
+
+`email` is optional and used only for VK — it arrives in the provider's redirect fragment
+and `users.get` cannot return it. Yandex requests carry `access_token` only; the email is
+resolved server-side from the provider profile.
 
 ```http
 POST /api/v1/auth/yandex HTTP/1.1
@@ -142,20 +162,22 @@ Content-Type: application/json
 
 ### 4.2 Success response (`200`)
 
+Same envelope as `register`/`login` — `UserResource` fields, provider ids never exposed:
+
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "name": "Иван",
-    "username": "ivan_petrov",
-    "email": "ivan@example.com",
-    "email_verified_at": "2025-11-20T12:00:00Z",
-    "vk_id": "12345678",
-    "yandex_id": null,
-    "roles": ["User"],
-    "permissions": ["..."]
-  },
-  "token": "3|abcdef0123456789..."
+  "data": {
+    "token": "3|abcdef0123456789...",
+    "user": {
+      "id": "uuid",
+      "email": "ivan@example.com",
+      "name": "Иван",
+      "username": "ivan_petrov",
+      "avatar_url": "https://...",
+      "created_at": "2025-11-20T12:00:00Z",
+      "updated_at": "2025-11-20T12:00:00Z"
+    }
+  }
 }
 ```
 
@@ -167,32 +189,56 @@ revocable via `/auth/logout` and `/auth/logout-all`.
 
 | Status | Condition | Body |
 |--------|-----------|------|
-| `422` | Invalid provider token / provider error / no provider id | `{"message": "...", "errors": {"access_token": ["..."]}}` |
-| `429` | Throttle exceeded | `{"message": "Too many requests."}` |
 | `422` | Missing `access_token` | `{"message": "...", "errors": {"access_token": ["..."]}}` |
+| `422` | Invalid provider token / provider error / no provider id | `{"message": "...", "errors": {"access_token": ["..."]}}` |
+| `409` | Provider email belongs to an existing unlinked account | `{"message": "...", "code": "oauth_link_required"}` |
+| `429` | Throttle exceeded | `{"message": "Too many requests."}` |
+
+The client maps `oauth_link_required` to a message explaining that the user should sign in
+with email and link the provider in the profile (see §5).
 
 ## 5. Account Linking and Email Collision
 
-The lookup logic intentionally matches on `vk_id`/`yandex_id` **or** on a real `email`:
+Login resolves users **only** by `vk_id`/`yandex_id`. There is deliberately **no**
+auto-linking by email match: provider emails on the access-token path are not
+verified by the backend, and implicit linking would let an account be captured via a
+foreign provider profile that happens to share the address.
 
-```php
-User::query()
-    ->where('vk_id', $providerId)
-    ->when($email, fn($q) => $q->orWhere('email', $email))
-    ->first();
+- Login, provider id unknown and no email collision → a **new** account is created with a
+  real provider email or a synthetic local email (`vk_{id}@vk.local`,
+  `yandex_{id}@yandex.local`; unique by construction, never deliverable).
+- Login, provider id unknown and the email matches an existing account → `409
+  oauth_link_required`, no token issued, nothing is written.
+- Linking an existing account is only possible through the **confirmed** flow:
+  the user first authenticates (any method), then calls `POST /auth/{provider}/link`
+  with a provider access token obtained through the same WebView flow. The client exposes
+  this as «Привязать VK / Привязать Яндекс» in Profile → Account.
+
+### 5.1 Link endpoint contract
+
+```http
+POST /api/v1/auth/{provider}/link
+Authorization: Bearer <sanctum-token>
+Content-Type: application/json
+
+{ "access_token": "...", "email": "..." /* optional, VK only */ }
 ```
 
-Consequences:
+Success `200`: `{"data": {"user": {...UserResource...}}}` — the updated profile (the link
+also backfills empty `name`/`avatar_url`/`username`). The call is **idempotent**: linking
+the same provider account again succeeds as a no-op.
 
-- A user who previously registered by email and later logs in with VK/Yandex using the same
-  email is **linked** to the existing account (the provider id is backfilled onto it).
-- A user who logs in with VK/Yandex and no shared email creates a **new** account with a
-  synthetic local email (`vk_{id}@vk.local` or `yandex_{id}@yandex.local`).
-- Synthetic emails are unique by construction (the provider id is unique) and never collide
-  with real emails because they use the reserved `@vk.local` / `@yandex.local` domains.
+| Status | Condition | Body `code` |
+|--------|-----------|-------------|
+| `401` | Unauthenticated | — |
+| `422` | Missing/invalid provider token | `access_token` validation error |
+| `409` | Provider account is linked to a **different** user | `oauth_provider_taken` |
+| `409` | User already has a **different** account of this provider | `oauth_already_linked` |
 
-If a future requirement allows a user to merge accounts, it must be implemented as an
-explicit merge flow with email verification, not as an implicit side effect of OAuth login.
+Unlink is a future capability (§10.6): it must refuse to remove the last auth method of an
+account and requires distinguishing user-set passwords from generated ones.
+
+## 6. Email Verification for OAuth Users
 
 ## 6. Email Verification for OAuth Users
 
@@ -209,22 +255,27 @@ explicit merge flow with email verification, not as an implicit side effect of O
 ### 7.1 Why WebView
 
 VK and Yandex OAuth require a browser context for consent and cookie-based session. Flutter
-uses `WebViewWidget` (from `webview_flutter`) rather than a platform browser tab because the
-app must intercept the redirect and extract the access token from the URL fragment. A
-platform browser tab does not reliably expose the fragment to the app.
+uses `InAppWebView` (from `flutter_inappwebview`, already used for link previews — the doc
+previously named `webview_flutter`; the navigation-delegate contract is identical) rather
+than a platform browser tab because the app must intercept the redirect and extract the
+access token from the URL fragment. A platform browser tab does not reliably expose the
+fragment to the app.
 
 ### 7.2 Implementation contract
 
-- The `OAuthPage` widget hosts a `WebViewWidget` and a navigation delegate.
-- The navigation delegate watches for navigations to `{VK_REDIRECT_URI}` / `{YANDEX_REDIRECT_URI}`
-  and parses the fragment **before** allowing the navigation to complete. The redirect target
-  itself does not need to exist as a real page; it is a sentinel.
-- On success: extract `access_token`, close the WebView, call the exchange endpoint, store
-  the Sanctum token, navigate to home.
-- On user cancel (close button): pop the page, no token exchange.
-- On provider error in the fragment (`error=...`): show the error card with retry.
-- The WebView must not persist cookies between sessions for the OAuth provider; clear the
-  WebView cookie store on open so each login is a fresh consent.
+- `OAuthPage` (`features/auth/presentation/pages/oauth_page.dart`) hosts an `InAppWebView`
+  and a navigation delegate (`shouldOverrideUrlLoading`).
+- The WebView runs in **incognito** mode — provider cookies are not persisted between
+  sessions, so each login is a fresh consent.
+- The delegate watches for navigations to `{VK|YANDEX}_REDIRECT_URI` and parses the
+  fragment **before** allowing the navigation to complete. The redirect target itself does
+  not need to exist as a real page; it is a sentinel.
+- A one-time `state` is generated per flow and **must** match the value echoed in the
+  fragment; mismatch or `error=` in the fragment is a failure, never a login.
+- On success: extract `access_token` (and `email` for VK), close the WebView, call the
+  exchange endpoint, store the Sanctum token, navigate to home.
+- On user cancel (close button): pop the page, no token exchange, no error shown.
+- On provider error in the fragment or load failure: show the error card with retry.
 
 ### 7.3 Security constraints
 
@@ -260,7 +311,7 @@ must be documented in an ADR and must not change the mobile contract.
 
 ## 9. Configuration
 
-Required environment variables:
+### 9.1 Backend environment variables
 
 ```dotenv
 # VK
@@ -268,6 +319,8 @@ VK_APP_ID=...
 VK_APP_SECRET=...
 VK_SERVICE_TOKEN=...
 VK_API_VERSION=5.199
+VK_CLIENT_ID=...          # Socialite driver (web flow)
+VK_CLIENT_SECRET=...
 VK_REDIRECT_URI=https://app.chtohochu.ru/oauth/vk/redirect
 
 # Yandex
@@ -281,6 +334,38 @@ The `services.vk` block holds the API-call credentials used by `fetchVkProfile`.
 enabled). The `services.yandex` block holds the Socialite credentials used by
 `Socialite::driver('yandex')`.
 
+### 9.2 Flutter `--dart-define` parameters
+
+| Define | Required | Meaning |
+|--------|----------|---------|
+| `VK_APP_ID` | for VK login | Public application id of the VK app |
+| `YANDEX_CLIENT_ID` | for Yandex login | Public client id of the Yandex app |
+| `VK_REDIRECT_URI` | optional | Sentinel redirect, default `https://{app-host}/oauth/vk/redirect` (derived from `API_BASE_URL`: `api.*` → `app.*`) |
+| `YANDEX_REDIRECT_URI` | optional | Same pattern, `/oauth/yandex/redirect` |
+
+Client ids are **public identifiers** — they may ship inside the client. Provider secrets
+must never be delivered to the client. When a client id is absent from the build, the
+corresponding button shows an informational «скоро будет доступно» instead of starting the
+flow — the feature degrades gracefully per build.
+
+```bash
+flutter run \
+  --dart-define=API_BASE_URL=https://api.chtohochu.test \
+  --dart-define=VK_APP_ID=... \
+  --dart-define=YANDEX_CLIENT_ID=...
+```
+
+### 9.3 Owner checklist (external setup)
+
+1. **VK**: create/enable a standalone app at <https://dev.vk.com>; copy `VK_APP_ID`,
+   `VK_APP_SECRET`, `VK_SERVICE_TOKEN`; register `VK_REDIRECT_URI`
+   (`https://app.chtohochu.ru/oauth/vk/redirect` for prod, `https://app.chtohochu.test/...`
+   for a local VK app) in the app's allowed redirect URIs.
+2. **Yandex**: create an app at <https://oauth.yandex.ru>; enable scopes `login:email` and
+   `login:info`; copy `YANDEX_CLIENT_ID`/`YANDEX_CLIENT_SECRET`; register
+   `YANDEX_REDIRECT_URI` as a Callback URI.
+3. Fill backend `.env` (§9.1) and pass client dart-defines (§9.2) per environment.
+
 ## 10. Security Considerations
 
 1. **The provider access token is a secret.** It is sent only to `/api/v1/auth/{provider}`
@@ -291,11 +376,11 @@ enabled). The `services.yandex` block holds the Socialite credentials used by
    returned `id` as the source of truth.
 3. **Throttling.** The exchange endpoints are rate-limited to 10/min/IP to resist
    token-guessing and enumeration.
-4. **Account takeover via email collision.** Linking on email is convenient but carries
-   takeover risk if an attacker controls the email account at the provider. Mitigation:
-   VK/Yandex `id` is the primary link key; email is only a secondary match. If a
-   high-risk operation is gated on email-based linking in the future, it must require email
-   verification first.
+4. **Account takeover via email collision.** There is no implicit linking by email:
+   provider `id` is the only link key, and connecting a provider to an existing account
+   requires the confirmed `/auth/{provider}/link` call inside an authenticated session.
+   A `409 oauth_link_required` response reveals account existence — the same information a
+   duplicate-email registration already exposes.
 5. **Synthetic emails** (`@vk.local`, `@yandex.local`) must never be deliverable. They exist
    only to satisfy the `users.email` unique constraint. They must not be used for
    notifications; notifications to OAuth-only users without a real email must be suppressed
@@ -303,18 +388,24 @@ enabled). The `services.yandex` block holds the Socialite credentials used by
 6. **Token revocation on link/unlink.** Linking a new provider to an existing account does
    not revoke existing tokens. Unlinking a provider (a future capability) must not lock the
    user out if they have a password; if they have no password and no other provider, unlink
-   must be refused.
-7. **No silent re-linking.** If a provider login matches an existing account by email but
-   the account already has a different `vk_id`/`yandex_id`, the backend must refuse the
-   link rather than overwrite it. (The current `array_filter` + `?:` logic preserves the
-   existing id; this behavior must be covered by a test.)
+   must be refused — note that OAuth-created users currently carry a random bcrypt
+   password, so the lockout check requires distinguishing user-set passwords first.
+7. **No silent re-linking.** If the user already has a *different* provider account linked,
+   or the provider account belongs to a different user, `/auth/{provider}/link` refuses
+   with `409` (`oauth_already_linked` / `oauth_provider_taken`) — the existing id is never
+   overwritten. Covered by `SocialAuthApiTest`.
+8. **Provider token provenance (client).** The client verifies the `state` echoed in the
+   redirect fragment against the value it generated; a fragment without a matching `state`
+   or with `error=` is treated as failure, so an attacker cannot inject a foreign
+   provider token into the WebView flow.
 
 ## 11. Testing
 
-- For each provider: happy path (new user), happy path (existing user by provider id),
-  existing user by email (linking), missing provider id (422), invalid token (422),
-  throttle (429 after 10 attempts).
-- Username generation: collisions, short bases, non-Latin input.
-- Synthetic email uniqueness across providers.
-- Account linking does not overwrite an existing provider id.
-- The `/auth/me` response after OAuth login includes correct roles/permissions.
+`tests/Feature/SocialAuthApiTest.php` covers, per provider: happy path (new user),
+existing user by provider id, email collision → `409 oauth_link_required`, invalid token
+→ `422`, missing token → `422`, link attach / idempotency / `oauth_provider_taken` /
+`oauth_already_linked` / unauthenticated link → `401`.
+
+Still recommended (not yet covered): throttle `429` after 10 attempts; username
+generation edge cases (collisions, short bases, non-Latin); synthetic email uniqueness
+across providers.

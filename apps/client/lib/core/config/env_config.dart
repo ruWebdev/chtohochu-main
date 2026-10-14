@@ -18,6 +18,10 @@ class EnvConfig {
     required this.apiBaseUrl,
     required this.environment,
     required this.reverbAppKey,
+    required this.vkAppId,
+    required this.yandexClientId,
+    required this.vkRedirectUri,
+    required this.yandexRedirectUri,
   });
 
   /// Создаёт конфигурацию из `--dart-define` переменных.
@@ -30,6 +34,21 @@ class EnvConfig {
     final apiBaseUrl = definedUrl.isNotEmpty
         ? definedUrl
         : 'https://api.chtohochu.ru';
+
+    // OAuth implicit flow (docs/20-backend/oauth.md). Client id —
+    // публичный идентификатор приложения у провайдера (секреты
+    // на клиенте не хранятся). Пустое значение = провайдер не
+    // сконфигурирован для этой сборки → кнопка показывает
+    // «скоро будет доступно» вместо входа.
+    const vkAppId = String.fromEnvironment('VK_APP_ID');
+    const yandexClientId = String.fromEnvironment('YANDEX_CLIENT_ID');
+    // Sentinel redirect URI — WebView перехватывает навигацию на
+    // него и забирает access_token из фрагмента. По умолчанию —
+    // фиктивная страница на домене пользовательского клиента
+    // (app.*); должен совпадать с регистрацией у провайдера.
+    final oauthBase = _oauthAppBase(apiBaseUrl);
+    const definedVkRedirect = String.fromEnvironment('VK_REDIRECT_URI');
+    const definedYaRedirect = String.fromEnvironment('YANDEX_REDIRECT_URI');
 
     // Reverb app key — публичный идентификатор (по дизайну уезжает
     // в клиенты, как Pusher app key). Не секрет. Без явного
@@ -60,11 +79,31 @@ class EnvConfig {
       apiBaseUrl: apiBaseUrl,
       environment: environment,
       reverbAppKey: reverbAppKey,
+      vkAppId: vkAppId,
+      yandexClientId: yandexClientId,
+      vkRedirectUri: definedVkRedirect.isNotEmpty
+          ? definedVkRedirect
+          : '$oauthBase/oauth/vk/redirect',
+      yandexRedirectUri: definedYaRedirect.isNotEmpty
+          ? definedYaRedirect
+          : '$oauthBase/oauth/yandex/redirect',
     );
   }
 
   /// Базовый URL API.
   final String apiBaseUrl;
+
+  /// Публичный id VK-приложения (`''` = OAuth через VK недоступен).
+  final String vkAppId;
+
+  /// Публичный client id Яндекс-приложения.
+  final String yandexClientId;
+
+  /// Sentinel redirect URI для VK OAuth.
+  final String vkRedirectUri;
+
+  /// Sentinel redirect URI для Yandex OAuth.
+  final String yandexRedirectUri;
 
   /// Публичный ключ Reverb-приложения (wss://{apiHost}/app/{key}).
   final String reverbAppKey;
@@ -74,6 +113,18 @@ class EnvConfig {
 
   /// `true`, если приложение собрано для production.
   bool get isProduction => environment == 'prod';
+
+  /// Хост пользовательского клиента для OAuth-sentinel страниц:
+  /// `api.chtohochu.ru` → `app.chtohochu.ru` (локально →
+  /// `app.chtohochu.test`). Хост без `api.`-префикса отдаётся как есть.
+  static String _oauthAppBase(String apiBaseUrl) {
+    final uri = Uri.tryParse(apiBaseUrl);
+    if (uri == null || uri.host.isEmpty) return apiBaseUrl;
+    final host = uri.host.startsWith('api.')
+        ? 'app.${uri.host.substring(4)}'
+        : uri.host;
+    return '${uri.scheme}://$host';
+  }
 
   /// Локальный/dev хост API: `*.chtohochu.test`, localhost, приватные IP.
   static bool _isLocalHost(String url) {

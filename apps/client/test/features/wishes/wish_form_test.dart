@@ -22,7 +22,7 @@ void main() {
 
     expect(find.byType(WishFormPage), findsOneWidget);
     expect(find.text('Создай своё первое желание'), findsOneWidget);
-    expect(find.text('Что вы хотите?'), findsOneWidget);
+    expect(find.text('Что ты хочешь?'), findsOneWidget);
     expect(find.text('Сохранить желание'), findsOneWidget);
     expect(find.text('Пропустить'), findsOneWidget);
   });
@@ -43,7 +43,7 @@ void main() {
     await tester.tap(find.text('Сохранить желание'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Введите название желания'), findsOneWidget);
+    expect(find.text('Введи название желания'), findsOneWidget);
   });
 
   testWidgets('Successful wish creation navigates to home', (tester) async {

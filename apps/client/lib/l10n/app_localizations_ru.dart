@@ -61,13 +61,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get orSeparator => 'или';
 
   @override
-  String get tryAgain => 'Попробуйте ещё раз.';
+  String get tryAgain => 'Попробуй ещё раз.';
 
   @override
   String get loadFailed => 'Не удалось загрузить';
 
   @override
-  String get pullToRefresh => 'Потяните вниз, чтобы обновить.';
+  String get pullToRefresh => 'Потяни вниз, чтобы обновить.';
 
   @override
   String get syncNotSynced => 'не синхронизировано';
@@ -79,7 +79,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get urlHint => 'https://…';
 
   @override
-  String get errorSaveFailed => 'Не удалось сохранить. Проверьте интернет.';
+  String get errorSaveFailed => 'Не удалось сохранить. Проверь интернет.';
 
   @override
   String get errorNotAuthenticated => 'Пользователь не авторизован.';
@@ -88,7 +88,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get errorValidation => 'Ошибка валидации.';
 
   @override
-  String get errorGeneric => 'Произошла ошибка. Попробуйте ещё раз.';
+  String get errorGeneric => 'Произошла ошибка. Попробуй ещё раз.';
 
   @override
   String get navWishes => 'Что хочу';
@@ -158,7 +158,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get shareLoadErrorDescription =>
-      'Проверьте подключение к интернету и попробуйте ещё раз.';
+      'Проверь подключение к интернету и попробуй ещё раз.';
 
   @override
   String get retry => 'Повторить';
@@ -183,10 +183,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authTagline => 'Твоё пространство желаний';
 
   @override
-  String get authSubtitleLogin => 'Войдите, чтобы продолжить';
+  String get authSubtitleLogin => 'Войди, чтобы продолжить';
 
   @override
-  String get authSubtitleRegister => 'Создайте аккаунт за минуту';
+  String get authSubtitleRegister => 'Создай аккаунт за минуту';
 
   @override
   String get authTabLogin => 'Вход';
@@ -198,7 +198,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authNameLabel => 'Имя (необязательно)';
 
   @override
-  String get authNameHint => 'Как вас зовут';
+  String get authNameHint => 'Как тебя зовут?';
 
   @override
   String get authNameSemantic => 'Имя';
@@ -216,7 +216,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get passwordLabel => 'Пароль';
 
   @override
-  String get passwordHint => 'Минимум 6 символов';
+  String get passwordHint => 'Минимум 8 символов';
 
   @override
   String get passwordSemantic => 'Пароль';
@@ -240,10 +240,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authYandexButton => 'Войти через Яндекс';
 
   @override
-  String get emailInvalid => 'Введите корректный email';
+  String get emailInvalid => 'Введи корректный email';
 
   @override
-  String get passwordTooShort => 'Пароль не короче 8 символов';
+  String get passwordTooShort => 'Пароль должен быть не короче 8 символов';
 
   @override
   String get authInvalidCredentials => 'Неверный email или пароль';
@@ -252,10 +252,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authEmailTaken => 'Аккаунт с таким email уже существует';
 
   @override
-  String get authNetwork => 'Проверьте подключение к интернету';
+  String get authNetwork => 'Проверь подключение к интернету';
 
   @override
-  String get authGeneric => 'Произошла ошибка. Попробуйте ещё раз.';
+  String get authGeneric => 'Произошла ошибка. Попробуй ещё раз.';
 
   @override
   String get authVkFailed => 'Не удалось войти через VK.';
@@ -273,6 +273,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get oauthUnavailableTitle => 'Вход через соцсети скоро будет доступен';
 
   @override
+  String oauthLinkRequired(String provider) {
+    return 'Аккаунт с такой почтой уже существует. Войди по email и привяжи $provider в профиле.';
+  }
+
+  @override
+  String oauthLinked(String provider) {
+    return '$provider привязан.';
+  }
+
+  @override
+  String oauthLinkFailed(String provider) {
+    return 'Не удалось привязать $provider. Попробуй ещё раз.';
+  }
+
+  @override
+  String get oauthConnectVk => 'Привязать VK';
+
+  @override
+  String get oauthConnectYandex => 'Привязать Яндекс';
+
+  @override
   String get onboardingSkip => 'Пропустить';
 
   @override
@@ -287,14 +308,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingSlide1Description =>
-      'Записывайте свои желания в одном месте, чтобы ничего не потерялось.';
+      'Записывай желания в одном месте, чтобы ничего не потерялось.';
 
   @override
   String get onboardingSlide2Title => 'Чтобы самому не забыть';
 
   @override
   String get onboardingSlide2Description =>
-      'Добавляйте идеи подарков, вещи и мечты — они всегда будут под рукой.';
+      'Добавляй идеи подарков, вещи и мечты — они всегда будут под рукой.';
 
   @override
   String get onboardingSlide3Title =>
@@ -302,7 +323,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingSlide3Description =>
-      'Поделитесь списком — и получите именно то, чего вы действительно хотите.';
+      'Поделись списком — и получишь именно то, чего хочешь.';
 
   @override
   String get wishesTitle => 'Что хочу';
@@ -358,7 +379,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishNewTitle => 'Новое желание';
 
   @override
-  String get wishTitleLabel => 'Что вы хотите?';
+  String get wishTitleLabel => 'Что ты хочешь?';
 
   @override
   String get wishTitleHint => 'Например: наушники Sony WH-1000XM6';
@@ -397,6 +418,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishCardAction => 'Купить';
 
   @override
+  String get wishBadgePersonal => 'Личное';
+
+  @override
+  String get wishBadgeShared => 'Поделился';
+
+  @override
   String get wishPriorityLabel => 'Насколько сильно хочешь?';
 
   @override
@@ -418,7 +445,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishNoteSemantic => 'Заметка о желании';
 
   @override
-  String get wishTitleRequired => 'Введите название желания';
+  String get wishTitleRequired => 'Введи название желания';
 
   @override
   String wishTitleTooLong(int max) {
@@ -426,7 +453,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get wishPriceInvalid => 'Введите цену числом';
+  String get wishPriceInvalid => 'Введи цену числом';
 
   @override
   String get open => 'Открыть';
@@ -439,7 +466,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get wishImportFailed =>
-      'Не удалось загрузить данные по ссылке — заполните вручную.';
+      'Не удалось загрузить данные по ссылке — заполни вручную.';
 
   @override
   String get wishImportNewLink => 'Получена новая ссылка для импорта';
@@ -448,7 +475,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishSave => 'Сохранить желание';
 
   @override
-  String get wishDeleteTitle => 'Вы уверены?';
+  String get wishDeleteTitle => 'Удалить желание?';
 
   @override
   String get wishDeleteMessage =>
@@ -485,7 +512,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get firstWishDescription =>
-      'Запишите то, чего вы хотите — чтобы не забыть самим и помочь близким выбрать правильный подарок.';
+      'Запиши то, чего хочешь, — чтобы не забыть самому и помочь близким выбрать подарок.';
 
   @override
   String get wishQuickHint => 'Что хочешь?';
@@ -569,7 +596,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get listsEmptyDescription =>
-      'Создавайте списки покупок — продукты на неделю, в поездку, для дома — и отмечайте купленное.';
+      'Создавай списки покупок — продукты на неделю, в поездку, для дома — и отмечай купленное.';
 
   @override
   String get listCreate => 'Создать список';
@@ -593,7 +620,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get listTitleHint => 'Например: продукты на неделю';
 
   @override
-  String get listTitleRequired => 'Введите название списка';
+  String get listTitleRequired => 'Введи название списка';
 
   @override
   String listTitleTooLong(int max) {
@@ -674,7 +701,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get listMemberOwner => 'Владелец';
 
   @override
-  String get listMemberYou => 'Вы';
+  String get listMemberYou => 'Ты';
 
   @override
   String get listMembersAdd => 'Добавить участника';
@@ -687,7 +714,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get listMembersNoFriendsHint =>
-      'Сначала добавьте человека в друзья на экране «Друзья».';
+      'Сначала добавь человека в друзья на экране «Друзья».';
 
   @override
   String listMemberAdded(String name) {
@@ -716,7 +743,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String listLeaveMessage(String title) {
-    return '«$title» исчезнет из ваших списков.';
+    return '«$title» исчезнет из твоих списков.';
   }
 
   @override
@@ -746,17 +773,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get friendsEmptyDescription =>
-      'Добавьте близких, чтобы видеть их желания и проще выбирать подарки.';
+      'Добавь близких, чтобы видеть их желания и проще выбирать подарки.';
 
   @override
   String get friendSearchHint => 'Имя или @username';
 
   @override
-  String get friendSearchEmptyTitle => 'Найдите друга';
+  String get friendSearchEmptyTitle => 'Найди друга';
 
   @override
   String get friendSearchEmptyDescription =>
-      'Введите имя или @username — человек появится в результатах поиска.';
+      'Введи имя или @username — человек появится в результатах поиска.';
 
   @override
   String get friendSearchFailed => 'Не удалось выполнить поиск';
@@ -766,7 +793,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String friendSearchNoResultsHint(String query) {
-    return 'По запросу «$query» нет пользователей. Проверьте имя или username.';
+    return 'По запросу «$query» нет пользователей. Проверь имя или username.';
   }
 
   @override
@@ -781,8 +808,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get friendAddFailed =>
-      'Не удалось добавить друга. Попробуйте ещё раз.';
+  String get friendAddFailed => 'Не удалось добавить друга. Попробуй ещё раз.';
 
   @override
   String get friendRemoveFailed => 'Не удалось удалить друга.';
@@ -792,7 +818,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String friendRemoveMessage(String name) {
-    return '$name исчезнет из вашего списка друзей. Вы сможете добавить его снова через поиск.';
+    return '$name исчезнет из твоего списка друзей. Снова добавить его можно через поиск.';
   }
 
   @override
@@ -828,7 +854,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String friendNoWishes(String name) {
-    return '$name ещё не добавил(а) желания, которые вам видны.';
+    return '$name ещё не добавил(а) желаний, которые тебе видны.';
   }
 
   @override
@@ -871,7 +897,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get logoutTitle => 'Выйти из аккаунта?';
 
   @override
-  String get logoutMessage => 'Вы сможете войти снова позже.';
+  String get logoutMessage => 'Сможешь войти снова позже.';
 
   @override
   String get logoutPendingTitle => 'Несохранённые изменения';
@@ -901,10 +927,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get nameLabel => 'Имя';
 
   @override
-  String get nameHintProfile => 'Как вас видят друзья';
+  String get nameHintProfile => 'Как тебя видят друзья';
 
   @override
-  String get nameRequired => 'Укажите имя';
+  String get nameRequired => 'Укажи имя';
 
   @override
   String get usernameLabel => 'Username';
@@ -916,7 +942,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get usernameInvalid => 'Латиница, цифры, «_» и «.», минимум 3 символа';
 
   @override
-  String get usernameHelp => 'По username вас смогут найти друзья.';
+  String get usernameHelp => 'По username тебя смогут найти друзья.';
 
   @override
   String get photoSheetTitle => 'Фото профиля';

@@ -2,6 +2,7 @@ import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/core/services/secure_storage_service.dart';
 import 'package:chtohochu/features/auth/data/auth_repository.dart';
 import 'package:chtohochu/features/auth/domain/auth_session.dart';
+import 'package:chtohochu/features/auth/domain/oauth_provider.dart';
 import 'package:chtohochu/features/auth/domain/user.dart';
 
 /// In-memory `AuthRepository` для тестов error-path'ов —
@@ -46,11 +47,21 @@ class FakeAuthRepository implements AuthRepository {
   }) => _persist('token_$email');
 
   @override
-  Future<AuthSession> loginWithVk() => throw const OAuthUnavailableError('vk');
+  Future<AuthSession> loginWithVk({required OAuthCredentials credentials}) =>
+      _persist('token_vk_${credentials.accessToken}');
 
   @override
-  Future<AuthSession> loginWithYandex() =>
-      throw const OAuthUnavailableError('yandex');
+  Future<AuthSession> loginWithYandex({
+    required OAuthCredentials credentials,
+  }) => _persist('token_yandex_${credentials.accessToken}');
+
+  @override
+  Future<User> linkWithVk({required OAuthCredentials credentials}) async =>
+      testUser;
+
+  @override
+  Future<User> linkWithYandex({required OAuthCredentials credentials}) async =>
+      testUser;
 
   @override
   Future<AuthSession?> currentSession() async {

@@ -219,6 +219,12 @@ flutter run
 # используйте adb reverse / host IP / проброс (см. local-https.md).
 flutter run \
   --dart-define=API_BASE_URL=https://api.chtohochu.test
+
+# + VK / Yandex OAuth (см. docs/20-backend/oauth.md §9):
+flutter run \
+  --dart-define=API_BASE_URL=https://api.chtohochu.test \
+  --dart-define=VK_APP_ID=... \
+  --dart-define=YANDEX_CLIENT_ID=...
 ```
 
 ### 4.3 Code generation

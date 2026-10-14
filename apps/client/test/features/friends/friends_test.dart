@@ -127,7 +127,7 @@ void main() {
 
     expect(find.byType(FriendsPage), findsOneWidget);
     expect(find.text('Пока нет друзей'), findsOneWidget);
-    expect(find.textContaining('Добавьте близких'), findsOneWidget);
+    expect(find.textContaining('Добавь близких'), findsOneWidget);
     expect(find.widgetWithText(AppButton, 'Добавить друга'), findsOneWidget);
   });
 
@@ -235,7 +235,7 @@ void main() {
 
     expect(find.byType(AddFriendSheet), findsOneWidget);
     // Initial — подсказка до ввода.
-    expect(find.text('Найдите друга'), findsOneWidget);
+    expect(find.text('Найди друга'), findsOneWidget);
 
     // Results — network-only поиск по fake API.
     await tester.enterText(find.byType(TextField), 'ольга');
@@ -584,7 +584,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
     expect(
-      find.text('Не удалось добавить друга. Попробуйте ещё раз.'),
+      find.text('Не удалось добавить друга. Попробуй ещё раз.'),
       findsOneWidget,
     );
   });

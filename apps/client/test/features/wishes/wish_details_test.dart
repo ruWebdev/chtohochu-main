@@ -202,7 +202,7 @@ void main() {
     await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Вы уверены?'), findsOneWidget);
+    expect(find.text('Удалить желание?'), findsOneWidget);
     expect(
       find.text('Желание будет удалено без возможности восстановления.'),
       findsOneWidget,
@@ -365,7 +365,7 @@ void main() {
       // Карточка желания ниже секции списков — за viewport:
       // ensureVisible + тап по центру самой карточки (текст мог бы
       // оказаться под bottom bar после частичной прокрутки).
-      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      final card = find.widgetWithText(WishMasonryCard, 'Наушники');
       await tester.ensureVisible(card);
       await tester.tap(card);
       await tester.pumpAndSettle();
@@ -520,7 +520,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
       await tester.pumpAndSettle();
-      expect(find.text('Вы уверены?'), findsOneWidget);
+      expect(find.text('Удалить желание?'), findsOneWidget);
       await tester.tap(find.widgetWithText(AppButton, 'Отмена'));
       await tester.pumpAndSettle();
       expect(find.byType(WishDetailsPage), findsOneWidget);
@@ -634,7 +634,7 @@ void main() {
       );
       await tester.pumpWidget(widget);
       await tester.pumpAndSettle();
-      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      final card = find.widgetWithText(WishMasonryCard, 'Наушники');
       await tester.ensureVisible(card);
       await tester.tap(card);
       await tester.pumpAndSettle();
@@ -655,7 +655,7 @@ void main() {
       );
       await tester.pumpWidget(widget);
       await tester.pumpAndSettle();
-      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      final card = find.widgetWithText(WishMasonryCard, 'Наушники');
       await tester.ensureVisible(card);
       await tester.tap(card);
       await tester.pumpAndSettle();
@@ -673,7 +673,7 @@ void main() {
       final widget = await appWith(wishJson());
       await tester.pumpWidget(widget);
       await tester.pumpAndSettle();
-      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      final card = find.widgetWithText(WishMasonryCard, 'Наушники');
       await tester.ensureVisible(card);
       await tester.tap(card);
       await tester.pumpAndSettle();

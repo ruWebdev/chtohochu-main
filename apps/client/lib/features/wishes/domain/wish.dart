@@ -1,3 +1,30 @@
+/// Приоритет желания: «Не сейчас» | «Хочу» | «Очень хочу».
+///
+/// Скалярное свойство желания — группировка выполняется только
+/// в UI (главный экран), отдельных таблиц/сущностей нет.
+/// API-значения совпадают с именами enum: later | normal | high.
+enum WishPriority {
+  /// Отложенное — «Не сейчас»: скрыто в сворачиваемую группу.
+  later,
+
+  /// Обычное — «Хочу»: значение по умолчанию.
+  normal,
+
+  /// Повышенное — «Очень хочу»: маркер + выше в основной группе.
+  high;
+
+  /// API-значение — совпадает с именем enum.
+  String get apiValue => name;
+
+  /// Парсинг API-значения; неизвестное/`null` → [normal]
+  /// (forward-compatible: новые значения не ломают старый клиент).
+  static WishPriority fromApi(String? value) => switch (value) {
+    'later' => WishPriority.later,
+    'high' => WishPriority.high,
+    _ => WishPriority.normal,
+  };
+}
+
 /// Желание пользователя.
 ///
 /// Модель для MVP vertical slice: название, опциональные описание,
@@ -15,6 +42,7 @@ class Wish {
     this.imageUrl,
     this.imageLocalPath,
     this.listId,
+    this.priority = WishPriority.normal,
     this.updatedAt,
   });
 
@@ -57,6 +85,9 @@ class Wish {
   /// `null` — вне списков. Local-only: сервер связь пока не знает.
   final String? listId;
 
+  /// Приоритет желания (`later | normal | high`); default — normal.
+  final WishPriority priority;
+
   /// Дата создания.
   final DateTime createdAt;
 
@@ -77,6 +108,7 @@ class Wish {
     String? imageUrl,
     String? imageLocalPath,
     String? listId,
+    WishPriority? priority,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -89,6 +121,7 @@ class Wish {
       imageUrl: imageUrl ?? this.imageUrl,
       imageLocalPath: imageLocalPath ?? this.imageLocalPath,
       listId: listId ?? this.listId,
+      priority: priority ?? this.priority,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -106,6 +139,7 @@ class Wish {
           imageUrl == other.imageUrl &&
           imageLocalPath == other.imageLocalPath &&
           listId == other.listId &&
+          priority == other.priority &&
           createdAt == other.createdAt;
 
   @override
@@ -118,6 +152,7 @@ class Wish {
     imageUrl,
     imageLocalPath,
     listId,
+    priority,
     createdAt,
   );
 

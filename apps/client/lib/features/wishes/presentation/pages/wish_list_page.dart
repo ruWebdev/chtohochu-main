@@ -76,6 +76,40 @@ class WishListPage extends ConsumerWidget {
     }
   }
 
+  /// Flat bottom sheet с действиями над списком: переименование,
+  /// удаление (разделитель + красная строка — как на деталях
+  /// желания).
+  void _showActionsSheet(BuildContext context, WidgetRef ref, WishList list) {
+    final l10n = context.l10n;
+    showAppBottomSheet<void>(
+      context,
+      title: list.title,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppListItem(
+            leading: const Icon(PhosphorIconsRegular.pencilSimple),
+            title: l10n.listRenameTooltip,
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              _rename(context, list);
+            },
+          ),
+          const AppListDivider(),
+          AppListItem(
+            leading: const Icon(PhosphorIconsRegular.trash),
+            title: l10n.listDeleteSemantic,
+            destructive: true,
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              _confirmDelete(context, ref, list);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Long-press по карточке → sheet с действием «Убрать из
   /// списка». Это НЕ удаление желания: `assignWishToList(null)`
   /// только сбрасывает membership, сам Wish остаётся и попадает
@@ -131,26 +165,20 @@ class WishListPage extends ConsumerWidget {
         appBar: AppShellBar(
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: () => _back(context),
           ),
-          title: list?.title,
-          subtitle: wishes == null
-              ? null
-              : wishesCountLabel(l10n, wishes.length),
           actions: [
-            if (list != null)
+            if (list != null) ...[
               AppBarAction(
                 icon: PhosphorIconsRegular.plus,
                 onPressed: () => showWishPickerSheet(context, listId: list.id),
                 semanticLabel: l10n.wishAdd,
                 tooltip: l10n.wishAdd,
               ),
-          ],
-          overflowActions: [
-            if (list != null) ...[
+              // «Поделиться» — прямая кнопка бара, как на деталях.
               AppBarAction(
                 icon: PhosphorIconsRegular.shareNetwork,
                 onPressed: () => shareEntity(
@@ -159,61 +187,74 @@ class WishListPage extends ConsumerWidget {
                   (api) => api.createWishListShare(list.id),
                 ),
                 semanticLabel: l10n.shareAction,
+                tooltip: l10n.shareAction,
               ),
+              // «Меню» — белая круглая кнопка, открывает flat bottom
+              // sheet с действиями над списком.
               AppBarAction(
-                icon: PhosphorIconsRegular.pencilSimple,
-                onPressed: () => _rename(context, list),
-                semanticLabel: l10n.listRenameTooltip,
-              ),
-              AppBarAction(
-                icon: PhosphorIconsRegular.trash,
-                onPressed: () => _confirmDelete(context, ref, list),
-                semanticLabel: l10n.listDeleteSemantic,
+                icon: PhosphorIconsRegular.dotsThreeVertical,
+                onPressed: () => _showActionsSheet(context, ref, list),
+                semanticLabel: l10n.more,
+                tooltip: l10n.more,
               ),
             ],
           ],
         ),
         body: SafeArea(
-          child: wishesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => AppEmptyState(
-              icon: const Icon(PhosphorIconsRegular.warningCircle),
-              title: l10n.loadFailed,
-              description: l10n.pullToRefresh,
-            ),
-            data: (wishes) {
-              if (listsAsync.isLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (list == null) {
-                // Список удалён (локально или remote-reconcile),
-                // пока страница открыта.
-                return _NotFound(onBack: () => _back(context));
-              }
-              if (wishes.isEmpty) {
-                return const _EmptyWishes();
-              }
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final grid = _WishGrid(
-                    wishes: wishes,
-                    onWishLongPress: (wish) =>
-                        _openWishActions(context, ref, wish),
-                  );
-                  if (constraints.maxWidth >= AppSizes.wideLayoutBreakpoint) {
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: AppSizes.contentMaxWidth,
-                        ),
-                        child: grid,
-                      ),
+          child: Column(
+            children: [
+              AppScreenTitle(
+                title: list?.title,
+                subtitle: list == null || wishes == null
+                    ? null
+                    : wishesCountLabel(l10n, wishes.length),
+              ),
+              Expanded(
+                child: wishesAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, _) => AppEmptyState(
+                    icon: const Icon(PhosphorIconsRegular.warningCircle),
+                    title: l10n.loadFailed,
+                    description: l10n.pullToRefresh,
+                  ),
+                  data: (wishes) {
+                    if (listsAsync.isLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (list == null) {
+                      // Список удалён (локально или remote-reconcile),
+                      // пока страница открыта.
+                      return _NotFound(onBack: () => _back(context));
+                    }
+                    if (wishes.isEmpty) {
+                      return const _EmptyWishes();
+                    }
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final grid = _WishGrid(
+                          wishes: wishes,
+                          onWishLongPress: (wish) =>
+                              _openWishActions(context, ref, wish),
+                        );
+                        if (constraints.maxWidth >=
+                            AppSizes.wideLayoutBreakpoint) {
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: AppSizes.contentMaxWidth,
+                              ),
+                              child: grid,
+                            ),
+                          );
+                        }
+                        return grid;
+                      },
                     );
-                  }
-                  return grid;
-                },
-              );
-            },
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -232,6 +273,11 @@ class _WishGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final columnWidth =
+        (MediaQuery.sizeOf(context).width -
+            AppSpacing.screenPaddingHorizontal * 2 -
+            AppSpacing.betweenCards) /
+        2;
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -248,11 +294,11 @@ class _WishGrid extends StatelessWidget {
                   onLongPress: () => onWishLongPress(wish),
                 ),
             ]),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: AppSpacing.betweenCards,
               crossAxisSpacing: AppSpacing.betweenCards,
-              mainAxisExtent: AppSizes.wishCardExtent,
+              mainAxisExtent: WishGridCard.extentForColumnWidth(columnWidth),
             ),
           ),
         ),

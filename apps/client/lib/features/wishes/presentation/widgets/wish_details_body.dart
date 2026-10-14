@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -24,6 +23,7 @@ class WishDetailsBody extends StatelessWidget {
     required this.wish,
     this.additionalImages = const [],
     this.listTitle,
+    this.inList = false,
     this.onListTap,
   });
 
@@ -38,8 +38,11 @@ class WishDetailsBody extends StatelessWidget {
   /// (просмотр чужих желаний, список ещё не загружен).
   final String? listTitle;
 
-  /// Тап по блоку списка — переход в список. `null` — желание
-  /// без списка, строка не интерактивна.
+  /// Желание состоит в списке — влияет на иконку/стиль строки.
+  final bool inList;
+
+  /// Тап по блоку списка — открывает выбор списка.
+  /// `null` — строка не интерактивна (просмотр чужих желаний).
   final VoidCallback? onListTap;
 
   static Future<void> _copyLink(BuildContext context, String link) async {
@@ -56,6 +59,15 @@ class WishDetailsBody extends StatelessWidget {
     final t = AppTypography.of(context);
     final l10n = context.l10n;
 
+    // Все изображения желания: primary + additional по sortOrder.
+    // Карусель со свайпом и точками (индикатор — только при >1);
+    // одно фото остаётся статичным блоком, пусто — заглушка.
+    final sources = [
+      if (wish.imageDisplaySource != null) wish.imageDisplaySource!,
+      for (final img in additionalImages)
+        if (img.displaySource != null) img.displaySource!,
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.screenPaddingHorizontal,
@@ -64,11 +76,7 @@ class WishDetailsBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _WishImage(imageUrl: wish.imageDisplaySource, title: wish.title),
-          if (additionalImages.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            _AdditionalImages(images: additionalImages, title: wish.title),
-          ],
+          AppImageCarousel(sources: sources, semanticLabel: wish.title),
           const SizedBox(height: AppSpacing.lg),
 
           Text(wish.title, style: t.title),
@@ -86,11 +94,7 @@ class WishDetailsBody extends StatelessWidget {
               style: t.caption.copyWith(color: colors.textMuted),
             ),
             const SizedBox(height: AppSpacing.xxs),
-            _ListRow(
-              title: listTitle!,
-              inList: onListTap != null,
-              onTap: onListTap,
-            ),
+            _ListRow(title: listTitle!, inList: inList, onTap: onListTap),
           ],
           if (wish.link != null && wish.link!.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.lg),
@@ -112,109 +116,6 @@ class WishDetailsBody extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-      ),
-    );
-  }
-}
-
-/// Изображение желания с заглушкой.
-///
-/// Если `imageUrl` пустой или картинка не загрузилась — нейтральный
-/// блок с иконкой подарка вместо «битого» изображения.
-class _WishImage extends StatelessWidget {
-  const _WishImage({required this.imageUrl, required this.title});
-
-  final String? imageUrl;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    const height = 200.0;
-    final radius = BorderRadius.circular(AppRadii.xl);
-
-    final placeholder = Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: radius,
-      ),
-      alignment: Alignment.center,
-      child: Icon(
-        PhosphorIconsRegular.gift,
-        size: AppSizes.iconSizeLg * 2,
-        color: colors.textMuted,
-      ),
-    );
-
-    final url = imageUrl;
-    if (url == null || url.isEmpty) return placeholder;
-
-    return ClipRRect(
-      borderRadius: radius,
-      child: AppImage(
-        src: url,
-        height: height,
-        width: double.infinity,
-        semanticLabel: title,
-        errorWidget: placeholder,
-        loadingWidget: placeholder,
-      ),
-    );
-  }
-}
-
-/// Лента дополнительных изображений под primary — локальные
-/// файлы и remote URL через тот же `AppImage`, порядок —
-/// по `sortOrder` (он же порядок добавления).
-class _AdditionalImages extends StatelessWidget {
-  const _AdditionalImages({required this.images, required this.title});
-
-  final List<WishImage> images;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    const size = AppSizes.wishThumbSize;
-    final radius = BorderRadius.circular(AppRadii.md);
-
-    final placeholder = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: radius,
-      ),
-      alignment: Alignment.center,
-      child: Icon(
-        PhosphorIconsRegular.image,
-        size: AppSizes.iconSize,
-        color: colors.textMuted,
-      ),
-    );
-
-    return SizedBox(
-      height: size,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: images.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
-        itemBuilder: (context, index) {
-          final src = images[index].displaySource;
-          if (src == null) return placeholder;
-          return ClipRRect(
-            borderRadius: radius,
-            child: AppImage(
-              src: src,
-              width: size,
-              height: size,
-              semanticLabel: title,
-              errorWidget: placeholder,
-              loadingWidget: placeholder,
-            ),
-          );
-        },
       ),
     );
   }
@@ -247,7 +148,7 @@ class _ListRow extends StatelessWidget {
                 ? PhosphorIconsRegular.listBullets
                 : PhosphorIconsRegular.listDashes,
             size: AppSizes.iconSize,
-            color: colors.primary,
+            color: colors.textSecondary,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
@@ -297,7 +198,7 @@ class _LinkRow extends StatelessWidget {
           Icon(
             PhosphorIconsRegular.link,
             size: AppSizes.iconSize,
-            color: colors.primary,
+            color: colors.textSecondary,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(

@@ -1,7 +1,9 @@
+import 'package:chtohochu/app/router/routes.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/wish_form_page.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -36,6 +38,8 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
+    // Форма выросла (селектор приоритета) — кнопка за viewport.
+    await tester.ensureVisible(find.text('Сохранить желание'));
     await tester.tap(find.text('Сохранить желание'));
     await tester.pumpAndSettle();
 
@@ -57,6 +61,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'Наушники Sony');
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Сохранить желание'));
     await tester.tap(find.text('Сохранить желание'));
     // Mock wish repo (500ms) + router refresh.
     await tester.pumpAndSettle(const Duration(seconds: 3));
@@ -120,8 +125,10 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    // Открыть экран создания желания через + в AppBar.
-    await tester.tap(find.byType(AddWishRow));
+    // Открыть страницу создания напрямую — точки входа на Home
+    // теперь открывают AddWishSheet, а /wishes/new остаётся для
+    // полного редактирования (импорт → «Редактировать»).
+    tester.element(find.byType(Scaffold).first).go(AppRoutes.newWish);
     await tester.pumpAndSettle();
 
     expect(find.byType(WishFormPage), findsOneWidget);
@@ -148,7 +155,7 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(AddWishRow));
+    tester.element(find.byType(Scaffold).first).go(AppRoutes.newWish);
     await tester.pumpAndSettle();
     expect(find.byType(WishFormPage), findsOneWidget);
 

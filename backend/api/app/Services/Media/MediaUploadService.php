@@ -158,6 +158,40 @@ class MediaUploadService
     }
 
     /**
+     * Удалить объекты отдельных изображений по их `client_id`
+     * (у wish_images `id` == `client_id` upload-записи).
+     *
+     * Используется при удалении изображения у ЖИВОГО желания:
+     * [deleteForEntity] чистит объект целиком по entity_id и не
+     * подходит для точечного удаления. Ограничено `user_id`,
+     * чтобы клиентский id одного аккаунта не мог тронуть чужой
+     * upload с совпавшим UUID.
+     *
+     * @param  list<string>  $clientIds
+     */
+    public function deleteForClientIds(
+        string $userId,
+        string $purpose,
+        array $clientIds,
+    ): void {
+        if ($clientIds === []) {
+            return;
+        }
+        $disk = config("media.purposes.$purpose.disk");
+
+        MediaUpload::where('user_id', $userId)
+            ->where('purpose', $purpose)
+            ->whereIn('client_id', $clientIds)
+            ->whereIn('status', ['pending', 'uploading', 'uploaded'])
+            ->get()
+            ->each(function (MediaUpload $upload) use ($disk) {
+                $this->assertKeyInPurpose($upload);
+                $this->storage->delete($disk, $upload->object_key);
+                $upload->update(['status' => 'deleted']);
+            });
+    }
+
+    /**
      * Ownership entity проверяется всегда: клиент не может получить
      * upload URL в чужой namespace. Чужая сущность — 404, как и для
      * wishes (не раскрываем существование).

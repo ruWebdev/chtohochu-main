@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_radii.dart';
+import '../../../app/theme/app_sizes.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../l10n/l10n.dart';
-import '../../../app/theme/app_typography.dart';
 import '../buttons/app_icon_button.dart';
 
 /// Action для [AppShellBar].
@@ -42,13 +43,16 @@ class AppBarAction {
 /// floating glass bottom bar, но не копирует его. Использует существующие
 /// design tokens и [AppIconButton] для action-кнопок.
 ///
+/// Бар содержит **только кнопки**: leading слева, actions/trailing
+/// справа. Заголовок экрана живёт в теле — см. `AppScreenTitle`.
+///
 /// **Геометрия:** custom layout (не обёртка Material `AppBar`) для точного
 /// контроля горизонтальных отступов. Левый и правый insets симметричны и
-/// равны [AppSpacing.screenPaddingHorizontal] (16px).
+/// равны [AppSpacing.screenPaddingHorizontal] (16px). Сверху — дополнительный
+/// отступ [AppSpacing.sm], чтобы верхняя кромка кнопок совпадала с шапкой
+/// главной страницы (header row).
 ///
 /// Поддерживает:
-/// * [title] — заголовок экрана (стиль `screenTitle`);
-/// * [subtitle] — опциональный подзаголовок;
 /// * [leading] — опциональный leading-виджет (например, back button);
 /// * [actions] — контекстные action-кнопки;
 /// * [overflowActions] — редко используемые действия → PopupMenu.
@@ -57,25 +61,11 @@ class AppBarAction {
 class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
   const AppShellBar({
     super.key,
-    this.title,
-    this.subtitle,
-    this.subtitleTrailing,
     this.leading,
     this.actions = const [],
     this.overflowActions = const [],
+    this.trailing,
   });
-
-  /// Заголовок экрана. Если `null` — зона заголовка пустая
-  /// (например, экран деталей, где заголовок в теле страницы).
-  final String? title;
-
-  /// Опциональный подзаголовок (например, количество элементов).
-  final String? subtitle;
-
-  /// Опциональный микро-виджет после текста подзаголовка
-  /// (например, индикатор синхронизации). Не переносится,
-  /// текст слева сжимается ellipsis'ом.
-  final Widget? subtitleTrailing;
 
   /// Опциональный leading-виджет.
   ///
@@ -93,19 +83,24 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
   /// Если пусто — overflow menu не показывается.
   final List<AppBarAction> overflowActions;
 
+  /// Опциональный trailing-виджет после actions (например,
+  /// текстовое действие «Пропустить» на экранах-формах).
+  /// Показывается самым правым элементом бара.
+  final Widget? trailing;
+
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize =>
+      const Size.fromHeight(kToolbarHeight + AppSpacing.sm);
 
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final t = AppTypography.of(context);
     final topPadding = MediaQuery.paddingOf(context).top;
 
     return Material(
       color: colors.background,
       child: Padding(
-        padding: EdgeInsets.only(top: topPadding),
+        padding: EdgeInsets.only(top: topPadding + AppSpacing.sm),
         child: SizedBox(
           height: kToolbarHeight,
           child: Padding(
@@ -114,49 +109,10 @@ class AppShellBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: Row(
               children: [
-                if (leading != null) ...[
-                  leading!,
-                  const SizedBox(width: AppSpacing.appBarLeadingGap),
-                ],
-                Expanded(
-                  child: title == null
-                      ? const SizedBox.shrink()
-                      : subtitle != null
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              title!,
-                              style: t.screenTitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    subtitle!,
-                                    style: t.secondary.copyWith(
-                                      color: colors.textMuted,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                ?subtitleTrailing,
-                              ],
-                            ),
-                          ],
-                        )
-                      : Text(
-                          title!,
-                          style: t.screenTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                ),
+                ?leading,
+                const Spacer(),
                 ..._buildActions(),
+                ?trailing,
               ],
             ),
           ),
@@ -217,14 +173,14 @@ class _OverflowMenu extends StatelessWidget {
       padding: EdgeInsets.zero,
       icon: AppIconButton(
         icon: const Icon(PhosphorIconsRegular.dotsThreeVertical),
-        variant: AppIconButtonVariant.ghost,
+        variant: AppIconButtonVariant.subtle,
         semanticLabel: context.l10n.more,
         tooltip: context.l10n.more,
       ),
       position: PopupMenuPosition.under,
       color: colors.surfaceElevated,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadii.lg),
         side: BorderSide(color: colors.border),
       ),
       itemBuilder: (context) {
@@ -234,8 +190,12 @@ class _OverflowMenu extends StatelessWidget {
               value: i,
               child: Row(
                 children: [
-                  Icon(actions[i].icon, size: 20, color: colors.textSecondary),
-                  const SizedBox(width: 12),
+                  Icon(
+                    actions[i].icon,
+                    size: AppSizes.iconSize,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       actions[i].semanticLabel,

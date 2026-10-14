@@ -3,8 +3,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_radii.dart';
-import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
@@ -54,7 +52,16 @@ class SharedWishPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SharedImage(imageUrl: wish.imageUrl, title: wish.title),
+          // Primary + доп.изображения — та же карусель, что
+          // в приватных деталях (tap → fullscreen, точки при >1).
+          AppImageCarousel(
+            sources: [
+              if (wish.imageUrl != null && wish.imageUrl!.isNotEmpty)
+                wish.imageUrl!,
+              ...wish.images,
+            ],
+            semanticLabel: wish.title,
+          ),
           const SizedBox(height: AppSpacing.lg),
           if (wish.ownerName != null)
             Text(
@@ -86,47 +93,3 @@ class SharedWishPage extends StatelessWidget {
   }
 }
 
-/// Изображение shared-желания через `AppImage` (network URL) с
-/// gift-заглушкой — тот же паттерн, что в приватных деталях.
-class _SharedImage extends StatelessWidget {
-  const _SharedImage({required this.imageUrl, required this.title});
-
-  final String? imageUrl;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    const height = 200.0;
-    final radius = BorderRadius.circular(AppRadii.xl);
-
-    final placeholder = Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: radius,
-      ),
-      alignment: Alignment.center,
-      child: Icon(
-        PhosphorIconsRegular.gift,
-        size: AppSizes.iconSizeLg * 2,
-        color: colors.textMuted,
-      ),
-    );
-
-    final url = imageUrl;
-    if (url == null || url.isEmpty) return placeholder;
-
-    return ClipRRect(
-      borderRadius: radius,
-      child: AppImage(
-        src: url,
-        height: height,
-        width: double.infinity,
-        semanticLabel: title,
-        errorWidget: placeholder,
-        loadingWidget: placeholder,
-      ),
-    );
-  }
-}

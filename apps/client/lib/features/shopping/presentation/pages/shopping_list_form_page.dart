@@ -6,7 +6,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../../../app/router/routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
 import '../../domain/shopping_list.dart';
@@ -79,7 +78,6 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final t = AppTypography.of(context);
     final l10n = context.l10n;
     final state = ref.watch(shoppingListFormControllerProvider);
     final isLoading = state is ShoppingListFormLoading;
@@ -95,61 +93,72 @@ class _ShoppingListFormPageState extends ConsumerState<ShoppingListFormPage> {
       },
       child: Scaffold(
         backgroundColor: colors.background,
-        appBar: AppBar(
-          leading: IconButton(
+        appBar: AppShellBar(
+          leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.x),
+            variant: AppIconButtonVariant.subtle,
+            semanticLabel: l10n.close,
             tooltip: l10n.close,
             onPressed: _close,
           ),
         ),
         body: SafeArea(
-          child: GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.screenPaddingHorizontal,
-                vertical: AppSpacing.sm,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(l10n.listRename, style: t.screenTitle),
-                  const SizedBox(height: AppSpacing.xl),
+          child: Column(
+            children: [
+              AppScreenTitle(title: l10n.listRename),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.screenPaddingHorizontal,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: AppSpacing.xl),
 
-                  AppTextField(
-                    controller: _titleController,
-                    label: l10n.listTitleLabel,
-                    hint: l10n.listTitleHint,
-                    errorText: _titleError,
-                    enabled: !isLoading,
-                    textInputAction: TextInputAction.done,
-                    semanticsLabel: l10n.listTitleLabel,
-                    onSubmitted: (_) => _save(),
-                    onChanged: (_) {
-                      if (_titleError != null) {
-                        setState(() => _titleError = null);
-                      }
-                    },
+                        AppTextField(
+                          controller: _titleController,
+                          label: l10n.listTitleLabel,
+                          hint: l10n.listTitleHint,
+                          errorText: _titleError,
+                          enabled: !isLoading,
+                          textInputAction: TextInputAction.done,
+                          semanticsLabel: l10n.listTitleLabel,
+                          onSubmitted: (_) => _save(),
+                          onChanged: (_) {
+                            if (_titleError != null) {
+                              setState(() => _titleError = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+
+                        if (error != null) ...[
+                          AppFeedback(
+                            type: AppFeedbackType.error,
+                            title: error,
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
+
+                        AppButton(
+                          label: l10n.saveChanges,
+                          expand: true,
+                          isLoading: isLoading,
+                          enabled: !isLoading,
+                          leading: const Icon(PhosphorIconsRegular.check),
+                          onPressed: _save,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  if (error != null) ...[
-                    AppFeedback(type: AppFeedbackType.error, title: error),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-
-                  AppButton(
-                    label: l10n.saveChanges,
-                    expand: true,
-                    isLoading: isLoading,
-                    enabled: !isLoading,
-                    leading: const Icon(PhosphorIconsRegular.check),
-                    onPressed: _save,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

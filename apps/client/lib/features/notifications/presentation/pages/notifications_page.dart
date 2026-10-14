@@ -31,22 +31,29 @@ class NotificationsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppShellBar(
-        title: l10n.notificationsTitle,
         leading: AppIconButton(
           icon: const Icon(PhosphorIconsRegular.arrowLeft),
+          variant: AppIconButtonVariant.subtle,
           semanticLabel: l10n.back,
           tooltip: l10n.back,
           onPressed: () => _back(context),
         ),
       ),
       body: SafeArea(
-        child: ListView(
+        child: Column(
           children: [
-            const SizedBox(height: AppSpacing.xxl),
-            AppEmptyState(
-              icon: const Icon(PhosphorIconsRegular.bell),
-              title: l10n.notificationsEmptyTitle,
-              description: l10n.notificationsEmptyDescription,
+            AppScreenTitle(title: l10n.notificationsTitle),
+            Expanded(
+              child: ListView(
+                children: [
+                  const SizedBox(height: AppSpacing.xxl),
+                  AppEmptyState(
+                    icon: const Icon(PhosphorIconsRegular.bell),
+                    title: l10n.notificationsEmptyTitle,
+                    description: l10n.notificationsEmptyDescription,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

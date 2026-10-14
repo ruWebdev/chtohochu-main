@@ -206,7 +206,7 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
         appBar: AppShellBar(
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: _back,

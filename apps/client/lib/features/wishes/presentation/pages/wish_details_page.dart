@@ -32,6 +32,53 @@ class WishDetailsPage extends ConsumerWidget {
     context.go(AppRoutes.home);
   }
 
+  /// Flat bottom sheet с действиями над желанием:
+  /// редактирование, добавление в список, удаление.
+  void _showActionsSheet(BuildContext context, WidgetRef ref, Wish wish) {
+    final l10n = context.l10n;
+    showAppBottomSheet<void>(
+      context,
+      title: wish.title,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppListItem(
+            leading: const Icon(PhosphorIconsRegular.pencilSimple),
+            title: l10n.edit,
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              context.go(AppRoutes.wishEdit(wish.id));
+            },
+          ),
+          AppListItem(
+            leading: const Icon(PhosphorIconsRegular.listPlus),
+            title: wish.listId == null
+                ? l10n.wishAddToList
+                : l10n.wishChangeList,
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              showWishListPickerSheet(
+                context,
+                wishId: wish.id,
+                currentListId: wish.listId,
+              );
+            },
+          ),
+          const AppListDivider(),
+          AppListItem(
+            leading: const Icon(PhosphorIconsRegular.trash),
+            title: l10n.delete,
+            destructive: true,
+            onTap: () {
+              Navigator.of(sheetContext).pop();
+              _confirmDelete(context, ref, wish);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirmDelete(
     BuildContext context,
     WidgetRef ref,
@@ -41,7 +88,7 @@ class WishDetailsPage extends ConsumerWidget {
     final confirmed = await showAppConfirmDialog(
       context,
       title: l10n.wishDeleteTitle,
-      message: l10n.wishDeleteMessage(wish.title),
+      message: l10n.wishDeleteMessage,
       confirmLabel: l10n.delete,
       destructive: true,
     );
@@ -81,43 +128,15 @@ class WishDetailsPage extends ConsumerWidget {
         appBar: AppShellBar(
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: () => _back(context),
           ),
           actions: [
             if (wish != null) ...[
-              AppBarAction(
-                icon: PhosphorIconsRegular.listPlus,
-                onPressed: () => showWishListPickerSheet(
-                  context,
-                  wishId: wish.id,
-                  currentListId: wish.listId,
-                ),
-                semanticLabel: wish.listId == null
-                    ? l10n.wishAddToList
-                    : l10n.wishChangeList,
-                tooltip: wish.listId == null
-                    ? l10n.wishAddToList
-                    : l10n.wishChangeList,
-              ),
-              AppBarAction(
-                icon: PhosphorIconsRegular.pencilSimple,
-                onPressed: () => context.go(AppRoutes.wishEdit(wish.id)),
-                semanticLabel: l10n.wishEditSemantic,
-                tooltip: l10n.edit,
-              ),
-              AppBarAction(
-                icon: PhosphorIconsRegular.trash,
-                onPressed: () => _confirmDelete(context, ref, wish),
-                semanticLabel: l10n.wishDeleteSemantic,
-                tooltip: l10n.delete,
-              ),
-            ],
-          ],
-          overflowActions: [
-            if (wish != null)
+              // «Поделиться» — сейчас вызывает существующий share-link
+              // (mock-уровень визуала, логика та же).
               AppBarAction(
                 icon: PhosphorIconsRegular.shareNetwork,
                 onPressed: () => shareEntity(
@@ -126,7 +145,17 @@ class WishDetailsPage extends ConsumerWidget {
                   (api) => api.createWishShare(wish.id),
                 ),
                 semanticLabel: l10n.shareAction,
+                tooltip: l10n.shareAction,
               ),
+              // «Меню» — белая круглая кнопка, открывает flat bottom
+              // sheet с действиями над желанием.
+              AppBarAction(
+                icon: PhosphorIconsRegular.dotsThreeVertical,
+                onPressed: () => _showActionsSheet(context, ref, wish),
+                semanticLabel: l10n.more,
+                tooltip: l10n.more,
+              ),
+            ],
           ],
         ),
         body: SafeArea(
@@ -138,15 +167,19 @@ class WishDetailsPage extends ConsumerWidget {
                   wish: wish,
                   additionalImages:
                       ref.watch(wishImagesProvider(wishId)).value ?? const [],
-                  // Блок membership: «Без списка» или название
-                  // списка с переходом в него. Пока списки грузятся —
-                  // блок скрыт, чтобы не мигать неверным состоянием.
+                  // Блок membership: «Без списка» или название списка.
+                  // Тап всегда открывает sheet выбора списка.
+                  // Пока списки грузятся — блок скрыт, чтобы не
+                  // мигать неверным состоянием.
                   listTitle: wish.listId == null
                       ? l10n.wishListNone
                       : list?.title,
-                  onListTap: list == null
-                      ? null
-                      : () => context.go(AppRoutes.wishList(list.id)),
+                  inList: wish.listId != null,
+                  onListTap: () => showWishListPickerSheet(
+                    context,
+                    wishId: wish.id,
+                    currentListId: wish.listId,
+                  ),
                 ),
         ),
       ),

@@ -97,11 +97,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Создать желание при отсутствии сети — операция в outbox.
+      // «Добавить первое желание» открывает AddWishSheet.
       api.failures['POST /wishes'] = 'network';
       await tester.tap(find.text('Добавить первое желание'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Оффлайн желание');
-      await tester.tap(find.text('Сохранить желание'));
+      // Кнопка «Добавить» включается по rebuild после ввода.
+      await tester.pump();
+      await tester.tap(find.widgetWithText(AppButton, 'Добавить'));
       await tester.pumpAndSettle(const Duration(seconds: 3));
 
       // Желание видно из Drift, но не синхронизировано.

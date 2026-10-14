@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Wish extends Model
 {
@@ -39,6 +40,7 @@ class Wish extends Model
         'link',
         'image_url',
         'list_id',
+        'priority',
     ];
 
     /**
@@ -68,6 +70,15 @@ class Wish extends Model
     public function list(): BelongsTo
     {
         return $this->belongsTo(WishList::class, 'list_id');
+    }
+
+    /**
+     * Дополнительные изображения желания (primary — `image_url`),
+     * упорядоченные по `sort_order`.
+     */
+    public function images(): HasMany
+    {
+        return $this->hasMany(WishImage::class)->orderBy('sort_order');
     }
 
     protected static function booted(): void

@@ -314,7 +314,10 @@ class SyncEngine {
             (entity['price'] as int?) == (sent['price'] as int?) &&
             entity['link'] == sent['link'] &&
             entity['image_url'] == sent['image_url'] &&
-            entity['list_id'] == sent['list_id'],
+            entity['list_id'] == sent['list_id'] &&
+            // priority сервер хранит при create; старый backend
+            // поля не имеет → 'normal' по умолчанию.
+            (entity['priority'] ?? 'normal') == (sent['priority'] ?? 'normal'),
     };
   }
 
@@ -616,6 +619,13 @@ class SyncEngine {
         clientId: uploadId,
         path: path,
       );
+      // Пока upload был в полёте, primary мог быть заменён или
+      // удалён: пишем состояние только если строка ждёт ЭТОТ
+      // upload (imageUploadId не менялся при новой мутации).
+      // Иначе устаревший remote_url затёр бы свежий image_url
+      // и status нового файла — правка пользователя потерялась бы.
+      final current = await _db.wishById(ownerId, wish.id);
+      if (current?.imageUploadId != uploadId) return;
       await _db.setWishImageUploadState(
         ownerId,
         wish.id,
@@ -625,20 +635,16 @@ class SyncEngine {
       // remote_url уходит штатным update-op: сервер и другие
       // устройства получают его обычным PATCH — отдельный
       // протокол для изображений не нужен.
-      await _outbox.enqueue(
-        ownerId: ownerId,
-        entityType: 'wish',
-        entityId: wish.id,
-        operation: OutboxOp.update,
-        payload: {'image_url': remoteUrl},
-      );
+      await _enqueueWishSnapshot(ownerId, wish.id);
     } on DioException catch (e) {
+      // Transient → pending (retry в следующем цикле), permanent
+      // → failed. Не rethrow: сбой одного изображения не должен
+      // блокировать остальные uploads и pull в этом цикле.
       await _db.setWishImageUploadState(
         ownerId,
         wish.id,
         status: _isPermanentFailure(e) ? 'failed' : 'pending',
       );
-      if (!_isPermanentFailure(e)) rethrow;
     }
   }
 
@@ -678,13 +684,17 @@ class SyncEngine {
         status: 'uploaded',
         remoteUrl: remoteUrl,
       );
+      // Сервер узнает об изображении полным snapshot-обновлением
+      // желания (`images`: [{id, url}] — полная замена набора).
+      await _enqueueWishSnapshot(ownerId, image.wishId);
     } on DioException catch (e) {
+      // То же, что у primary: transient → pending (retry позже),
+      // permanent → failed; остальные uploads и pull продолжаются.
       await _db.setWishImageRowUploadState(
         ownerId,
         image.id,
         status: _isPermanentFailure(e) ? 'failed' : 'pending',
       );
-      if (!_isPermanentFailure(e)) rethrow;
     }
   }
 
@@ -714,6 +724,39 @@ class SyncEngine {
       clientId: clientId,
     );
     return _mediaUploads.uploadAndConfirm(instructions, file);
+  }
+
+  /// Поставить update-op с ПОЛНЫМ snapshot желания после upload
+  /// медиа: remote_url уезжает штатным PATCH — отдельный протокол
+  /// для изображений не нужен.
+  ///
+  /// Snapshot обязателен: update+update компактифицируется merge'ем
+  /// payload'ов, поэтому свежие значения берём из строки — частичный
+  /// payload `{'image_url': …}` утащил бы на сервер устаревшие поля.
+  Future<void> _enqueueWishSnapshot(String ownerId, String wishId) async {
+    final row = await _db.wishById(ownerId, wishId);
+    if (row == null) return;
+    await _outbox.enqueue(
+      ownerId: ownerId,
+      entityType: 'wish',
+      entityId: wishId,
+      operation: OutboxOp.update,
+      payload: {
+        'title': row.title,
+        'description': row.description,
+        'price': row.price,
+        'link': row.link,
+        'image_url': Wish.isRemoteImageRef(row.imageUrl) ? row.imageUrl : null,
+        'list_id': row.listId,
+        'priority': row.priority,
+        // Доп.изображения — только строки, которые сервер уже
+        // может знать (remote_url проставлен после upload).
+        'images': [
+          for (final i in await _db.wishImagesOf(ownerId, wishId))
+            if (i.remoteUrl != null) {'id': i.id, 'url': i.remoteUrl},
+        ],
+      },
+    );
   }
 
   /// 4xx — permanent: повтор того же файла даст тот же отказ.
@@ -1077,6 +1120,11 @@ class SyncEngine {
             link: Value(data['link'] as String?),
             imageUrl: Value(keepLocal ? localImage : serverImage),
             listId: Value(data['list_id'] as String?),
+            // Старый сервер может не отдавать priority — тогда
+            // локальное значение сохраняется (absent ≠ 'normal').
+            priority: data['priority'] is String
+                ? Value(data['priority'] as String)
+                : const Value.absent(),
             createdAt: Value(DateTime.parse(data['created_at'] as String)),
             updatedAt: Value(DateTime.parse(data['updated_at'] as String)),
           ),
@@ -1230,7 +1278,15 @@ class SyncEngine {
     // применяем только к тому owner_id, под которым начали.
     if (_ownerId != ownerId) return;
 
-    final remoteWishes = rawWishes.map(_parseWishRow).toList();
+    final remoteWishes = <WishesCompanion>[];
+    // wishId → серверный набор доп.изображений (`images` ресурса).
+    final remoteWishImages =
+        <String, List<({String id, String url, int sortOrder})>>{};
+    for (final raw in rawWishes) {
+      final row = _parseWishRow(raw);
+      remoteWishes.add(row);
+      remoteWishImages[row.id.value] = _parseWishImages(raw);
+    }
     final remoteWishIds = remoteWishes.map((w) => w.id.value).toSet();
 
     final remoteWishLists = <WishListsCompanion>[];
@@ -1331,6 +1387,33 @@ class SyncEngine {
         await _db
             .into(_db.wishes)
             .insertOnConflictUpdate(merged.copyWith(ownerId: Value(ownerId)));
+      }
+      // Доп.изображения reconcil'ятся только для «чистых» желаний:
+      // pending-операция желания означает, что локальный набор
+      // новее серверного — не затираем.
+      for (final wishId in remoteWishIds) {
+        if (pending.contains(wishId)) continue;
+        final remote = remoteWishImages[wishId] ?? const [];
+        final local = await _db.wishImagesOf(ownerId, wishId);
+        for (final img in remote) {
+          await _db.upsertRemoteWishImage(
+            ownerId: ownerId,
+            wishId: wishId,
+            id: img.id,
+            url: img.url,
+            sortOrder: img.sortOrder,
+          );
+        }
+        final remoteIds = {for (final i in remote) i.id};
+        for (final row in local) {
+          // Строка с remote_url, которой нет в серверном наборе —
+          // удалена на другом устройстве. Строки без remote_url
+          // (pending/uploading) серверу неизвестны — не трогаем.
+          if (!remoteIds.contains(row.id) && row.remoteUrl != null) {
+            final localPath = await _db.deleteWishImageRow(ownerId, row.id);
+            if (localPath != null) await deleteWishPhotoFiles([localPath]);
+          }
+        }
       }
       for (final row in remoteWishLists) {
         if (!pending.contains(row.id.value)) {
@@ -1601,9 +1684,35 @@ class SyncEngine {
       link: Value(m['link'] as String?),
       imageUrl: Value(m['image_url'] as String?),
       listId: Value(m['list_id'] as String?),
+      // Ключа нет в ответе (старый backend) → absent: insert
+      // получит column default 'normal', update сохранит
+      // локальное значение — сбрасывать нельзя.
+      priority: m['priority'] is String
+          ? Value(m['priority'] as String)
+          : const Value.absent(),
       createdAt: Value(DateTime.parse(m['created_at'] as String)),
       updatedAt: Value(DateTime.parse(m['updated_at'] as String)),
     );
+  }
+
+  /// `images` ресурса желания → нормализованный список.
+  /// Битые элементы пропускаются — reconcile работает по валидным.
+  List<({String id, String url, int sortOrder})> _parseWishImages(
+    dynamic item,
+  ) {
+    final images = (item as Map<String, dynamic>)['images'];
+    if (images is! List) return const [];
+    return [
+      for (final raw in images)
+        if (raw is Map<String, dynamic> &&
+            raw['id'] is String &&
+            raw['url'] is String)
+          (
+            id: raw['id'] as String,
+            url: raw['url'] as String,
+            sortOrder: raw['sort_order'] as int? ?? 0,
+          ),
+    ];
   }
 }
 
@@ -1642,6 +1751,9 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
   final engine = SyncEngine(
     db: ref.read(appDatabaseProvider),
     dio: ref.read(apiClientProvider),
+    // Через провайдер — тесты подменяют presigned PUT,
+    // не пересобирая SyncEngine.
+    mediaUploads: ref.read(mediaUploadServiceProvider),
     onUnauthorized: () => _onUnauthorized(ref),
     onStatus: ref.read(syncStatusProvider.notifier).set,
   );

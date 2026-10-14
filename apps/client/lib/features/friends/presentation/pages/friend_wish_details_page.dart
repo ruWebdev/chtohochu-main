@@ -55,19 +55,29 @@ class FriendWishDetailsPage extends ConsumerWidget {
         appBar: AppShellBar(
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: () => _back(context),
           ),
-          title: friend == null ? null : friendDisplayName(l10n, friend.name),
         ),
         body: SafeArea(
-          child: isLoading && wish == null
-              ? const Center(child: CircularProgressIndicator())
-              : wish == null
-              ? _NotFound(onBack: () => _back(context))
-              : WishDetailsBody(wish: wish),
+          child: Column(
+            children: [
+              AppScreenTitle(
+                title: friend == null
+                    ? null
+                    : friendDisplayName(l10n, friend.name),
+              ),
+              Expanded(
+                child: isLoading && wish == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : wish == null
+                    ? _NotFound(onBack: () => _back(context))
+                    : WishDetailsBody(wish: wish),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -10,11 +10,13 @@ import 'package:chtohochu/features/wishes/presentation/pages/wish_list_page.dart
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_card.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_list_card.dart';
 import 'package:chtohochu/shared/ui/buttons/app_button.dart';
-import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
+import 'package:chtohochu/shared/ui/lists/app_list_item.dart';
+import 'package:chtohochu/shared/ui/scaffolding/app_screen_title.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../helpers/fake_api.dart';
 import '../../helpers/test_app.dart';
@@ -70,6 +72,31 @@ void main() {
     expect(find.byType(WishListPage), findsOneWidget);
   }
 
+  testWidgets('Желания любого приоритета — единый список без групп '
+      'и маркеров', (tester) async {
+    final (widget, _) = await appWithList(
+      wishes: [
+        {
+          ..._serverWish('w1', 'Отложенное', listId: 'list-1'),
+          'priority': 'later',
+        },
+        {..._serverWish('w2', 'Срочное', listId: 'list-1'), 'priority': 'high'},
+      ],
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    await openListPage(tester);
+
+    // Оба желания — в единой сетке; группировка «Не сейчас»
+    // и high-маркер — прерогатива только Home.
+    expect(find.byType(WishGridCard), findsNWidgets(2));
+    expect(find.text('Отложенное'), findsOneWidget);
+    expect(find.text('Срочное'), findsOneWidget);
+    expect(find.text('Не сейчас · 1'), findsNothing);
+    expect(find.byIcon(PhosphorIconsFill.heart), findsNothing);
+  });
+
   testWidgets('Tap on WishListCard opens WishListPage with title and '
       'count subtitle', (tester) async {
     final (widget, _) = await appWithList(
@@ -81,10 +108,10 @@ void main() {
 
     await openListPage(tester);
 
-    // Заголовок AppShellBar + счётчик вторичным текстом.
-    final bar = tester.widget<AppShellBar>(find.byType(AppShellBar));
-    expect(bar.title, 'Техника');
-    expect(bar.subtitle, '1 желание');
+    // Заголовок AppScreenTitle + счётчик вторичным текстом.
+    final header = tester.widget<AppScreenTitle>(find.byType(AppScreenTitle));
+    expect(header.title, 'Техника');
+    expect(header.subtitle, '1 желание');
   });
 
   testWidgets('List wishes render as WishGridCard; wishes outside the '
@@ -152,8 +179,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(WishGridCard), findsNWidgets(1));
     expect(find.text('Наушники'), findsNothing);
-    final bar = tester.widget<AppShellBar>(find.byType(AppShellBar));
-    expect(bar.subtitle, '1 желание');
+    final header = tester.widget<AppScreenTitle>(find.byType(AppScreenTitle));
+    expect(header.subtitle, '1 желание');
   });
 
   testWidgets('Back returns to Home with updated wishCount on the '
@@ -226,8 +253,8 @@ void main() {
       // Sheet закрыт, желание на странице, счётчик вырос.
       expect(find.byType(WishGridCard), findsNWidgets(2));
       expect(find.text('Свитер'), findsOneWidget);
-      final bar = tester.widget<AppShellBar>(find.byType(AppShellBar));
-      expect(bar.subtitle, '2 желания');
+      final header = tester.widget<AppScreenTitle>(find.byType(AppScreenTitle));
+      expect(header.subtitle, '2 желания');
       // Сервер получил membership (offline-first → PATCH доехал).
       expect(
         api.wishesOf(_uid).firstWhere((w) => w['id'] == 'w2')['list_id'],
@@ -264,6 +291,55 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('бар: «Добавить желание», «Поделиться» и «Ещё» — '
+        'прямые кнопки', (tester) async {
+      final (widget, _) = await appWithList();
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+      await openListPage(tester);
+
+      expect(find.byTooltip('Назад'), findsOneWidget);
+      expect(find.byTooltip('Добавить желание'), findsOneWidget);
+      expect(find.byTooltip('Поделиться'), findsOneWidget);
+      expect(find.byTooltip('Ещё'), findsOneWidget);
+      // Переименование/удаление не вынесены на бар — живут в шите.
+      expect(find.byTooltip('Переименовать'), findsNothing);
+      expect(find.byTooltip('Удалить список'), findsNothing);
+    });
+
+    testWidgets('меню-шит: заголовок = название списка, разделитель и '
+        'красное «Удалить список»', (tester) async {
+      final (widget, _) = await appWithList();
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+      await openListPage(tester);
+
+      await openMenu(tester);
+
+      // Flat bottom sheet: заголовок = название списка.
+      final sheet = find.byType(BottomSheet);
+      expect(
+        find.descendant(of: sheet, matching: find.text('Техника')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sheet,
+          matching: find.widgetWithText(AppListItem, 'Переименовать'),
+        ),
+        findsOneWidget,
+      );
+      // Разделитель перед destructive-действием.
+      expect(
+        find.descendant(of: sheet, matching: find.byType(AppListDivider)),
+        findsOneWidget,
+      );
+      final deleteItem = tester.widget<AppListItem>(
+        find.widgetWithText(AppListItem, 'Удалить список'),
+      );
+      expect(deleteItem.destructive, isTrue);
+    });
+
     testWidgets('меню содержит «Переименовать» и «Удалить список»; '
         'переименование обновляет заголовок, сервер и Home', (tester) async {
       final (widget, api) = await appWithList(
@@ -274,10 +350,13 @@ void main() {
       await openListPage(tester);
 
       await openMenu(tester);
-      expect(find.text('Переименовать'), findsOneWidget);
-      expect(find.text('Удалить список'), findsOneWidget);
+      expect(find.widgetWithText(AppListItem, 'Переименовать'), findsOneWidget);
+      expect(
+        find.widgetWithText(AppListItem, 'Удалить список'),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.text('Переименовать'));
+      await tester.tap(find.widgetWithText(AppListItem, 'Переименовать'));
       await tester.pumpAndSettle();
 
       // Sheet в режиме переименования: заголовок + текущее
@@ -309,8 +388,8 @@ void main() {
 
       // Заголовок страницы обновлён реактивно; PATCH доехал до
       // сервера через существующий outbox-путь.
-      var bar = tester.widget<AppShellBar>(find.byType(AppShellBar));
-      expect(bar.title, 'Гаджеты');
+      var header = tester.widget<AppScreenTitle>(find.byType(AppScreenTitle));
+      expect(header.title, 'Гаджеты');
       expect(
         api.wishListsOf(_uid).firstWhere((l) => l['id'] == 'list-1')['title'],
         'Гаджеты',
@@ -337,7 +416,7 @@ void main() {
       await openListPage(tester);
 
       await openMenu(tester);
-      await tester.tap(find.text('Удалить список'));
+      await tester.tap(find.widgetWithText(AppListItem, 'Удалить список'));
       await tester.pumpAndSettle();
 
       // Подтверждение: список удаляется, желания — нет.
@@ -353,9 +432,9 @@ void main() {
 
       // Подтверждаем удаление.
       await openMenu(tester);
-      await tester.tap(find.text('Удалить список'));
+      await tester.tap(find.widgetWithText(AppListItem, 'Удалить список'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Удалить'));
+      await tester.tap(find.widgetWithText(AppButton, 'Удалить'));
       await tester.pumpAndSettle();
 
       // Автоматический возврат на Home; карточка списка исчезла,
@@ -382,8 +461,7 @@ void main() {
       await tester.pumpAndSettle();
       await openListPage(tester);
 
-      await openMenu(tester);
-      await tester.tap(find.text('Поделиться'));
+      await tester.tap(find.byTooltip('Поделиться'));
       await tester.pumpAndSettle();
 
       expect(
@@ -407,8 +485,7 @@ void main() {
       await tester.pumpAndSettle();
       await openListPage(tester);
 
-      await openMenu(tester);
-      await tester.tap(find.text('Поделиться'));
+      await tester.tap(find.byTooltip('Поделиться'));
       await tester.pumpAndSettle();
 
       expect(
@@ -426,14 +503,12 @@ void main() {
       await tester.pumpAndSettle();
       await openListPage(tester);
       // Задержка только на share-запросе, после boot-pull. Большая —
-      // чтобы анимация меню (pumpAndSettle) не успела её «перемотать».
+      // чтобы повторный тап гарантированно пришёлся на полёт запроса.
       api.latency = const Duration(seconds: 60);
 
-      await openMenu(tester);
-      await tester.tap(find.text('Поделиться'));
+      await tester.tap(find.byTooltip('Поделиться'));
       await tester.pump(); // запрос ещё в полёте (latency)
-      await openMenu(tester);
-      await tester.tap(find.text('Поделиться'));
+      await tester.tap(find.byTooltip('Поделиться'));
       await tester.pumpAndSettle();
 
       // Добиваем таймер задержки — первый запрос завершается.
@@ -482,8 +557,8 @@ void main() {
       // Желание исчезло из списка, счётчик и feedback обновились.
       expect(find.byType(WishGridCard), findsNWidgets(1));
       expect(find.text('Свитер'), findsNothing);
-      final bar = tester.widget<AppShellBar>(find.byType(AppShellBar));
-      expect(bar.subtitle, '1 желание');
+      final header = tester.widget<AppScreenTitle>(find.byType(AppScreenTitle));
+      expect(header.subtitle, '1 желание');
       expect(find.text('Желание убрано из списка'), findsOneWidget);
 
       // Сервер получил list_id = null; само желание не удалено.
@@ -618,12 +693,16 @@ class _FailAssignRepo implements WishRepository {
   Stream<List<WishImage>> watchWishImages(String wishId) =>
       _inner.watchWishImages(wishId);
   @override
+  Future<List<WishImage>> getWishImages(String wishId) =>
+      _inner.getWishImages(wishId);
+  @override
   Future<Wish> createWish({
     required String title,
     String? description,
     int? price,
     String? link,
     String? imageUrl,
+    WishPriority priority = WishPriority.normal,
     List<String> additionalImagePaths = const [],
   }) => _inner.createWish(
     title: title,
@@ -631,10 +710,12 @@ class _FailAssignRepo implements WishRepository {
     price: price,
     link: link,
     imageUrl: imageUrl,
+    priority: priority,
     additionalImagePaths: additionalImagePaths,
   );
   @override
-  Future<Wish> updateWish(Wish wish) => _inner.updateWish(wish);
+  Future<Wish> updateWish(Wish wish, {List<WishImageInput>? images}) =>
+      _inner.updateWish(wish, images: images);
   @override
   Future<void> deleteWish(String id) => _inner.deleteWish(id);
 }

@@ -354,7 +354,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       final target = _userById(friendId);
       if (target == null) throw _error(404, 'Not found.');
       if (rest.endsWith('/wishes') && method == 'GET') {
-        final list = (_wishes[friendId] ?? {}).values.toList()
+        final list = (_wishes[friendId] ?? {}).values.map(_wishJson).toList()
           ..sort(
             (a, b) => (b['created_at'] as String).compareTo(
               a['created_at'] as String,
@@ -463,7 +463,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       };
     } else if (path == '/wishes' && method == 'GET') {
       final uid = _userIdForToken(token);
-      final list = (_wishes[uid] ?? {}).values.toList()
+      final list = (_wishes[uid] ?? {}).values.map(_wishJson).toList()
         ..sort(
           (a, b) =>
               (b['created_at'] as String).compareTo(a['created_at'] as String),
@@ -482,6 +482,7 @@ class FakeApiAdapter implements HttpClientAdapter {
       if (lid != null && !(_wishLists[uid] ?? {}).containsKey(lid)) {
         throw _error(422, 'The given data was invalid.');
       }
+      _validatePriority(body);
       final now = DateTime.now().toIso8601String();
       final wish = {
         'id': id,
@@ -491,6 +492,9 @@ class FakeApiAdapter implements HttpClientAdapter {
         'link': body['link'],
         'image_url': body['image_url'],
         'list_id': body['list_id'],
+        // Backend-дефолт: поле необязательно в create.
+        'priority': body['priority'] ?? 'normal',
+        'images': _parseImagesField(body['images']),
         'created_at': now,
         'updated_at': now,
       };
@@ -692,12 +696,13 @@ class FakeApiAdapter implements HttpClientAdapter {
         final wish = wishes[path.substring(8)];
         if (wish == null) throw _error(404, 'Not found.');
         if (method == 'GET') {
-          data = wish;
+          data = _wishJson(wish);
         } else if (method == 'PATCH') {
           final lid = body?['list_id'];
           if (lid != null && !(_wishLists[uid] ?? {}).containsKey(lid)) {
             throw _error(422, 'The given data was invalid.');
           }
+          _validatePriority(body);
           for (final k in [
             'title',
             'description',
@@ -705,11 +710,17 @@ class FakeApiAdapter implements HttpClientAdapter {
             'link',
             'image_url',
             'list_id',
+            'priority',
           ]) {
             if (body!.containsKey(k)) wish[k] = body[k];
           }
+          // `images`: отсутствует = не трогать, [] = очистить,
+          // […] = полная замена (порядок массива → sort_order).
+          if (body!.containsKey('images')) {
+            wish['images'] = _parseImagesField(body['images']);
+          }
           wish['updated_at'] = DateTime.now().toIso8601String();
-          data = wish;
+          data = _wishJson(wish);
         } else if (method == 'DELETE') {
           wishes.remove(path.substring(8));
           status = 204;
@@ -973,12 +984,51 @@ class FakeApiAdapter implements HttpClientAdapter {
   String seedShare(String uid, String entity) =>
       _shareFor(uid, entity)['token'] as String;
 
+  /// Нормализация wish-записи: `images` присутствует всегда
+  /// (старые seed'ы без поля → `[]`) — как WishResource.
+  Map<String, dynamic> _wishJson(Map<String, dynamic> w) => {
+    ...w,
+    'images': w['images'] ?? const [],
+  };
+
+  /// Backend-валидация `priority` (`Rule::in`): только при
+  /// наличии поля — отсутствующее не сбрасывает старое значение.
+  void _validatePriority(Map<String, dynamic>? body) {
+    final p = body?['priority'];
+    if (p != null && p is! String ||
+        p is String && !{'later', 'normal', 'high'}.contains(p)) {
+      throw _error(422, 'The given data was invalid.');
+    }
+  }
+
+  /// Валидация+нормализация поля `images` (POST/PATCH): каждый
+  /// элемент — `{id?: uuid, url: string}`; индекс → sort_order.
+  List<Map<String, dynamic>> _parseImagesField(Object? field) {
+    if (field == null) return [];
+    if (field is! List) throw _error(422, 'The given data was invalid.');
+    return [
+      for (var i = 0; i < field.length; i++)
+        () {
+          final img = field[i];
+          if (img is! Map || img['url'] is! String) {
+            throw _error(422, 'The given data was invalid.');
+          }
+          return {
+            'id': (img['id'] as String?) ?? _uuid.v4(),
+            'url': img['url'],
+            'sort_order': i + 1,
+          };
+        }(),
+    ];
+  }
+
   /// Публичная проекция желания — как SharedWishResource.
   Map<String, dynamic> _publicWish(String uid, Map<String, dynamic> w) => {
     'title': w['title'],
     'price': w['price'],
     'link': w['link'],
     'image_url': w['image_url'],
+    'images': _wishJson(w)['images'],
     'owner': {
       'name': _users.values.firstWhere(
         (u) => u['id'] == uid,

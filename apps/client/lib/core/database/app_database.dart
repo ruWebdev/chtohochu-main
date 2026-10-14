@@ -47,6 +47,11 @@ class Wishes extends Table {
   /// retry запроса инструкций возвращает тот же upload на сервере.
   TextColumn get imageUploadId => text().nullable()();
 
+  /// Приоритет желания: `later | normal | high` (default `normal`).
+  /// Скалярное поле — группировка выполняется только в UI,
+  /// отдельных таблиц нет.
+  TextColumn get priority => text().withDefault(const Constant('normal'))();
+
   /// Локальный список желаний, в котором лежит желание
   /// (`wish_lists.id`); `null` — вне списков. Local-only связь:
   /// сервер списков пока не знает, в outbox не попадает.
@@ -434,7 +439,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -529,13 +534,23 @@ class AppDatabase extends _$AppDatabase {
         final liveListIds = (await (select(
           wishLists,
         )..where((l) => l.deletedAt.isNull())).get()).map((l) => l.id).toSet();
-        final members = await (select(
-          wishes,
-        )..where((w) => w.listId.isNotNull() & w.deletedAt.isNull())).get();
+        // selectOnly, а не select(wishes): на этом шаге таблица
+        // ещё в форме < v10 — колонок поздних схем (priority и т.п.)
+        // нет, полный row-mapping упал бы на старой базе.
+        final members =
+            await (selectOnly(wishes)
+                  ..addColumns([wishes.id, wishes.listId, wishes.ownerId])
+                  ..where(
+                    wishes.listId.isNotNull() & wishes.deletedAt.isNull(),
+                  ))
+                .get();
         final migratedAt = DateTime.now();
         for (final w in members) {
-          if (!liveListIds.contains(w.listId)) continue;
-          final ops = await opsFor(w.ownerId, w.id);
+          final wishId = w.read(wishes.id)!;
+          final wishOwnerId = w.read(wishes.ownerId)!;
+          final wishListId = w.read(wishes.listId);
+          if (!liveListIds.contains(wishListId)) continue;
+          final ops = await opsFor(wishOwnerId, wishId);
           // Удаляемое желание не трогаем: update после delete —
           // висячий PATCH на уже удалённую сущность.
           if (ops.any((o) => o.operation == 'delete')) continue;
@@ -543,11 +558,11 @@ class AppDatabase extends _$AppDatabase {
           if (carried.isEmpty) {
             await into(outboxEntries).insert(
               OutboxEntriesCompanion(
-                ownerId: Value(w.ownerId),
+                ownerId: Value(wishOwnerId),
                 entityType: const Value('wish'),
-                entityId: Value(w.id),
+                entityId: Value(wishId),
                 operation: const Value('update'),
-                payloadJson: Value(jsonEncode({'list_id': w.listId})),
+                payloadJson: Value(jsonEncode({'list_id': wishListId})),
                 createdAt: Value(migratedAt),
               ),
             );
@@ -555,7 +570,7 @@ class AppDatabase extends _$AppDatabase {
             for (final op in carried) {
               final payload =
                   jsonDecode(op.payloadJson!) as Map<String, dynamic>;
-              payload['list_id'] = w.listId;
+              payload['list_id'] = wishListId;
               await (update(
                 outboxEntries,
               )..where((o) => o.id.equals(op.id))).write(
@@ -576,6 +591,11 @@ class AppDatabase extends _$AppDatabase {
             'UPDATE shopping_lists SET owner_user_id = owner_id',
           );
         }
+      }
+      if (from < 12) {
+        // Приоритет желания (later|normal|high). Существующие
+        // строки получают 'normal' через column default.
+        await migrator.addColumn(wishes, wishes.priority);
       }
     },
   );
@@ -680,6 +700,78 @@ class AppDatabase extends _$AppDatabase {
       for (final r in rows)
         if (r.localPath != null) r.localPath!,
     ];
+  }
+
+  /// Одна строка доп.изображения (owner-scoped).
+  Future<WishImageRow?> wishImageById(String ownerId, String imageId) {
+    return (select(wishImages)
+          ..where((i) => i.id.equals(imageId) & i.ownerId.equals(ownerId)))
+        .getSingleOrNull();
+  }
+
+  /// Вставить строку доп.изображения.
+  Future<void> insertWishImage(WishImagesCompanion row) =>
+      into(wishImages).insert(row);
+
+  /// Удалить строку доп.изображения; возвращает `local_path`
+  /// удалённой строки (для cleanup файла) или `null`.
+  Future<String?> deleteWishImageRow(String ownerId, String imageId) async {
+    final row = await wishImageById(ownerId, imageId);
+    if (row == null) return null;
+    await (delete(
+      wishImages,
+    )..where((i) => i.id.equals(imageId) & i.ownerId.equals(ownerId))).go();
+    return row.localPath;
+  }
+
+  /// Обновить `sort_order` существующей строки.
+  Future<void> setWishImageSortOrder(
+    String ownerId,
+    String imageId,
+    int sortOrder,
+  ) {
+    return (update(wishImages)
+          ..where((i) => i.id.equals(imageId) & i.ownerId.equals(ownerId)))
+        .write(WishImagesCompanion(sortOrder: Value(sortOrder)));
+  }
+
+  /// Upsert серверного изображения при pull-reconcile.
+  ///
+  /// Новая строка помечается `uploaded` — сервер знает только
+  /// доставленные изображения. У существующей обновляются
+  /// `remote_url`/`sort_order`; `local_path` не трогается —
+  /// локальный файл иммутабелен как источник отображения.
+  Future<void> upsertRemoteWishImage({
+    required String ownerId,
+    required String wishId,
+    required String id,
+    required String url,
+    required int sortOrder,
+  }) async {
+    final existing = await wishImageById(ownerId, id);
+    if (existing == null) {
+      await into(wishImages).insert(
+        WishImagesCompanion(
+          id: Value(id),
+          ownerId: Value(ownerId),
+          wishId: Value(wishId),
+          remoteUrl: Value(url),
+          uploadStatus: const Value('uploaded'),
+          sortOrder: Value(sortOrder),
+          createdAt: Value(DateTime.now()),
+        ),
+      );
+    } else {
+      await (update(
+        wishImages,
+      )..where((i) => i.id.equals(id) & i.ownerId.equals(ownerId))).write(
+        WishImagesCompanion(
+          remoteUrl: Value(url),
+          uploadStatus: const Value('uploaded'),
+          sortOrder: Value(sortOrder),
+        ),
+      );
+    }
   }
 
   // ── Media upload queue (ADR-015) ────────────────────────

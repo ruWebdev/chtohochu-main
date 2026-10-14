@@ -30,10 +30,6 @@ class FriendsPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppShellBar(
-        title: l10n.friendsTitle,
-        subtitle: friends != null && friends.isNotEmpty
-            ? friendsCountLabel(l10n, friends.length)
-            : null,
         actions: [
           AppBarAction(
             icon: PhosphorIconsRegular.userPlus,
@@ -44,57 +40,83 @@ class FriendsPage extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () =>
-              ref.read(friendsControllerProvider.notifier).refresh(),
-          child: friendsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => AppEmptyState(
-              icon: const Icon(PhosphorIconsRegular.warningCircle),
-              title: l10n.loadFailed,
-              description: l10n.pullToRefresh,
-              action: AppButton(
-                label: l10n.refresh,
-                onPressed: () =>
+        // Низ не резервируем — контент уходит под стеклянный
+        // bottom bar; запас в конце прокрутки даёт скроллер.
+        bottom: false,
+        child: Column(
+          children: [
+            AppScreenTitle(
+              title: l10n.friendsTitle,
+              subtitle: friends != null && friends.isNotEmpty
+                  ? friendsCountLabel(l10n, friends.length)
+                  : null,
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () =>
                     ref.read(friendsControllerProvider.notifier).refresh(),
+                child: friendsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => AppEmptyState(
+                    icon: const Icon(PhosphorIconsRegular.warningCircle),
+                    title: l10n.loadFailed,
+                    description: l10n.pullToRefresh,
+                    action: AppButton(
+                      label: l10n.refresh,
+                      onPressed: () => ref
+                          .read(friendsControllerProvider.notifier)
+                          .refresh(),
+                    ),
+                  ),
+                  data: (friends) {
+                    if (friends.isEmpty) {
+                      return ListView(
+                        padding: EdgeInsets.only(
+                          bottom: AppBottomBar.scrollPaddingOf(context),
+                        ),
+                        children: [
+                          const SizedBox(height: AppSpacing.xxl),
+                          AppEmptyState(
+                            icon: const Icon(PhosphorIconsRegular.users),
+                            title: l10n.friendsEmptyTitle,
+                            description: l10n.friendsEmptyDescription,
+                            action: AppButton(
+                              label: l10n.friendAdd,
+                              leading: const Icon(
+                                PhosphorIconsRegular.userPlus,
+                              ),
+                              onPressed: () => showAddFriendSheet(context),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView.separated(
+                      padding: EdgeInsets.only(
+                        left: AppSpacing.screenPaddingHorizontal,
+                        right: AppSpacing.screenPaddingHorizontal,
+                        top: AppSpacing.sm,
+                        bottom:
+                            AppSpacing.sm +
+                            AppBottomBar.scrollPaddingOf(context),
+                      ),
+                      itemCount: friends.length,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: AppSpacing.betweenCards),
+                      itemBuilder: (context, index) {
+                        final friend = friends[index];
+                        return FriendCard(
+                          friend: friend,
+                          onTap: () => context.go(AppRoutes.friend(friend.id)),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ),
-            data: (friends) {
-              if (friends.isEmpty) {
-                return ListView(
-                  children: [
-                    const SizedBox(height: AppSpacing.xxl),
-                    AppEmptyState(
-                      icon: const Icon(PhosphorIconsRegular.users),
-                      title: l10n.friendsEmptyTitle,
-                      description: l10n.friendsEmptyDescription,
-                      action: AppButton(
-                        label: l10n.friendAdd,
-                        leading: const Icon(PhosphorIconsRegular.userPlus),
-                        onPressed: () => showAddFriendSheet(context),
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPaddingHorizontal,
-                  vertical: AppSpacing.sm,
-                ),
-                itemCount: friends.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppSpacing.betweenCards),
-                itemBuilder: (context, index) {
-                  final friend = friends[index];
-                  return FriendCard(
-                    friend: friend,
-                    onTap: () => context.go(AppRoutes.friend(friend.id)),
-                  );
-                },
-              );
-            },
-          ),
+          ],
         ),
       ),
     );

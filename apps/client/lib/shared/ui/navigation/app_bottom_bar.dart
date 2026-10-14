@@ -103,6 +103,15 @@ class AppBottomBar extends StatelessWidget {
   static const double _socketOverhang =
       (AppSizes.addActionSocketSize - AppSizes.bottomBarHeight) / 2;
 
+  /// Нижний отступ для прокручиваемого контента, уходящего под бар.
+  ///
+  /// Внутри `AppShell` (`Scaffold.extendBody`) `padding.bottom` уже
+  /// равен высоте бара вместе с системным inset; снаружи shell'а —
+  /// только системному inset. Чтение из [MediaQuery.paddingOf]
+  /// исключает двойной учёт при обеих навигациях Android.
+  static double scrollPaddingOf(BuildContext context) =>
+      MediaQuery.paddingOf(context).bottom;
+
   const AppBottomBar({
     super.key,
     required this.items,

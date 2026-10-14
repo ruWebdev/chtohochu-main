@@ -95,7 +95,7 @@ class ShareController extends Controller
             $shareable instanceof Wish => [
                 'type' => 'wish',
                 'data' => (new SharedWishResource(
-                    $shareable->loadMissing('owner')
+                    $shareable->loadMissing(['owner', 'images'])
                 ))->toArray($request),
             ],
             $shareable instanceof WishList => [
@@ -104,6 +104,7 @@ class ShareController extends Controller
                     $shareable->loadMissing([
                         'owner',
                         'wishes' => fn ($q) => $q
+                            ->with('images')
                             ->latest('created_at')
                             ->limit(self::SHARED_WISHES_LIMIT),
                     ])

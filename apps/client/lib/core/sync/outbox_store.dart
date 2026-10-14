@@ -109,7 +109,16 @@ class OutboxStore {
               .where((o) => o.operation == OutboxOp.update)
               .firstOrNull;
           if (pendingUpdate != null) {
-            await _revive(pendingUpdate.id, payload);
+            // update + update → payload'ы МЕРЖЯТСЯ (как create+update):
+            // частичная операция (например, post-upload {'image_url'})
+            // не должна затирать поля неотправленной правки —
+            // иначе локальное состояние тихо расходится с сервером.
+            final merged = <String, dynamic>{
+              ...jsonDecode(pendingUpdate.payloadJson ?? '{}')
+                  as Map<String, dynamic>,
+              ...?payload,
+            };
+            await _revive(pendingUpdate.id, merged);
           } else {
             await _insert(
               ownerId: ownerId,

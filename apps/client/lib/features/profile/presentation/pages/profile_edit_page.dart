@@ -166,84 +166,91 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
         appBar: AppShellBar(
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: _back,
           ),
-          title: l10n.profileEdit,
         ),
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPaddingHorizontal,
-              vertical: AppSpacing.sm,
-            ),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
             children: [
-              // --- Аватар ---
-              Center(
-                child: AppAvatar(
-                  imageUrl: _avatarUrl,
-                  initials: user?.initials,
-                  size: AppAvatarSize.lg,
+              AppScreenTitle(title: l10n.profileEdit),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.screenPaddingHorizontal,
+                    vertical: AppSpacing.sm,
+                  ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  children: [
+                    // --- Аватар ---
+                    Center(
+                      child: AppAvatar(
+                        imageUrl: _avatarUrl,
+                        initials: user?.initials,
+                        size: AppAvatarSize.lg,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Center(
+                      child: AppButton(
+                        label: l10n.photoChange,
+                        variant: AppButtonVariant.ghost,
+                        size: AppButtonSize.sm,
+                        onPressed: _saving ? null : _pickAvatar,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // --- Имя ---
+                    AppTextField(
+                      controller: _nameController,
+                      label: l10n.nameLabel,
+                      hint: l10n.nameHintProfile,
+                      errorText: _nameError,
+                      enabled: !_saving,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) {
+                        if (_nameError != null) {
+                          setState(() => _nameError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.betweenFields),
+
+                    // --- Username ---
+                    AppTextField(
+                      controller: _usernameController,
+                      label: l10n.usernameLabel,
+                      hint: l10n.usernameHint,
+                      leading: const Text('@'),
+                      errorText: _usernameError,
+                      enabled: !_saving,
+                      textInputAction: TextInputAction.done,
+                      onChanged: (_) {
+                        if (_usernameError != null) {
+                          setState(() => _usernameError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      l10n.usernameHelp,
+                      style: t.captionSmall.copyWith(color: colors.textMuted),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+
+                    // --- Сохранить ---
+                    AppButton(
+                      label: l10n.save,
+                      expand: true,
+                      isLoading: _saving,
+                      onPressed: _save,
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Center(
-                child: AppButton(
-                  label: l10n.photoChange,
-                  variant: AppButtonVariant.ghost,
-                  size: AppButtonSize.sm,
-                  onPressed: _saving ? null : _pickAvatar,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              // --- Имя ---
-              AppTextField(
-                controller: _nameController,
-                label: l10n.nameLabel,
-                hint: l10n.nameHintProfile,
-                errorText: _nameError,
-                enabled: !_saving,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {
-                  if (_nameError != null) {
-                    setState(() => _nameError = null);
-                  }
-                },
-              ),
-              const SizedBox(height: AppSpacing.betweenFields),
-
-              // --- Username ---
-              AppTextField(
-                controller: _usernameController,
-                label: l10n.usernameLabel,
-                hint: l10n.usernameHint,
-                leading: const Text('@'),
-                errorText: _usernameError,
-                enabled: !_saving,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) {
-                  if (_usernameError != null) {
-                    setState(() => _usernameError = null);
-                  }
-                },
-              ),
-              const SizedBox(height: AppSpacing.xxs),
-              Text(
-                l10n.usernameHelp,
-                style: t.captionSmall.copyWith(color: colors.textMuted),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-
-              // --- Сохранить ---
-              AppButton(
-                label: l10n.save,
-                expand: true,
-                isLoading: _saving,
-                onPressed: _save,
               ),
             ],
           ),

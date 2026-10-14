@@ -20,7 +20,7 @@ class AppSizes {
   static const double chipHeight = 30;
 
   /// Размер круглой icon button.
-  static const double iconButtonSize = 36;
+  static const double iconButtonSize = 40;
 
   /// Размер иконки в AppBar action.
   static const double appBarIconSize = 22;
@@ -37,6 +37,9 @@ class AppSizes {
   /// Размер аватара S.
   static const double avatarSm = 28;
 
+  /// Аватар в шапке главного экрана (рядом с приветствием).
+  static const double avatarHeader = 48;
+
   /// Размер аватара M.
   static const double avatarMd = 40;
 
@@ -49,10 +52,6 @@ class AppSizes {
   /// Высота карточки списка желаний в сетке (иконка + название
   /// в 2 строки + счётчик).
   static const double wishListCardExtent = 112;
-
-  /// Высота карточки желания в сетке (обложка + название
-  /// в 2 строки + цена).
-  static const double wishCardExtent = 172;
 
   /// Диаметр центральной кнопки «добавить» в bottom bar.
   static const double addActionButtonSize = 52;

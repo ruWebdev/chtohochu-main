@@ -68,7 +68,10 @@ class FriendController extends Controller
     {
         abort_unless($request->user()->can('viewWishes', $user), 404);
 
-        $wishes = $user->wishes()->latest('created_at')->get();
+        $wishes = $user->wishes()
+            ->with('images')
+            ->latest('created_at')
+            ->get();
 
         return WishResource::collection($wishes);
     }

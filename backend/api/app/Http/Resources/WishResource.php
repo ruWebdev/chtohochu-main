@@ -28,6 +28,12 @@ class WishResource extends JsonResource
             'price' => $this->price,
             'link' => $this->link,
             'image_url' => $this->image_url,
+            // Приоритет: later | normal | high (default 'normal').
+            // Поле личное — в shared/friend ресурсы не попадает.
+            'priority' => $this->priority,
+            // Дополнительные изображения, упорядоченные sort_order.
+            // Старые клиенты поле игнорируют; новые читают набор.
+            'images' => WishImageResource::collection($this->images),
             'list_id' => $this->list_id,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

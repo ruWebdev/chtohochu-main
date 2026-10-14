@@ -48,7 +48,9 @@ class WishFormController extends Notifier<WishFormState> {
     int? price,
     String? link,
     String? imageUrl,
+    WishPriority? priority,
     List<String> additionalImagePaths = const [],
+    List<WishImageInput>? images,
     Wish? existing,
   }) async {
     if (state is WishFormLoading) return null;
@@ -63,6 +65,7 @@ class WishFormController extends Notifier<WishFormState> {
           price: price,
           link: link,
           imageUrl: imageUrl,
+          priority: priority ?? WishPriority.normal,
           additionalImagePaths: additionalImagePaths,
         );
       } else {
@@ -76,8 +79,11 @@ class WishFormController extends Notifier<WishFormState> {
             price: price,
             link: link,
             imageUrl: imageUrl,
+            // Редактирование без смены приоритета сохраняет текущий.
+            priority: priority ?? existing.priority,
             createdAt: existing.createdAt,
           ),
+          images: images,
         );
       }
       state = WishFormSuccess(wish);

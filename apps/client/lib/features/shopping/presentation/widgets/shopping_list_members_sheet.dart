@@ -247,7 +247,7 @@ class _MemberRow extends StatelessWidget {
           if (canRemove)
             AppIconButton(
               icon: const Icon(PhosphorIconsRegular.userMinus),
-              variant: AppIconButtonVariant.ghost,
+              variant: AppIconButtonVariant.subtle,
               semanticLabel: l10n.listMemberRemove,
               tooltip: l10n.listMemberRemove,
               onPressed: onRemove,

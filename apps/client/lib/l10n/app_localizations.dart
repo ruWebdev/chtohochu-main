@@ -802,6 +802,48 @@ abstract class AppLocalizations {
   /// **'Ссылка на изображение'**
   String get wishImageSemantic;
 
+  /// Section label for wish photos on the edit screen (first photo is the cover)
+  ///
+  /// In ru, this message translates to:
+  /// **'Фотографии'**
+  String get wishPhotosSection;
+
+  /// Mock subtitle on the wish grid card (source/category placeholder)
+  ///
+  /// In ru, this message translates to:
+  /// **'Личное'**
+  String get wishCardSubtitle;
+
+  /// Mock action button label on the wish grid card
+  ///
+  /// In ru, this message translates to:
+  /// **'Купить'**
+  String get wishCardAction;
+
+  /// Priority selector label on the wish form
+  ///
+  /// In ru, this message translates to:
+  /// **'Насколько сильно хочешь?'**
+  String get wishPriorityLabel;
+
+  /// Priority option: postponed wish; also the collapsed section title on Home
+  ///
+  /// In ru, this message translates to:
+  /// **'Не сейчас'**
+  String get wishPriorityLater;
+
+  /// Priority option: normal (default)
+  ///
+  /// In ru, this message translates to:
+  /// **'Хочу'**
+  String get wishPriorityNormal;
+
+  /// Priority option: high
+  ///
+  /// In ru, this message translates to:
+  /// **'Очень хочу'**
+  String get wishPriorityHigh;
+
   /// Note field label in the wish form
   ///
   /// In ru, this message translates to:
@@ -838,6 +880,36 @@ abstract class AppLocalizations {
   /// **'Введите цену числом'**
   String get wishPriceInvalid;
 
+  /// Generic open action label
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть'**
+  String get open;
+
+  /// Title of the add-wish sheet in marketplace import mode
+  ///
+  /// In ru, this message translates to:
+  /// **'Импорт товара'**
+  String get wishImportTitle;
+
+  /// Shown while link preview metadata is being extracted
+  ///
+  /// In ru, this message translates to:
+  /// **'Загружаем данные по ссылке…'**
+  String get wishImportLoading;
+
+  /// Shown when link metadata extraction failed; form stays usable
+  ///
+  /// In ru, this message translates to:
+  /// **'Не удалось загрузить данные по ссылке — заполните вручную.'**
+  String get wishImportFailed;
+
+  /// Snackbar when a new share arrives while the wish form is open
+  ///
+  /// In ru, this message translates to:
+  /// **'Получена новая ссылка для импорта'**
+  String get wishImportNewLink;
+
   /// Primary button when creating a wish
   ///
   /// In ru, this message translates to:
@@ -847,14 +919,14 @@ abstract class AppLocalizations {
   /// Title of the delete-wish confirmation dialog
   ///
   /// In ru, this message translates to:
-  /// **'Удалить желание?'**
+  /// **'Вы уверены?'**
   String get wishDeleteTitle;
 
   /// Body of the delete-wish confirmation dialog
   ///
   /// In ru, this message translates to:
-  /// **'«{title}» будет удалено без возможности восстановления.'**
-  String wishDeleteMessage(String title);
+  /// **'Желание будет удалено без возможности восстановления.'**
+  String get wishDeleteMessage;
 
   /// Semantic label for the delete-wish action
   ///

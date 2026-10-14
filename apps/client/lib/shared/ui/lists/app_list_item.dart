@@ -76,6 +76,8 @@ class AppListItem extends StatelessWidget {
                     Text(
                       title,
                       style: typography.bodyMedium!.copyWith(color: titleColor),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
@@ -84,6 +86,8 @@ class AppListItem extends StatelessWidget {
                         style: typography.bodySmall!.copyWith(
                           color: subtitleColor,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ],

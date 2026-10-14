@@ -5,9 +5,11 @@ import 'package:chtohochu/features/wishes/data/wish_repository.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/home_page.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/wish_details_page.dart';
 import 'package:chtohochu/features/wishes/presentation/pages/wish_form_page.dart';
-import 'package:chtohochu/features/wishes/presentation/pages/wish_list_page.dart';
+import 'package:chtohochu/features/wishes/presentation/widgets/wish_card.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_list_card.dart';
 import 'package:chtohochu/shared/ui/buttons/app_button.dart';
+import 'package:chtohochu/shared/ui/images/app_image.dart';
+import 'package:chtohochu/shared/ui/images/app_image_carousel.dart';
 import 'package:chtohochu/shared/ui/lists/app_list_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +52,83 @@ void main() {
     expect(find.text('https://example.com/sony'), findsOneWidget);
   });
 
+  testWidgets('Details bar shows back + share + menu buttons', (tester) async {
+    final widget = await createTestApp(
+      preferences: _prefs(_wishJson),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Наушники Sony'));
+    await tester.pumpAndSettle();
+
+    // Бар: назад слева, «Поделиться» и «Ещё» справа.
+    expect(find.byTooltip('Назад'), findsOneWidget);
+    expect(find.byTooltip('Поделиться'), findsOneWidget);
+    expect(find.byTooltip('Ещё'), findsOneWidget);
+    // Действия не вынесены на бар — живут в меню-шите.
+    expect(find.byTooltip('Редактировать'), findsNothing);
+    expect(find.byTooltip('Удалить'), findsNothing);
+  });
+
+  testWidgets('Menu sheet lists edit, add-to-list and delete', (tester) async {
+    final widget = await createTestApp(
+      preferences: _prefs(_wishJson),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Наушники Sony'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+
+    // Flat bottom sheet: заголовок = название желания + 3 действия.
+    final sheet = find.byType(BottomSheet);
+    expect(
+      find.descendant(of: sheet, matching: find.text('Наушники Sony')),
+      findsOneWidget,
+    );
+    for (final action in ['Редактировать', 'Добавить в список', 'Удалить']) {
+      expect(
+        find.descendant(of: sheet, matching: find.text(action)),
+        findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('Tapping cover image opens fullscreen viewer with back', (
+    tester,
+  ) async {
+    const wishWithImage =
+        '[{"id":"w1","title":"Фото","description":null,"price":null,'
+        '"link":null,"imageUrl":"/tmp/nonexistent.jpg",'
+        '"createdAt":"2025-01-01T00:00:00.000"}]';
+    final widget = await createTestApp(
+      preferences: _prefs(wishWithImage),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Фото'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WishDetailsPage), findsOneWidget);
+
+    // Тап по обложке → модальный просмотр с зумом.
+    await tester.tap(find.byType(AppImage).first);
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+
+    // Стандартная кнопка «Назад» в просмотрщике возвращает на детали.
+    await tester.tap(find.byTooltip('Назад').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsNothing);
+    expect(find.byType(WishDetailsPage), findsOneWidget);
+  });
+
   testWidgets('Back button on details returns to home', (tester) async {
     final widget = await createTestApp(
       preferences: _prefs(_wishJson),
@@ -79,10 +158,12 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    // Детали → редактирование.
+    // Детали → меню → «Редактировать».
     await tester.tap(find.text('Наушники Sony'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Редактировать'));
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(AppListItem, 'Редактировать'));
     await tester.pumpAndSettle();
 
     expect(find.byType(WishFormPage), findsOneWidget);
@@ -113,13 +194,19 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
-    // Детали → удалить → диалог подтверждения.
+    // Детали → меню → «Удалить» → диалог подтверждения.
     await tester.tap(find.text('Наушники Sony'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Удалить'));
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Удалить желание?'), findsOneWidget);
+    expect(find.text('Вы уверены?'), findsOneWidget);
+    expect(
+      find.text('Желание будет удалено без возможности восстановления.'),
+      findsOneWidget,
+    );
 
     // Подтвердить → возврат на список без желания.
     await tester.tap(find.widgetWithText(AppButton, 'Удалить'));
@@ -144,6 +231,9 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
+    // Карточки выросли (квадратная обложка + инфо-блок) — «Книга»
+    // во второй строке сетки, за пределами viewport: докручиваем.
+    await tester.scrollUntilVisible(find.text('Книга'), 200);
     expect(find.text('Книга'), findsOneWidget);
     expect(find.text('Наушники'), findsOneWidget);
     expect(find.text('12 990 ₽'), findsOneWidget);
@@ -229,7 +319,9 @@ void main() {
 
     await tester.tap(find.text('Наушники Sony'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Удалить'));
+    await tester.tap(find.byTooltip('Ещё'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(AppButton, 'Удалить'));
     await tester.pumpAndSettle(const Duration(seconds: 3));
@@ -270,7 +362,12 @@ void main() {
     }
 
     Future<void> openDetails(WidgetTester tester) async {
-      await tester.tap(find.text('Наушники'));
+      // Карточка желания ниже секции списков — за viewport:
+      // ensureVisible + тап по центру самой карточки (текст мог бы
+      // оказаться под bottom bar после частичной прокрутки).
+      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      await tester.ensureVisible(card);
+      await tester.tap(card);
       await tester.pumpAndSettle();
       expect(find.byType(WishDetailsPage), findsOneWidget);
     }
@@ -294,7 +391,9 @@ void main() {
       await tester.pumpAndSettle();
       await openDetails(tester);
 
-      await tester.tap(find.byTooltip('Добавить в список'));
+      await tester.tap(find.byTooltip('Ещё'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppListItem, 'Добавить в список'));
       await tester.pumpAndSettle();
 
       final sheet = find.byType(BottomSheet);
@@ -332,7 +431,9 @@ void main() {
       await tester.pumpAndSettle();
       await openDetails(tester);
 
-      await tester.tap(find.byTooltip('Изменить список'));
+      await tester.tap(find.byTooltip('Ещё'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppListItem, 'Изменить список'));
       await tester.pumpAndSettle();
 
       final sheet = find.byType(BottomSheet);
@@ -349,7 +450,9 @@ void main() {
       expect(api.wishesOf(uid).single['list_id'], 'lb');
 
       // Открыть снова и убрать из списков.
-      await tester.tap(find.byTooltip('Изменить список'));
+      await tester.tap(find.byTooltip('Ещё'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppListItem, 'Изменить список'));
       await tester.pumpAndSettle();
       final sheet2 = find.byType(BottomSheet);
       expect(isSelected(tester, 'Дом'), isTrue);
@@ -362,7 +465,7 @@ void main() {
     });
 
     testWidgets('желание в списке: секция «Список» показывает '
-        'название и открывает WishListPage', (tester) async {
+        'название и открывает picker по тапу', (tester) async {
       final (widget, _) = await appWithWish(listId: 'la');
       await tester.pumpWidget(widget);
       await tester.pumpAndSettle();
@@ -373,15 +476,19 @@ void main() {
       expect(find.text('Подарки'), findsOneWidget);
       expect(find.text('Без списка'), findsNothing);
 
-      // Тап по строке списка → страница списка.
+      // Тап по строке списка → sheet выбора списка.
       await tester.tap(find.text('Подарки'));
       await tester.pumpAndSettle();
-      expect(find.byType(WishListPage), findsOneWidget);
-      expect(find.text('1 желание'), findsOneWidget);
+      final sheet = find.byType(BottomSheet);
+      expect(
+        find.descendant(of: sheet, matching: find.text('Изменить список')),
+        findsOneWidget,
+      );
+      expect(isSelected(tester, 'Подарки'), isTrue);
     });
 
     testWidgets('желание без списка: секция показывает «Без списка» '
-        'и не интерактивна', (tester) async {
+        'и открывает picker по тапу', (tester) async {
       final (widget, _) = await appWithWish();
       await tester.pumpWidget(widget);
       await tester.pumpAndSettle();
@@ -390,10 +497,15 @@ void main() {
       expect(find.text('Список'), findsOneWidget);
       expect(find.text('Без списка'), findsOneWidget);
 
-      // Строка не ведёт никуда — страница остаётся деталями.
+      // Строка «Без списка» интерактивна — открывает выбор списка.
       await tester.tap(find.text('Без списка'));
       await tester.pumpAndSettle();
-      expect(find.byType(WishDetailsPage), findsOneWidget);
+      final sheet = find.byType(BottomSheet);
+      expect(
+        find.descendant(of: sheet, matching: find.text('Добавить в список')),
+        findsOneWidget,
+      );
+      expect(isSelected(tester, 'Без списка'), isTrue);
     });
 
     testWidgets('удаление желания из списка: отмена сохраняет, '
@@ -404,9 +516,11 @@ void main() {
       await openDetails(tester);
 
       // Отмена — желание остаётся.
-      await tester.tap(find.byTooltip('Удалить'));
+      await tester.tap(find.byTooltip('Ещё'));
       await tester.pumpAndSettle();
-      expect(find.text('Удалить желание?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
+      await tester.pumpAndSettle();
+      expect(find.text('Вы уверены?'), findsOneWidget);
       await tester.tap(find.widgetWithText(AppButton, 'Отмена'));
       await tester.pumpAndSettle();
       expect(find.byType(WishDetailsPage), findsOneWidget);
@@ -415,7 +529,9 @@ void main() {
 
       // Подтверждение — желание удалено, возврат на Home,
       // счётчик списка уменьшился реактивно.
-      await tester.tap(find.byTooltip('Удалить'));
+      await tester.tap(find.byTooltip('Ещё'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppListItem, 'Удалить'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(AppButton, 'Удалить'));
       await tester.pumpAndSettle(const Duration(seconds: 3));
@@ -453,9 +569,7 @@ void main() {
       await tester.pumpAndSettle();
       await openDetails(tester);
 
-      await tester.tap(find.byTooltip('Ещё'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Поделиться'));
+      await tester.tap(find.byTooltip('Поделиться'));
       await tester.pumpAndSettle();
 
       expect(
@@ -467,6 +581,106 @@ void main() {
         shareCalls.single.arguments['text'] as String,
         startsWith('https://app.chtohochu.ru/s/'),
       );
+    });
+  });
+
+  group('карусель изображений', () {
+    const uid = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+
+    Map<String, dynamic> wishJson({
+      String? imageUrl,
+      List<Map<String, dynamic>>? images,
+    }) => {
+      'id': 'w1',
+      'title': 'Наушники',
+      'description': null,
+      'price': null,
+      'link': null,
+      'image_url': imageUrl,
+      'images': ?images,
+      'created_at': '2025-01-01T00:00:00.000Z',
+      'updated_at': '2025-01-01T00:00:00.000Z',
+    };
+
+    /// Желание «с сервера» — pull создаёт строки wish_images.
+    Future<Widget> appWith(Map<String, dynamic> serverWish) async {
+      final api = FakeApiAdapter(autoUserId: uid);
+      api.seedWish(uid, serverWish);
+      return createTestApp(
+        preferences: _prefs('[]'),
+        secureStorage: {'access_token': 'mock_token'},
+        api: api,
+        database: createTestDatabase(),
+      );
+    }
+
+    /// Точки пагинации карусели.
+    Finder dots() => find.descendant(
+      of: find.byType(AppImageCarousel),
+      matching: find.byType(AnimatedContainer),
+    );
+
+    testWidgets('несколько изображений → PageView + индикатор точек', (
+      tester,
+    ) async {
+      final widget = await appWith(
+        wishJson(
+          imageUrl: 'https://cdn.test/primary.jpg',
+          images: [
+            {'id': 'i1', 'url': 'https://cdn.test/a.jpg', 'sort_order': 1},
+            {'id': 'i2', 'url': 'https://cdn.test/b.jpg', 'sort_order': 2},
+          ],
+        ),
+      );
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      await tester.ensureVisible(card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+
+      final carousel = find.byType(AppImageCarousel);
+      expect(carousel, findsOneWidget);
+      expect(
+        find.descendant(of: carousel, matching: find.byType(PageView)),
+        findsOneWidget,
+      );
+      // primary + 2 additional → 3 точки.
+      expect(dots(), findsNWidgets(3));
+    });
+
+    testWidgets('одно изображение → PageView без индикатора', (tester) async {
+      final widget = await appWith(
+        wishJson(imageUrl: 'https://cdn.test/primary.jpg'),
+      );
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      await tester.ensureVisible(card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+
+      final carousel = find.byType(AppImageCarousel);
+      expect(carousel, findsOneWidget);
+      expect(
+        find.descendant(of: carousel, matching: find.byType(PageView)),
+        findsOneWidget,
+      );
+      expect(dots(), findsNothing);
+    });
+
+    testWidgets('нет изображений → заглушка без PageView', (tester) async {
+      final widget = await appWith(wishJson());
+      await tester.pumpWidget(widget);
+      await tester.pumpAndSettle();
+      final card = find.widgetWithText(WishGridCard, 'Наушники');
+      await tester.ensureVisible(card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppImageCarousel), findsOneWidget);
+      expect(find.byType(PageView), findsNothing);
+      expect(dots(), findsNothing);
     });
   });
 }

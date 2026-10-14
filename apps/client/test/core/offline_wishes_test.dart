@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:chtohochu/core/database/app_database.dart';
 import 'package:chtohochu/core/database/legacy_migration.dart';
 import 'package:chtohochu/core/services/preferences_service.dart';
+import 'package:chtohochu/core/sync/outbox_store.dart';
 import 'package:chtohochu/features/wishes/data/wish_repository.dart';
 import 'package:chtohochu/features/wishes/domain/wish.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -111,6 +112,61 @@ void main() {
       final wish = await repo.createWish(title: 'Книга');
       await repo.deleteWish(wish.id);
       expect(await repo.getWishById(wish.id), isNull);
+    });
+  });
+
+  group('Wish priority', () {
+    test('create по умолчанию → normal, payload несёт поле', () async {
+      final wish = await repo.createWish(title: 'Книга');
+
+      expect(wish.priority, WishPriority.normal);
+      expect((await rowOf(wish.id))!.priority, 'normal');
+
+      final ops = await outboxOf(ownerA);
+      expect(
+        (jsonDecode(ops.single.payloadJson!) as Map)['priority'],
+        'normal',
+      );
+    });
+
+    test('create с каждым уровнем персистится', () async {
+      for (final p in WishPriority.values) {
+        final wish = await repo.createWish(
+          title: 'Желание ${p.name}',
+          priority: p,
+        );
+        expect((await rowOf(wish.id))!.priority, p.name);
+        expect((await repo.getWishById(wish.id))!.priority, p);
+      }
+    });
+
+    test('update меняет priority, payload update несёт поле', () async {
+      final wish = await repo.createWish(
+        title: 'Книга',
+        priority: WishPriority.later,
+      );
+
+      await repo.updateWish(wish.copyWith(priority: WishPriority.high));
+
+      expect((await rowOf(wish.id))!.priority, 'high');
+      // create+update схлопнулись в один create с финальным payload.
+      final ops = await outboxOf(ownerA);
+      expect(ops.single.operation, 'create');
+      expect((jsonDecode(ops.single.payloadJson!) as Map)['priority'], 'high');
+    });
+
+    test('assignWishToList сохраняет priority', () async {
+      final wish = await repo.createWish(
+        title: 'Книга',
+        priority: WishPriority.high,
+      );
+      final list = await repo.createWishList(title: 'Подарки');
+
+      await repo.assignWishToList(wish.id, list.id);
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.listId, list.id);
+      expect(row.priority, 'high');
     });
   });
 
@@ -443,6 +499,236 @@ void main() {
       // Tombstone-строка скрыта, но при 422 на DELETE желание
       // вернётся — фото должны пережить tombstone.
       expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+    });
+  });
+
+  group('Wish images (edit)', () {
+    Future<List<WishImageRow>> imagesOf(String wishId) =>
+        db.wishImagesOf(ownerA, wishId);
+
+    /// Снимает outbox-операции — имитация «уже синхронизировано».
+    Future<void> markSynced() => (db.delete(
+      db.outboxEntries,
+    )..where((o) => o.ownerId.equals(ownerA))).go();
+
+    test('newFile → новые pending-строки с sort_order 1..N, '
+        'uploadId == id (client_id для server cleanup)', () async {
+      final wish = await repo.createWish(title: 'Фото');
+      await markSynced();
+
+      await repo.updateWish(
+        wish,
+        images: const [
+          WishImageInput.newFile('/tmp/a.jpg'),
+          WishImageInput.newFile('/tmp/b.jpg'),
+        ],
+      );
+
+      final rows = await imagesOf(wish.id);
+      expect(rows.map((r) => r.localPath), ['/tmp/a.jpg', '/tmp/b.jpg']);
+      expect(rows.map((r) => r.sortOrder), [1, 2]);
+      for (final r in rows) {
+        expect(r.uploadStatus, 'pending');
+        expect(r.uploadId, r.id);
+        expect(r.remoteUrl, isNull);
+      }
+      // Локальные пути в outbox payload не уходят — там только
+      // remote-набор (пока пуст).
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      expect(payload['images'], isEmpty);
+    });
+
+    test(
+      'existing → строка сохраняется; порядок списка → sort_order',
+      () async {
+        final wish = await repo.createWish(
+          title: 'Фото',
+          additionalImagePaths: ['/tmp/a.jpg', '/tmp/b.jpg'],
+        );
+        await markSynced();
+        final current = await imagesOf(wish.id);
+        final (a, b) = (current[0], current[1]);
+
+        // Перевёрнутый порядок: b первым.
+        await repo.updateWish(
+          wish,
+          images: [
+            WishImageInput.existing(b.id),
+            WishImageInput.existing(a.id),
+          ],
+        );
+
+        final rows = await imagesOf(wish.id);
+        expect(rows.map((r) => r.id), [b.id, a.id]);
+        expect(rows.map((r) => r.sortOrder), [1, 2]);
+      },
+    );
+
+    test('отсутствующие в наборе строки удаляются; пустой список '
+        'чищает всё', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: ['/tmp/a.jpg', '/tmp/b.jpg'],
+      );
+      await markSynced();
+
+      await repo.updateWish(wish, images: const []);
+      expect(await imagesOf(wish.id), isEmpty);
+    });
+
+    test('payload images содержит только remote-строки {id,url}', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: ['/tmp/a.jpg', '/tmp/b.jpg'],
+      );
+      await markSynced();
+      final current = await imagesOf(wish.id);
+      // a загружено (remote), b ещё pending.
+      await db.setWishImageRowUploadState(
+        ownerA,
+        current[0].id,
+        status: 'uploaded',
+        remoteUrl: 'https://cdn.test/a.jpg',
+      );
+
+      await repo.updateWish(
+        wish,
+        images: [
+          WishImageInput.existing(current[0].id),
+          WishImageInput.existing(current[1].id),
+        ],
+      );
+
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      expect(payload['images'], [
+        {'id': current[0].id, 'url': 'https://cdn.test/a.jpg'},
+      ]);
+    });
+
+    test(
+      'updateWish без images → payload несёт текущий remote-набор',
+      () async {
+        final wish = await repo.createWish(
+          title: 'Фото',
+          additionalImagePaths: ['/tmp/a.jpg'],
+        );
+        await markSynced();
+        final row = (await imagesOf(wish.id)).single;
+        await db.setWishImageRowUploadState(
+          ownerA,
+          row.id,
+          status: 'uploaded',
+          remoteUrl: 'https://cdn.test/a.jpg',
+        );
+
+        await repo.updateWish(wish.copyWith(title: 'Другое'));
+
+        final payload =
+            jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+        expect(payload['title'], 'Другое');
+        expect(payload['images'], [
+          {'id': row.id, 'url': 'https://cdn.test/a.jpg'},
+        ]);
+      },
+    );
+
+    test('новый primary-файл → imageUploadStatus pending + uploadId', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        imageUrl: 'https://cdn.test/old.jpg',
+      );
+      await markSynced();
+
+      await repo.updateWish(
+        Wish(
+          id: wish.id,
+          title: wish.title,
+          createdAt: wish.createdAt,
+          imageUrl: '/tmp/new-primary.jpg',
+        ),
+      );
+
+      final row = (await rowOf(wish.id))!;
+      expect(row.imageUrl, '/tmp/new-primary.jpg');
+      expect(row.imageLocalPath, '/tmp/new-primary.jpg');
+      expect(row.imageUploadStatus, 'pending');
+      expect(row.imageUploadId, isNotNull);
+      // Локальный путь не уходит в API.
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      expect(payload['image_url'], isNull);
+    });
+
+    test('продвижение additional→primary: remote URL переходит в '
+        'image_url, строка удаляется', () async {
+      final wish = await repo.createWish(
+        title: 'Фото',
+        imageUrl: 'https://cdn.test/old.jpg',
+        additionalImagePaths: ['/tmp/promoted.jpg'],
+      );
+      await markSynced();
+      final img = (await imagesOf(wish.id)).single;
+      await db.setWishImageRowUploadState(
+        ownerA,
+        img.id,
+        status: 'uploaded',
+        remoteUrl: 'https://cdn.test/promoted.jpg',
+      );
+
+      // Форма: первый фото = бывший additional (remote), additional
+      // набор пуст.
+      await repo.updateWish(
+        Wish(
+          id: wish.id,
+          title: wish.title,
+          createdAt: wish.createdAt,
+          imageUrl: 'https://cdn.test/promoted.jpg',
+        ),
+        images: const [],
+      );
+
+      expect((await rowOf(wish.id))!.imageUrl, 'https://cdn.test/promoted.jpg');
+      expect(await imagesOf(wish.id), isEmpty);
+      final payload =
+          jsonDecode((await outboxOf(ownerA)).single.payloadJson!) as Map;
+      expect(payload['image_url'], 'https://cdn.test/promoted.jpg');
+      expect(payload['images'], isEmpty);
+    });
+
+    test('existing с исчезнувшим id пропускается (строки нет)', () async {
+      final wish = await repo.createWish(title: 'Фото');
+      await markSynced();
+
+      await repo.updateWish(
+        wish,
+        images: const [WishImageInput.existing('img-ghost')],
+      );
+
+      expect(await imagesOf(wish.id), isEmpty);
+    });
+
+    test('outbox: частичный media-update мержится с pending-полями '
+        '(title не затирается)', () async {
+      final wish = await repo.createWish(title: 'Фото');
+      await markSynced();
+
+      await repo.updateWish(wish.copyWith(title: 'Новое название'));
+      // Симуляция post-upload op — частичный payload.
+      await OutboxStore(db).enqueue(
+        ownerId: ownerA,
+        entityType: WishEntityTypes.wish,
+        entityId: wish.id,
+        operation: OutboxOp.update,
+        payload: {'image_url': 'https://cdn.test/img.png'},
+      );
+
+      final ops = await outboxOf(ownerA);
+      expect(ops, hasLength(1));
+      final payload = jsonDecode(ops.single.payloadJson!) as Map;
+      expect(payload['title'], 'Новое название');
+      expect(payload['image_url'], 'https://cdn.test/img.png');
     });
   });
 }

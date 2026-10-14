@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:chtohochu/core/services/preferences_service.dart';
 import 'package:chtohochu/core/sync/sync_engine.dart';
 import 'package:chtohochu/features/notifications/presentation/pages/notifications_page.dart';
+import 'package:chtohochu/features/wishes/domain/wish.dart';
 import 'package:chtohochu/features/shopping/presentation/widgets/add_shopping_list_sheet.dart';
 import 'package:chtohochu/features/wishes/data/wish_repository.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/add_wish_list_sheet.dart';
@@ -13,12 +15,16 @@ import 'package:chtohochu/features/wishes/presentation/pages/wish_details_page.d
 import 'package:chtohochu/features/wishes/presentation/pages/wish_form_page.dart';
 import 'package:chtohochu/features/wishes/presentation/widgets/wish_card.dart';
 import 'package:chtohochu/app/theme/app_colors.dart';
+import 'package:chtohochu/app/theme/app_spacing.dart';
 import 'package:chtohochu/shared/ui/buttons/app_add_action_button.dart';
+import 'package:chtohochu/shared/ui/avatars/app_avatar.dart';
 import 'package:chtohochu/shared/ui/navigation/app_bottom_bar.dart';
 import 'package:chtohochu/shared/ui/scaffolding/app_shell_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chtohochu/core/database/app_database.dart';
 import 'package:drift/drift.dart' show Value;
@@ -41,6 +47,31 @@ const _wishLaptop =
 const _wishNoPrice =
     '{"id":"33333333-3333-3333-3333-333333333333","title":"Поездка на море",'
     '"createdAt":"2025-01-03T00:00:00.000"}';
+const _wishLongTitle =
+    '{"id":"44444444-4444-4444-4444-444444444444",'
+    '"title":"Портативная кофемашина автоматическая с нагревом",'
+    '"price":3217,"createdAt":"2025-01-04T00:00:00.000"}';
+
+const _uid = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+/// Серверное желание для boot-pull сида (FakeApi формат ресурса).
+Map<String, dynamic> _serverWish(
+  String id,
+  String title, {
+  String? priority,
+  String createdAt = '2025-01-01T00:00:00.000Z',
+}) => {
+  'id': id,
+  'title': title,
+  'description': null,
+  'price': null,
+  'link': null,
+  'image_url': null,
+  'list_id': null,
+  'priority': ?priority,
+  'created_at': createdAt,
+  'updated_at': createdAt,
+};
 
 void main() {
   testWidgets('Empty state: title, question, CTA; no count, no AddRow', (
@@ -65,7 +96,7 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('Empty CTA navigates to new wish', (tester) async {
+  testWidgets('Empty CTA opens add-wish sheet', (tester) async {
     final widget = await createTestApp(
       preferences: _authPrefs(),
       secureStorage: {'access_token': 'mock_token'},
@@ -76,7 +107,8 @@ void main() {
     await tester.tap(find.text('Добавить первое желание'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(WishFormPage), findsOneWidget);
+    expect(find.byType(AddWishSheet), findsOneWidget);
+    expect(find.byType(WishFormPage), findsNothing);
   });
 
   testWidgets('Count subtitle shown only with wishes; cards + AddRow', (
@@ -91,8 +123,112 @@ void main() {
 
     expect(find.text('2 желания'), findsOneWidget);
     expect(find.byType(WishGridCard), findsNWidgets(2));
+    // Карточки стали выше — слот «добавить» за пределами
+    // viewport и ещё не смонтирован: прокручиваем до него.
+    await tester.scrollUntilVisible(find.byType(AddWishRow), 100);
+    await tester.pumpAndSettle();
     expect(find.byType(AddWishRow), findsOneWidget);
     expect(find.text('Добавить желание'), findsOneWidget);
+  });
+
+  testWidgets('Home: «Очень хочу» выше обычных, «Не сейчас» свёрнута '
+      'и раскрывается по тапу', (tester) async {
+    final api = FakeApiAdapter(autoUserId: _uid);
+    // Новейшая — normal: без группировки она стояла бы первой
+    // (createdAt DESC). High обязана оказаться выше.
+    api.seedWish(
+      _uid,
+      _serverWish('w1', 'Обычное желание', priority: 'normal'),
+    );
+    api.seedWish(
+      _uid,
+      _serverWish(
+        'w2',
+        'Срочное желание',
+        priority: 'high',
+        createdAt: '2025-01-02T00:00:00.000Z',
+      ),
+    );
+    api.seedWish(
+      _uid,
+      _serverWish(
+        'w3',
+        'Отложенное желание',
+        priority: 'later',
+        createdAt: '2024-12-01T00:00:00.000Z',
+      ),
+    );
+    final widget = await createTestApp(
+      preferences: _authPrefs(),
+      secureStorage: {'access_token': 'mock_token'},
+      api: api,
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    // Основная группа: high → normal в порядке монтирования сетки.
+    final cards = tester
+        .widgetList<WishGridCard>(find.byType(WishGridCard))
+        .toList();
+    expect(cards.map((c) => c.wish.title), [
+      'Срочное желание',
+      'Обычное желание',
+    ]);
+    // High-карточка несёт маркер сердечка.
+    expect(
+      find.descendant(
+        of: find.widgetWithText(WishGridCard, 'Срочное желание'),
+        matching: find.byIcon(PhosphorIconsFill.heart),
+      ),
+      findsOneWidget,
+    );
+
+    // «Не сейчас» — заголовок со счётчиком, карточка скрыта.
+    // Заголовок ниже основной сетки — докручиваем до него.
+    await tester.scrollUntilVisible(find.text('Не сейчас · 1'), 200);
+    expect(find.text('Не сейчас · 1'), findsOneWidget);
+    expect(find.text('Отложенное желание'), findsNothing);
+
+    await tester.tap(find.text('Не сейчас · 1'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Отложенное желание'), 200);
+    expect(find.text('Отложенное желание'), findsOneWidget);
+
+    // Повторный тап сворачивает обратно.
+    await tester.tap(find.text('Не сейчас · 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Отложенное желание'), findsNothing);
+  });
+
+  testWidgets('Home: пустая группа «Не сейчас» не рендерится; смена '
+      'priority перемещает желание между группами', (tester) async {
+    final api = FakeApiAdapter(autoUserId: _uid);
+    api.seedWish(_uid, _serverWish('w1', 'Книга', priority: 'normal'));
+    final db = createTestDatabase();
+    final widget = await createTestApp(
+      preferences: _authPrefs(),
+      secureStorage: {'access_token': 'mock_token'},
+      api: api,
+      database: db,
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    // Отложенных нет — группы нет.
+    expect(find.text('Не сейчас · 1'), findsNothing);
+    expect(find.byType(WishGridCard), findsOneWidget);
+
+    // Офлайн-мутация через репозиторий: watch-стрим перестраивает
+    // группы автоматически, без переноса записи.
+    final prefs = await SharedPreferences.getInstance();
+    final repo = DriftWishRepository(db, PreferencesService(prefs));
+    final wish = (await repo.getWishById('w1'))!;
+    expect(wish.priority, WishPriority.normal);
+    await repo.updateWish(wish.copyWith(priority: WishPriority.later));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Не сейчас · 1'), findsOneWidget);
+    expect(find.text('Книга'), findsNothing); // свёрнута
   });
 
   testWidgets('AppBar shows bell (not plus); bell navigates to notifications', (
@@ -123,6 +259,26 @@ void main() {
     expect(find.text('Пока нет оповещений'), findsOneWidget);
   });
 
+  testWidgets('Header shows avatar + displayName + bell badge', (tester) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishBook]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    // Шапка: аватар + displayName тестового пользователя («user»),
+    // колокольчик с красным бейджем — в одном ряду вверху.
+    expect(find.byType(AppAvatar), findsOneWidget);
+    expect(find.text('user'), findsOneWidget);
+    expect(find.byTooltip('Оповещения'), findsOneWidget);
+
+    // Тап по аватару ведёт в профиль.
+    await tester.tap(find.byType(AppAvatar));
+    await tester.pumpAndSettle();
+    expect(find.text('Редактировать профиль'), findsOneWidget);
+  });
+
   testWidgets('Center «+» expands bar into action chooser', (tester) async {
     final widget = await createTestApp(
       preferences: _authPrefs('[$_wishBook]'),
@@ -147,12 +303,12 @@ void main() {
     // Пилюли действий по сторонам от центральной «+».
     expect(pill('Желание'), findsOneWidget);
     expect(pill('Список'), findsOneWidget);
-    // Обычные пункты навигации временно скрыты: «Что хочу»
-    // остаётся только как заголовок страницы.
+    // Обычные пункты навигации временно скрыты: заголовок шапки
+    // теперь — displayName пользователя («user» в тестовой сессии).
     expect(pill('Покупки'), findsNothing);
     expect(pill('Друзья'), findsNothing);
     expect(pill('Профиль'), findsNothing);
-    expect(find.text('Что хочу'), findsOneWidget);
+    expect(find.text('user'), findsOneWidget);
     // Ни один sheet не открыт.
     expect(find.byType(AddWishSheet), findsNothing);
     expect(find.byType(AddShoppingListSheet), findsNothing);
@@ -365,7 +521,7 @@ void main() {
     expect(centerButton().onPressed, isNotNull);
   });
 
-  testWidgets('AddRow navigates to new wish', (tester) async {
+  testWidgets('AddRow opens add-wish sheet', (tester) async {
     final widget = await createTestApp(
       preferences: _authPrefs('[$_wishBook]'),
       secureStorage: {'access_token': 'mock_token'},
@@ -373,10 +529,15 @@ void main() {
     await tester.pumpWidget(widget);
     await tester.pumpAndSettle();
 
+    // Карточки стали выше — слот «добавить» за пределами
+    // viewport и ещё не смонтирован: прокручиваем до него.
+    await tester.scrollUntilVisible(find.byType(AddWishRow), 100);
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(AddWishRow));
     await tester.pumpAndSettle();
 
-    expect(find.byType(WishFormPage), findsOneWidget);
+    expect(find.byType(AddWishSheet), findsOneWidget);
+    expect(find.byType(WishFormPage), findsNothing);
   });
 
   testWidgets('Wish card opens details; price rendered', (tester) async {
@@ -409,8 +570,68 @@ void main() {
     expect(find.text('Поездка на море'), findsOneWidget);
     expect(find.byType(WishGridCard), findsOneWidget);
     final cardSize = tester.getSize(find.byType(WishGridCard));
-    // Высота grid-карточки = 96 cover + padding + текст ≈ 172.
-    expect(cardSize.height, 172);
+    // Высота grid-карточки вычисляется от ширины колонки —
+    // обложка 4:3 + текстовый блок (WishGridCard.extentForColumnWidth).
+    final columnWidth =
+        (MediaQuery.sizeOf(tester.element(find.byType(WishGridCard))).width -
+            AppSpacing.screenPaddingHorizontal * 2 -
+            AppSpacing.betweenCards) /
+        2;
+    expect(cardSize.height, WishGridCard.extentForColumnWidth(columnWidth));
+  });
+
+  testWidgets('Wish with long imported title + price: no overflow', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs('[$_wishLongTitle]'),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    // Любой overflow бросит FlutterError при layout — тест упадёт сам.
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Портативная кофемашина автоматическая с нагревом'),
+      findsOneWidget,
+    );
+    expect(find.text('3 217 ₽'), findsOneWidget);
+    expect(find.byType(WishGridCard), findsOneWidget);
+  });
+
+  testWidgets('List extends under glass bar; last row clears it at end', (
+    tester,
+  ) async {
+    final widget = await createTestApp(
+      preferences: _authPrefs(
+        '[$_wishBook,$_wishLaptop,$_wishNoPrice,$_wishLongTitle]',
+      ),
+      secureStorage: {'access_token': 'mock_token'},
+    );
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+
+    final scrollable = find.byType(CustomScrollView);
+    final barRect = tester.getRect(find.byType(AppBottomBar));
+    final viewportRect = tester.getRect(scrollable);
+
+    // extendBody: вьюпорт доходит до нижней кромки экрана —
+    // контент визуально продолжается под полупрозрачной планкой.
+    expect(viewportRect.bottom, greaterThan(barRect.top));
+
+    // Докрутка до конца: последний элемент выходит из-под
+    // стекла — под ним остаётся ровно clearance бара.
+    await tester.drag(scrollable, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    final rowRect = tester.getRect(find.byType(AddWishRow));
+    // У строки собственный отступ md — её край выше кромки бара
+    // на этот отступ; clearance за ней — ровно высота бара.
+    expect(
+      rowRect.bottom,
+      moreOrLessEquals(barRect.top - AppSpacing.md, epsilon: 2),
+    );
+    expect(rowRect.bottom, lessThanOrEqualTo(barRect.top));
   });
 
   testWidgets('Syncing: micro spinner in subtitle', (tester) async {

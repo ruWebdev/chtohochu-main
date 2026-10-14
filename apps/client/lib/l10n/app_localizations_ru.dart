@@ -388,6 +388,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishImageSemantic => 'Ссылка на изображение';
 
   @override
+  String get wishPhotosSection => 'Фотографии';
+
+  @override
+  String get wishCardSubtitle => 'Личное';
+
+  @override
+  String get wishCardAction => 'Купить';
+
+  @override
+  String get wishPriorityLabel => 'Насколько сильно хочешь?';
+
+  @override
+  String get wishPriorityLater => 'Не сейчас';
+
+  @override
+  String get wishPriorityNormal => 'Хочу';
+
+  @override
+  String get wishPriorityHigh => 'Очень хочу';
+
+  @override
   String get wishNoteLabel => 'Заметка (необязательно)';
 
   @override
@@ -408,15 +429,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get wishPriceInvalid => 'Введите цену числом';
 
   @override
+  String get open => 'Открыть';
+
+  @override
+  String get wishImportTitle => 'Импорт товара';
+
+  @override
+  String get wishImportLoading => 'Загружаем данные по ссылке…';
+
+  @override
+  String get wishImportFailed =>
+      'Не удалось загрузить данные по ссылке — заполните вручную.';
+
+  @override
+  String get wishImportNewLink => 'Получена новая ссылка для импорта';
+
+  @override
   String get wishSave => 'Сохранить желание';
 
   @override
-  String get wishDeleteTitle => 'Удалить желание?';
+  String get wishDeleteTitle => 'Вы уверены?';
 
   @override
-  String wishDeleteMessage(String title) {
-    return '«$title» будет удалено без возможности восстановления.';
-  }
+  String get wishDeleteMessage =>
+      'Желание будет удалено без возможности восстановления.';
 
   @override
   String get wishDeleteSemantic => 'Удалить желание';

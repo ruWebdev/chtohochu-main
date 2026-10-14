@@ -42,6 +42,69 @@ class WishApiTest extends TestCase
         $this->assertCount(2, $response->json('data'));
     }
 
+    public function test_priority_defaults_to_normal_on_create(): void
+    {
+        $user = $this->actingUser();
+
+        $response = $this->postJson($this->api('/wishes'), ['title' => 'Без приоритета'])
+            ->assertCreated();
+
+        $this->assertSame('normal', $response->json('data.priority'));
+        $this->assertDatabaseHas('wishes', [
+            'id' => $response->json('data.id'),
+            'priority' => 'normal',
+        ]);
+    }
+
+    public function test_priority_is_stored_and_returned(): void
+    {
+        $this->actingUser();
+
+        foreach (['later', 'normal', 'high'] as $priority) {
+            $response = $this->postJson($this->api('/wishes'), [
+                'title' => "Желание {$priority}",
+                'priority' => $priority,
+            ])->assertCreated();
+            $this->assertSame($priority, $response->json('data.priority'));
+        }
+    }
+
+    public function test_priority_is_validated_on_create_and_update(): void
+    {
+        $user = $this->actingUser();
+        $wish = Wish::factory()->create(['owner_id' => $user->id]);
+
+        $this->postJson($this->api('/wishes'), [
+            'title' => 'X',
+            'priority' => 'urgent',
+        ])->assertUnprocessable();
+        $this->patchJson($this->api("/wishes/{$wish->id}"), [
+            'priority' => 'urgent',
+        ])->assertUnprocessable();
+    }
+
+    public function test_priority_updates_and_is_preserved_when_omitted(): void
+    {
+        $user = $this->actingUser();
+        $wish = Wish::factory()->create([
+            'owner_id' => $user->id,
+            'priority' => 'high',
+        ]);
+
+        // Обновление без поля priority (старый клиент) — не сбрасывает.
+        $response = $this->patchJson($this->api("/wishes/{$wish->id}"), [
+            'title' => 'Новое название',
+        ])->assertOk();
+        $this->assertSame('high', $response->json('data.priority'));
+
+        // Явное значение меняет приоритет.
+        $response = $this->patchJson($this->api("/wishes/{$wish->id}"), [
+            'priority' => 'later',
+        ])->assertOk();
+        $this->assertSame('later', $response->json('data.priority'));
+        $this->assertDatabaseHas('wishes', ['id' => $wish->id, 'priority' => 'later']);
+    }
+
     public function test_wishes_list_is_sorted_created_at_desc(): void
     {
         $user = $this->actingUser();

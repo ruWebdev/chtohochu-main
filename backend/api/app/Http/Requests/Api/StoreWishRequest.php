@@ -33,6 +33,15 @@ class StoreWishRequest extends FormRequest
             'price' => ['nullable', 'integer', 'min:0'],
             'link' => ['nullable', 'string', 'url', 'max:2048'],
             'image_url' => ['nullable', 'string', 'url', 'max:2048'],
+            // Приоритет желания; отсутствие = 'normal' (default БД).
+            'priority' => ['sometimes', 'string', Rule::in(['later', 'normal', 'high'])],
+            // Дополнительные изображения (primary — image_url).
+            // Отсутствие поля / null = без доп.изображений; массив —
+            // упорядоченный набор (индекс → sort_order). `id` —
+            // клиентский UUID = client_id media upload.
+            'images' => ['nullable', 'array', 'max:20'],
+            'images.*.id' => ['nullable', 'string', 'uuid'],
+            'images.*.url' => ['required', 'string', 'url', 'max:2048'],
             // Membership: только СВОЙ живой список желаний —
             // чужой/удалённый list_id отклоняется (422).
             'list_id' => [

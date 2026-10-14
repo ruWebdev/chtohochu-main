@@ -32,6 +32,17 @@ class UpdateWishRequest extends FormRequest
             'price' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'link' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
             'image_url' => ['sometimes', 'nullable', 'string', 'url', 'max:2048'],
+            // Поле отсутствует → приоритет не трогаем (старые
+            // клиенты его не шлют — сбрасывать в 'normal' нельзя).
+            'priority' => ['sometimes', 'string', Rule::in(['later', 'normal', 'high'])],
+            // Семантика набора доп.изображений однозначна:
+            // поле отсутствует → набор не трогаем; [] → удалить все;
+            // […] → полная замена упорядоченного набора (по id;
+            // элемент без id/с чужим id = новое изображение).
+            // `null` недопустим — не должен означать «очистить».
+            'images' => ['sometimes', 'array', 'max:20'],
+            'images.*.id' => ['nullable', 'string', 'uuid'],
+            'images.*.url' => ['required', 'string', 'url', 'max:2048'],
             // null = разгруппировать желание; не-null — только
             // свой живой список (чужой/удалённый → 422).
             'list_id' => [

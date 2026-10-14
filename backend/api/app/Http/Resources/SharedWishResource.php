@@ -30,6 +30,7 @@ class SharedWishResource extends JsonResource
             // image_url — публичный URL public-read bucket (ADR-015);
             // null передаётся как есть.
             'image_url' => $this->image_url,
+            'images' => WishImageResource::collection($this->images),
             // owner только с именем и только если загружен явно —
             // внутри списка желаний owner у элементов не подгружается.
             'owner' => $this->whenLoaded('owner', fn () => [

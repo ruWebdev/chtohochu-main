@@ -5,6 +5,7 @@ import '../core/constants/app_info.dart';
 import '../core/realtime/realtime_client.dart';
 import '../core/sync/sync_engine.dart';
 import '../l10n/l10n.dart';
+import '../features/sharing/data/incoming_share.dart';
 import '../features/showcase/presentation/providers/theme_controller.dart';
 import 'router/app_router.dart';
 import 'router/share_deep_links.dart';
@@ -35,6 +36,9 @@ class _ChtoHochuAppState extends ConsumerState<ChtoHochuApp> {
     ref.read(syncEngineProvider);
     // Входящие share-ссылки (cold/warm/background) → /s/{token}.
     ref.read(shareDeepLinkHandlerProvider).start();
+    // Входящий шеринг из сторонних приложений (ACTION_SEND) →
+    // импорт товара в AddWishSheet.
+    ref.read(incomingShareHandlerProvider).start();
   }
 
   @override

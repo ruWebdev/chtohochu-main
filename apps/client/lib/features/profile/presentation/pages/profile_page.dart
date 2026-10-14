@@ -87,101 +87,122 @@ class ProfilePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppShellBar(title: l10n.profileTitle),
+      appBar: const AppShellBar(),
       body: SafeArea(
-        child: user == null
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPaddingHorizontal,
-                  vertical: AppSpacing.sm,
-                ),
-                children: [
-                  // --- Шапка профиля ---
-                  const SizedBox(height: AppSpacing.sm),
-                  Center(
-                    child: AppAvatar(
-                      imageUrl: user.avatarUrl,
-                      initials: user.initials,
-                      size: AppAvatarSize.lg,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Center(
-                    child: Text(
-                      user.displayName,
-                      style: t.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (user.username != null && user.username!.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xxs),
-                    Center(
-                      child: Text(
-                        '@${user.username}',
-                        style: t.secondary.copyWith(color: colors.textMuted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+        // Низ не резервируем — контент уходит под стеклянный
+        // bottom bar; запас в конце прокрутки даёт скроллер.
+        bottom: false,
+        child: Column(
+          children: [
+            AppScreenTitle(title: l10n.profileTitle, centered: true),
+            Expanded(
+              child: user == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
+                      padding: EdgeInsets.only(
+                        left: AppSpacing.screenPaddingHorizontal,
+                        right: AppSpacing.screenPaddingHorizontal,
+                        top: AppSpacing.sm,
+                        bottom:
+                            AppSpacing.sm +
+                            AppBottomBar.scrollPaddingOf(context),
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.md),
-                  Center(
-                    child: AppButton(
-                      label: l10n.profileEdit,
-                      variant: AppButtonVariant.outline,
-                      size: AppButtonSize.sm,
-                      leading: const Icon(PhosphorIconsRegular.pencilSimple),
-                      onPressed: () => context.go(AppRoutes.profileEdit),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
+                      children: [
+                        // --- Шапка профиля ---
+                        const SizedBox(height: AppSpacing.sm),
+                        Center(
+                          child: AppAvatar(
+                            imageUrl: user.avatarUrl,
+                            initials: user.initials,
+                            size: AppAvatarSize.lg,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Center(
+                          child: Text(
+                            user.displayName,
+                            style: t.title,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (user.username != null &&
+                            user.username!.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.xxs),
+                          Center(
+                            child: Text(
+                              '@${user.username}',
+                              style: t.secondary.copyWith(
+                                color: colors.textMuted,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: AppSpacing.md),
+                        Center(
+                          child: AppButton(
+                            label: l10n.profileEdit,
+                            variant: AppButtonVariant.outline,
+                            size: AppButtonSize.sm,
+                            leading: const Icon(
+                              PhosphorIconsRegular.pencilSimple,
+                            ),
+                            onPressed: () => context.go(AppRoutes.profileEdit),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
 
-                  // --- Настройки ---
-                  _SectionLabel(l10n.settingsSection),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppCard(
-                    padding: EdgeInsets.zero,
-                    child: AppListItem(
-                      leading: const Icon(PhosphorIconsRegular.palette),
-                      title: l10n.appearance,
-                      subtitle: themeModeLabel(l10n, themeMode),
-                      trailing: const Icon(PhosphorIconsRegular.caretRight),
-                      onTap: () => _openThemePicker(context, ref),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                        // --- Настройки ---
+                        _SectionLabel(l10n.settingsSection),
+                        const SizedBox(height: AppSpacing.xs),
+                        AppCard(
+                          padding: EdgeInsets.zero,
+                          child: AppListItem(
+                            leading: const Icon(PhosphorIconsRegular.palette),
+                            title: l10n.appearance,
+                            subtitle: themeModeLabel(l10n, themeMode),
+                            trailing: const Icon(
+                              PhosphorIconsRegular.caretRight,
+                            ),
+                            onTap: () => _openThemePicker(context, ref),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
 
-                  // --- Аккаунт ---
-                  _SectionLabel(l10n.accountSection),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppCard(
-                    padding: EdgeInsets.zero,
-                    child: AppListItem(
-                      leading: const Icon(PhosphorIconsRegular.signOut),
-                      title: l10n.logout,
-                      destructive: true,
-                      onTap: () => _confirmLogout(context, ref),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                        // --- Аккаунт ---
+                        _SectionLabel(l10n.accountSection),
+                        const SizedBox(height: AppSpacing.xs),
+                        AppCard(
+                          padding: EdgeInsets.zero,
+                          child: AppListItem(
+                            leading: const Icon(PhosphorIconsRegular.signOut),
+                            title: l10n.logout,
+                            destructive: true,
+                            onTap: () => _confirmLogout(context, ref),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
 
-                  // --- О приложении ---
-                  _SectionLabel(l10n.aboutSection),
-                  const SizedBox(height: AppSpacing.xs),
-                  AppCard(
-                    padding: EdgeInsets.zero,
-                    child: AppListItem(
-                      leading: const Icon(PhosphorIconsRegular.info),
-                      title: AppInfo.name,
-                      subtitle: l10n.versionLabel(AppInfo.version),
+                        // --- О приложении ---
+                        _SectionLabel(l10n.aboutSection),
+                        const SizedBox(height: AppSpacing.xs),
+                        AppCard(
+                          padding: EdgeInsets.zero,
+                          child: AppListItem(
+                            leading: const Icon(PhosphorIconsRegular.info),
+                            title: AppInfo.name,
+                            subtitle: l10n.versionLabel(AppInfo.version),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                ],
-              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -52,27 +52,33 @@ class SharedLinkPage extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: context.appColors.background,
         appBar: AppShellBar(
-          title: l10n.appName,
           leading: AppIconButton(
             icon: const Icon(PhosphorIconsRegular.arrowLeft),
-            variant: AppIconButtonVariant.ghost,
+            variant: AppIconButtonVariant.subtle,
             semanticLabel: l10n.back,
             tooltip: l10n.back,
             onPressed: () => _back(context),
           ),
         ),
         body: SafeArea(
-          child: switch (async) {
-            AsyncData(:final value) => switch (value) {
-              SharedWish w => SharedWishPage(wish: w),
-              SharedWishList l => SharedWishListPage(list: l),
-            },
-            AsyncError(:final error) => _ShareError(
-              invalid: _isNotFound(error),
-              onRetry: () => ref.invalidate(sharedContentProvider(token)),
-            ),
-            _ => const Center(child: CircularProgressIndicator()),
-          },
+          child: Column(
+            children: [
+              AppScreenTitle(title: l10n.appName),
+              Expanded(
+                child: switch (async) {
+                  AsyncData(:final value) => switch (value) {
+                    SharedWish w => SharedWishPage(wish: w),
+                    SharedWishList l => SharedWishListPage(list: l),
+                  },
+                  AsyncError(:final error) => _ShareError(
+                    invalid: _isNotFound(error),
+                    onRetry: () => ref.invalidate(sharedContentProvider(token)),
+                  ),
+                  _ => const Center(child: CircularProgressIndicator()),
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

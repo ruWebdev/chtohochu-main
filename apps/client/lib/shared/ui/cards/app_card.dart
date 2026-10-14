@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_radii.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../app/theme/app_theme.dart';
 
 /// Вариант карточки.
 enum AppCardVariant {
   /// Поверхность + тонкая граница (по умолчанию).
   outlined,
 
-  /// Поверхность + лёгкая тень.
+  /// Приподнятая поверхность (flat: без тени).
   elevated,
 
   /// Приглушённая поверхность (без границы).
@@ -42,18 +41,10 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppThemeColors>()!;
 
-    final (bg, border, shadow) = switch (variant) {
-      AppCardVariant.outlined => (
-        colors.surface,
-        colors.border,
-        const <BoxShadow>[],
-      ),
-      AppCardVariant.elevated => (
-        colors.surfaceElevated,
-        null,
-        context.shadowCard,
-      ),
-      AppCardVariant.muted => (colors.surfaceMuted, null, const <BoxShadow>[]),
+    final (bg, border) = switch (variant) {
+      AppCardVariant.outlined => (colors.surface, colors.border),
+      AppCardVariant.elevated => (colors.surfaceElevated, null),
+      AppCardVariant.muted => (colors.surfaceMuted, null),
     };
 
     return Material(
@@ -69,7 +60,6 @@ class AppCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: border != null ? Border.all(color: border) : null,
-            boxShadow: shadow,
           ),
           child: child,
         ),

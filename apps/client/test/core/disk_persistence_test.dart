@@ -477,6 +477,51 @@ void main() {
     await db.close();
   });
 
+  test('schema v11 → v12: wishes получают priority=normal', () async {
+    // Имитация базы до введения приоритета: wishes v11-формы
+    // (все колонки кроме priority), user_version=11 → onUpgrade
+    // выполнит только addColumn(wishes.priority).
+    final raw = sqlite3.sqlite3.open(dbFile.path);
+    raw.execute('''
+      CREATE TABLE wishes (
+        id TEXT NOT NULL PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        price INTEGER,
+        link TEXT,
+        image_url TEXT,
+        image_local_path TEXT,
+        image_upload_status TEXT,
+        image_upload_id TEXT,
+        list_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      );
+      PRAGMA user_version = 11;
+      ''');
+    raw.execute(
+      "INSERT INTO wishes VALUES ('w1','user-a','Старое желание',"
+      "NULL,500,NULL,NULL,NULL,NULL,NULL,NULL,1735689600,1735689600,NULL)",
+    );
+    raw.close();
+
+    final db = openDb();
+
+    // Существующая строка получила column default 'normal'.
+    final wish = (await db.wishById(owner, 'w1'))!;
+    expect(wish.title, 'Старое желание');
+    expect(wish.priority, 'normal');
+
+    // Колонка функциональна: новое значение персистится.
+    await (db.update(db.wishes)..where((w) => w.id.equals('w1'))).write(
+      const WishesCompanion(priority: Value('high')),
+    );
+    expect((await db.wishById(owner, 'w1'))!.priority, 'high');
+    await db.close();
+  });
+
   test('wish_images переживают полный restart БД', () async {
     final prefs = PreferencesService(await SharedPreferences.getInstance());
 

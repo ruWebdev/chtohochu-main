@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../features/friends/presentation/widgets/add_friend_sheet.dart';
+import '../../features/sharing/data/incoming_share.dart';
+import '../../features/wishes/domain/wish_draft.dart';
 import '../../features/shopping/presentation/widgets/add_shopping_list_sheet.dart';
 import '../../features/wishes/presentation/widgets/add_wish_list_sheet.dart';
 import '../../features/wishes/presentation/widgets/add_wish_sheet.dart';
@@ -24,19 +27,37 @@ import 'routes.dart';
 /// (`+ Желание` → AddWishSheet, `+ Список` → AddWishListSheet) —
 /// четыре пункта навигации временно скрываются. Тап вне бара или
 /// повторный тап по «+» сворачивает выбор обратно.
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
 
   /// Контент текущего раздела.
   final Widget child;
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   /// Bottom bar «Что хочу» в режиме выбора действия.
   bool _chooserOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Share мог прийти до того, как AppShell навесил listener
+    // (сессия готовилась) — проверяем уже выставленный draft.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _deliverImport(ref.read(importRequestProvider));
+    });
+  }
+
+  void _deliverImport(WishDraft? draft) {
+    if (draft == null) return;
+    ref.read(importRequestProvider.notifier).value = null;
+    // Sheet стекуется поверх текущего UI — уже открытый sheet
+    // с пользовательским вводом не теряется.
+    showAddWishSheet(context, draft: draft);
+  }
 
   void _toggleChooser() => setState(() => _chooserOpen = !_chooserOpen);
 
@@ -58,6 +79,15 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final l10n = context.l10n;
+
+    // Входящий share (ACTION_SEND) после готовности сессии →
+    // открываем AddWishSheet в режиме импорта.
+    ref.listen(importRequestProvider, (_, draft) {
+      if (draft == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _deliverImport(ref.read(importRequestProvider));
+      });
+    });
     final currentRoute = GoRouterState.of(context).matchedLocation;
 
     // Chooser живёт только на «Что хочу»: при смене маршрута
@@ -87,6 +117,10 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       backgroundColor: colors.background,
+      // Стеклянный bottom bar полупрозрачный — body уходит под него,
+      // а его высота приходит в контент через MediaQuery.padding.bottom
+      // (см. AppBottomBar.scrollPaddingOf).
+      extendBody: true,
       body: Stack(
         children: [
           widget.child,

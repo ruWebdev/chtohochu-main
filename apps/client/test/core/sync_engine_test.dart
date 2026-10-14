@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:chtohochu/core/database/app_database.dart';
@@ -473,6 +474,113 @@ void main() {
       expect(await db.wishImagesOf(ownerA, wish.id), isEmpty);
     });
 
+    test('remote images upsert’ятся в wish_images как uploaded', () async {
+      api.seedWish(ownerA, {
+        ...serverWish('srv-9', 'С фото'),
+        'images': [
+          {'id': 'img-1', 'url': 'https://cdn.test/a.jpg', 'sort_order': 1},
+          {'id': 'img-2', 'url': 'https://cdn.test/b.jpg', 'sort_order': 2},
+        ],
+      });
+
+      await sync();
+
+      final rows = await db.wishImagesOf(ownerA, 'srv-9');
+      expect(rows.map((r) => r.id), ['img-1', 'img-2']);
+      expect(rows.map((r) => r.remoteUrl), [
+        'https://cdn.test/a.jpg',
+        'https://cdn.test/b.jpg',
+      ]);
+      expect(rows.every((r) => r.uploadStatus == 'uploaded'), isTrue);
+    });
+
+    test('remote-удалённое изображение чистится; pending-строка '
+        'не трогается', () async {
+      final wish = await repo.createWish(title: 'W');
+      await sync(); // create уехал — желание чистое
+
+      // Локально: строка, которую сервер знал (uploaded), и новая
+      // pending-строка без remote_url.
+      Future<void> img(
+        String id, {
+        String? remoteUrl,
+        String? localPath,
+        int sortOrder = 1,
+        String status = 'uploaded',
+      }) => db.insertWishImage(
+        WishImagesCompanion(
+          id: Value(id),
+          uploadId: Value(id),
+          ownerId: const Value(ownerA),
+          wishId: Value(wish.id),
+          remoteUrl: Value(remoteUrl),
+          localPath: Value(localPath),
+          uploadStatus: Value(status),
+          sortOrder: Value(sortOrder),
+          createdAt: Value(DateTime.now()),
+        ),
+      );
+      await img('img-gone', remoteUrl: 'https://cdn.test/gone.jpg');
+      await img(
+        'img-new',
+        localPath: '/tmp/new.jpg',
+        sortOrder: 2,
+        status: 'pending',
+      );
+
+      // Remote: img-gone удалён на другом устройстве, добавлен
+      // img-keep. Pending-строка серверу неизвестна.
+      api.seedWish(ownerA, {
+        ...serverWish(wish.id, 'W'),
+        'images': [
+          {
+            'id': 'img-keep',
+            'url': 'https://cdn.test/keep.jpg',
+            'sort_order': 1,
+          },
+        ],
+      });
+
+      await sync();
+
+      final rows = await db.wishImagesOf(ownerA, wish.id);
+      expect(rows.map((r) => r.id).toSet(), {'img-keep', 'img-new'});
+      expect(
+        rows.firstWhere((r) => r.id == 'img-keep').remoteUrl,
+        'https://cdn.test/keep.jpg',
+      );
+    });
+
+    test('pending желание: набор изображений snapshot не трогает', () async {
+      final wish = await repo.createWish(title: 'W');
+      await sync();
+      await db.insertWishImage(
+        WishImagesCompanion(
+          id: const Value('img-local'),
+          uploadId: const Value('img-local'),
+          ownerId: const Value(ownerA),
+          wishId: Value(wish.id),
+          remoteUrl: const Value('https://cdn.test/local.jpg'),
+          uploadStatus: const Value('uploaded'),
+          sortOrder: const Value(1),
+          createdAt: Value(DateTime.now()),
+        ),
+      );
+
+      // Pending update → pull не reconcil'ит images этого желания.
+      // Фейк ставим ДО updateWish: outbox-listener сам запустит sync.
+      api.failures['PATCH /wishes'] = 'network';
+      await repo.updateWish(wish.copyWith(title: 'Правка'));
+      // Сервер вернёт ПУСТОЙ набор (remote-delete с другого
+      // устройства) — локальная строка должна пережить pull.
+      api.seedWish(ownerA, {...serverWish(wish.id, 'W'), 'images': []});
+
+      await sync();
+
+      expect(await db.wishImagesOf(ownerA, wish.id), hasLength(1));
+      api.failures.remove('PATCH /wishes');
+    });
+
     test('server image_url: null не стирает локальные фото '
         '(primary path + additional rows)', () async {
       final wish = await repo.createWish(
@@ -558,6 +666,100 @@ void main() {
 
       await sync(); // snapshot ownerA пуст — 'b-wish' не трогаем.
       expect((await rowOf('b-wish'))!.ownerId, ownerB);
+    });
+  });
+
+  group('wish priority', () {
+    test('create с priority → POST payload → сервер хранит', () async {
+      final wish = await repo.createWish(
+        title: 'Экстрим',
+        priority: WishPriority.high,
+      );
+      await sync();
+
+      expect(api.wishesOf(ownerA).single['priority'], 'high');
+      expect((await rowOf(wish.id))!.priority, 'high');
+      expect(await outboxOf(ownerA), isEmpty);
+    });
+
+    test('update priority → PATCH → сервер обновлён', () async {
+      final wish = await repo.createWish(
+        title: 'Книга',
+        priority: WishPriority.later,
+      );
+      await sync();
+
+      await repo.updateWish(wish.copyWith(priority: WishPriority.high));
+      await sync();
+
+      expect(api.wishesOf(ownerA).single['priority'], 'high');
+      expect((await rowOf(wish.id))!.priority, 'high');
+    });
+
+    test('remote-смена priority на другом устройстве → pull '
+        'reconcile обновляет локальную строку', () async {
+      final wish = await repo.createWish(title: 'Книга');
+      await sync();
+
+      api.seedWish(ownerA, {
+        'id': wish.id,
+        'title': 'Книга',
+        'description': null,
+        'price': null,
+        'link': null,
+        'image_url': null,
+        'list_id': null,
+        'priority': 'later',
+        'created_at': '2026-01-01T00:00:00.000Z',
+        'updated_at': '2026-01-03T00:00:00.000Z',
+      });
+      await sync();
+
+      expect((await rowOf(wish.id))!.priority, 'later');
+    });
+
+    test('legacy-ответ без ключа priority не сбрасывает локальное '
+        'значение', () async {
+      final wish = await repo.createWish(
+        title: 'Книга',
+        priority: WishPriority.high,
+      );
+      await sync();
+
+      // Старый backend: ключ отсутствует и в pull snapshot, и в
+      // ответах на push — local 'high' не должен схлопнуться
+      // в column-default 'normal'.
+      api.seedWish(ownerA, {
+        'id': wish.id,
+        'title': 'Книга',
+        'description': null,
+        'price': null,
+        'link': null,
+        'image_url': null,
+        'list_id': null,
+        'created_at': '2026-01-01T00:00:00.000Z',
+        'updated_at': '2026-01-03T00:00:00.000Z',
+      });
+      await sync();
+
+      expect((await rowOf(wish.id))!.priority, 'high');
+    });
+
+    test('offline create + смена priority до sync → один POST '
+        'с финальным значением', () async {
+      api.failures['POST /wishes'] = 'network';
+      final wish = await repo.createWish(
+        title: 'Книга',
+        priority: WishPriority.later,
+      );
+      await repo.updateWish(wish.copyWith(priority: WishPriority.high));
+      api.failures.clear();
+
+      await sync();
+
+      final server = api.wishesOf(ownerA).single;
+      expect(server['priority'], 'high');
+      expect(await outboxOf(ownerA), isEmpty);
     });
   });
 
@@ -899,6 +1101,150 @@ void main() {
         api.requests.where((r) => r == 'POST /media/uploads'),
         hasLength(2),
       );
+    });
+
+    test('additional remote_url доезжает до сервера штатным PATCH '
+        '(images[]: id + url + sort_order)', () async {
+      final p = await fakePhoto('extra');
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: [p],
+      );
+
+      await mediaEngine.requestSync();
+
+      final row = (await db.wishImagesOf(ownerA, wish.id)).single;
+      final server = api.wishesOf(ownerA).single;
+      final images = (server['images'] as List).cast<Map<String, dynamic>>();
+      expect(images, hasLength(1));
+      // Сервер знает изображение под клиентским id строки —
+      // этот же id приедет на второе устройство при pull.
+      expect(images.single['id'], row.id);
+      expect(images.single['url'], row.remoteUrl);
+      expect(images.single['sort_order'], 1);
+    });
+
+    test('primary заменён во время in-flight upload: завершение '
+        'старого upload не затирает новый image_url', () async {
+      // PUT заблокирован gate'ом: upload первого primary висит
+      // «в полёте», пока пользователь заменяет фото на другое.
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      mediaEngine.detach();
+      final gated = SyncEngine(
+        db: db,
+        dio: dio,
+        onUnauthorized: () {},
+        onStatus: (_) {},
+        mediaUploads: MediaUploadService(
+          api: dio,
+          put: (url, headers, file) async {
+            puts.add(url);
+            await gate.future;
+            api.markMediaObjectPut(url);
+          },
+        ),
+      )..attach(ownerA);
+      addTearDown(gated.detach);
+
+      final p1 = await fakePhoto('a');
+      final p2 = await fakePhoto('b');
+      final wish = await repo.createWish(title: 'Фото', imageUrl: p1);
+
+      final inflight = gated.requestSync();
+      // Ждём, пока первый PUT реально ушёл «в полёт».
+      while (puts.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      // Замена primary во время полёта старого upload.
+      await repo.updateWish(wish.copyWith(imageUrl: p2));
+      gate.complete();
+      await inflight;
+      await gated.requestSync();
+
+      // Оба PUT'а состоялись, но сервер и локальная строка
+      // должны указывать на объект ВТОРОГО upload'а — результат
+      // старого upload'а не имеет права перезаписать новый
+      // image_url и его upload-статус.
+      expect(puts, hasLength(2));
+      String remoteOf(String putUrl) =>
+          api.mediaUploadOf(
+                putUrl.replaceFirst('fake-put://', ''),
+              )!['remote_url']
+              as String;
+      final server = api.wishesOf(ownerA).single;
+      expect(server['image_url'], remoteOf(puts[1]));
+      final row = (await db.wishById(ownerA, wish.id))!;
+      expect(row.imageUrl, remoteOf(puts[1]));
+      expect(row.imageLocalPath, p2);
+    });
+
+    test('transient сбой одного upload не блокирует остальные '
+        'изображения и pull', () async {
+      final p1 = await fakePhoto('a');
+      final p2 = await fakePhoto('b');
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: [p1, p2],
+      );
+      // Remote-изменение с другого устройства — pull в этом же
+      // цикле должен его принести.
+      api.seedWish(ownerA, {
+        'id': 'srv-remote',
+        'title': 'Удалённое',
+        'description': null,
+        'price': null,
+        'link': null,
+        'image_url': null,
+        'images': [],
+        'created_at': '2026-01-01T00:00:00.000Z',
+        'updated_at': '2026-01-01T00:00:00.000Z',
+      });
+
+      // Первый POST /media/uploads упадёт — transient (network).
+      api.failuresOnce['POST /media/uploads'] = 'network';
+      await mediaEngine.requestSync();
+
+      // Сбой первого upload не блокирует второй: успешный upload
+      // ставит update-op → runAgain → упавший ретраится в этом же
+      // прогоне. Итог: оба изображения загружены.
+      final rows = await db.wishImagesOf(ownerA, wish.id);
+      expect(rows.map((r) => r.uploadStatus), ['uploaded', 'uploaded']);
+      // Pull не пропущен: remote желание появилось локально.
+      expect(await db.wishById(ownerA, 'srv-remote'), isNotNull);
+      // Сервер получил оба изображения штатным PATCH.
+      final server = api.wishesOf(ownerA).firstWhere((w) => w['id'] == wish.id);
+      expect(server['images'] as List, hasLength(2));
+    });
+
+    test('pending title + post-upload op → PATCH несёт оба поля', () async {
+      final p = await fakePhoto('extra');
+      final wish = await repo.createWish(
+        title: 'Фото',
+        additionalImagePaths: [p],
+      );
+      // Создание и upload отрабатывают — желание чистое.
+      await mediaEngine.requestSync();
+      final row = (await db.wishImagesOf(ownerA, wish.id)).single;
+
+      // Pending правка title, затем симуляция медиа-op с полным
+      // snapshot (как делает _enqueueWishSnapshot после upload).
+      api.failures['PATCH /wishes/'] = 'network';
+      await repo.updateWish(wish.copyWith(title: 'Переименовано'));
+      await mediaEngine.requestSync();
+
+      // PATCH упал (network) — операция осталась с полным payload.
+      final ops = await outboxOf(ownerA);
+      expect(ops, hasLength(1));
+      final payload =
+          jsonDecode(ops.single.payloadJson!) as Map<String, dynamic>;
+      expect(payload['title'], 'Переименовано');
+      expect(payload['images'], [
+        {'id': row.id, 'url': row.remoteUrl},
+      ]);
+      api.failures.remove('PATCH /wishes/');
     });
 
     test('offline: upload откладывается, желание живёт', () async {

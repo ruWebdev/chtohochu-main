@@ -19,13 +19,15 @@ sealed class SharedContent {
   }
 }
 
-/// Публичная проекция желания: title, price, link, image_url, owner.name.
+/// Публичная проекция желания: title, price, link, image_url,
+/// images, owner.name.
 class SharedWish extends SharedContent {
   const SharedWish({
     required this.title,
     this.price,
     this.link,
     this.imageUrl,
+    this.images = const [],
     this.ownerName,
   });
 
@@ -34,13 +36,24 @@ class SharedWish extends SharedContent {
     price: json['price'] as int?,
     link: json['link'] as String?,
     imageUrl: json['image_url'] as String?,
+    images: [
+      for (final i in (json['images'] as List<dynamic>? ?? const []))
+        if (i is Map<String, dynamic> && i['url'] is String)
+          i['url'] as String,
+    ],
     ownerName: (json['owner'] as Map<String, dynamic>?)?['name'] as String?,
   );
 
   final String title;
   final int? price;
   final String? link;
+
+  /// Primary-изображение (старое поле, сохраняет семантику).
   final String? imageUrl;
+
+  /// URL доп.изображений по sort_order (без id — публичная
+  /// проекция идентификаторы не отдаёт на UI-уровне).
+  final List<String> images;
   final String? ownerName;
 }
 

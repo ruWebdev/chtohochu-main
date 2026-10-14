@@ -32,10 +32,10 @@ class AppColors {
 
   /// Светлая тема — семантические токены.
   static AppThemeColors get lightThemeColors => const AppThemeColors(
-    background: Color(0xFFFBF8F4),
+    background: Color(0xFFF1EDE6),
     surface: Color(0xFFFFFFFF),
     surfaceElevated: Color(0xFFFFFFFF),
-    surfaceMuted: Color(0xFFF3EEE7),
+    surfaceMuted: Color(0xFFE9E3D8),
     textPrimary: Color(0xFF1F1B16),
     textSecondary: Color(0xFF5C544B),
     textMuted: Color(0xFF8A8278),
@@ -43,8 +43,8 @@ class AppColors {
     primaryForeground: Color(0xFFFFFFFF),
     secondary: Color(0xFFE8E6FF),
     secondaryForeground: Color(0xFF3A33A8),
-    border: Color(0xFFE7E1D8),
-    divider: Color(0xFFEFEAE2),
+    border: Color(0xFFDFD8CB),
+    divider: Color(0xFFE6E0D4),
     success: Color(0xFF1F8A4C),
     successSurface: Color(0xFFE8F5EC),
     warning: Color(0xFFB26A00),

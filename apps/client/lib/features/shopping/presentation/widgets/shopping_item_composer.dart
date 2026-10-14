@@ -6,7 +6,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
@@ -122,7 +121,6 @@ class _ShoppingItemComposerState extends ConsumerState<ShoppingItemComposer> {
         color: colors.surfaceElevated,
         borderRadius: BorderRadius.circular(AppRadii.xl),
         border: Border.all(color: colors.border),
-        boxShadow: context.shadowFloating,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -8,7 +8,8 @@ import '../../../app/theme/app_spacing.dart';
 enum AppAvatarSize {
   sm(AppSizes.avatarSm),
   md(AppSizes.avatarMd),
-  lg(AppSizes.avatarLg);
+  lg(AppSizes.avatarLg),
+  header(AppSizes.avatarHeader);
 
   const AppAvatarSize(this.value);
   final double value;
@@ -110,5 +111,6 @@ extension AppAvatarSpacing on AppAvatar {
     AppAvatarSize.sm => AppSpacing.xs,
     AppAvatarSize.md => AppSpacing.sm,
     AppAvatarSize.lg => AppSpacing.md,
+    AppAvatarSize.header => AppSpacing.md,
   };
 }

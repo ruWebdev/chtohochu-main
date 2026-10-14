@@ -8,7 +8,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
@@ -593,7 +592,6 @@ class _ModeToggle extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected ? colors.surface : Colors.transparent,
                 borderRadius: BorderRadius.circular(AppRadii.md),
-                boxShadow: selected ? context.shadowSubtle : null,
               ),
               alignment: Alignment.center,
               child: Text(

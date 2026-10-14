@@ -13,6 +13,7 @@ import '../../features/profile/presentation/pages/profile_edit_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/session/presentation/providers/app_session_controller.dart';
 import '../../features/sharing/presentation/pages/shared_link_page.dart';
+import '../../features/wishes/domain/wish_draft.dart';
 import '../../features/shopping/presentation/pages/shopping_list_edit_page.dart';
 import '../../features/shopping/presentation/pages/shopping_list_page.dart';
 import '../../features/shopping/presentation/pages/shopping_page.dart';
@@ -116,7 +117,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.newWish,
         name: 'newWish',
-        builder: (context, state) => const WishFormPage(),
+        builder: (context, state) {
+          // Черновик из входящего шеринга (ACTION_SEND → WishDraft).
+          // Key по ссылке: повторный share с другим draft должен
+          // пересоздать State формы, иначе initState не переиграется.
+          final draft = state.extra is WishDraft
+              ? state.extra as WishDraft
+              : null;
+          return WishFormPage(
+            key: ValueKey('new-wish-${draft?.link}'),
+            draft: draft,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.wishDetailsPath,

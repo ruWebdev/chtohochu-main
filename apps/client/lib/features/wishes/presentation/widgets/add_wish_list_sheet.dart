@@ -5,7 +5,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_theme.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/l10n.dart';
 import '../../../../shared/ui/ui.dart';
@@ -161,7 +160,6 @@ class _AddWishListSheetState extends ConsumerState<AddWishListSheet> {
             border: Border(
               top: BorderSide(color: colors.border.withValues(alpha: 0.6)),
             ),
-            boxShadow: context.shadowFloating,
           ),
           child: SafeArea(
             top: false,

@@ -31,10 +31,6 @@ class ShoppingPage extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppShellBar(
-        title: l10n.shoppingTitle,
-        subtitle: lists != null && lists.isNotEmpty
-            ? listsCountLabel(l10n, lists.length)
-            : null,
         actions: [
           AppBarAction(
             icon: PhosphorIconsRegular.plus,
@@ -45,58 +41,84 @@ class ShoppingPage extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () =>
-              ref.read(shoppingListsControllerProvider.notifier).refresh(),
-          child: listsAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => AppEmptyState(
-              icon: const Icon(PhosphorIconsRegular.warningCircle),
-              title: l10n.loadFailed,
-              description: l10n.pullToRefresh,
-              action: AppButton(
-                label: l10n.refresh,
-                onPressed: () => ref
+        // Низ не резервируем — контент уходит под стеклянный
+        // bottom bar; запас в конце прокрутки даёт скроллер.
+        bottom: false,
+        child: Column(
+          children: [
+            AppScreenTitle(
+              title: l10n.shoppingTitle,
+              subtitle: lists != null && lists.isNotEmpty
+                  ? listsCountLabel(l10n, lists.length)
+                  : null,
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref
                     .read(shoppingListsControllerProvider.notifier)
                     .refresh(),
+                child: listsAsync.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => AppEmptyState(
+                    icon: const Icon(PhosphorIconsRegular.warningCircle),
+                    title: l10n.loadFailed,
+                    description: l10n.pullToRefresh,
+                    action: AppButton(
+                      label: l10n.refresh,
+                      onPressed: () => ref
+                          .read(shoppingListsControllerProvider.notifier)
+                          .refresh(),
+                    ),
+                  ),
+                  data: (lists) {
+                    if (lists.isEmpty) {
+                      return ListView(
+                        padding: EdgeInsets.only(
+                          bottom: AppBottomBar.scrollPaddingOf(context),
+                        ),
+                        children: [
+                          const SizedBox(height: AppSpacing.xxl),
+                          AppEmptyState(
+                            icon: const Icon(PhosphorIconsRegular.shoppingCart),
+                            title: l10n.listsEmptyTitle,
+                            description: l10n.listsEmptyDescription,
+                            action: AppButton(
+                              label: l10n.listCreate,
+                              leading: const Icon(PhosphorIconsRegular.plus),
+                              onPressed: () =>
+                                  showAddShoppingListSheet(context),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return ListView.separated(
+                      padding: EdgeInsets.only(
+                        left: AppSpacing.screenPaddingHorizontal,
+                        right: AppSpacing.screenPaddingHorizontal,
+                        top: AppSpacing.sm,
+                        bottom:
+                            AppSpacing.sm +
+                            AppBottomBar.scrollPaddingOf(context),
+                      ),
+                      itemCount: lists.length,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: AppSpacing.betweenCards),
+                      itemBuilder: (context, index) {
+                        final list = lists[index];
+                        return ShoppingListCard(
+                          list: list,
+                          onTap: () =>
+                              context.go(AppRoutes.shoppingList(list.id)),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ),
-            data: (lists) {
-              if (lists.isEmpty) {
-                return ListView(
-                  children: [
-                    const SizedBox(height: AppSpacing.xxl),
-                    AppEmptyState(
-                      icon: const Icon(PhosphorIconsRegular.shoppingCart),
-                      title: l10n.listsEmptyTitle,
-                      description: l10n.listsEmptyDescription,
-                      action: AppButton(
-                        label: l10n.listCreate,
-                        leading: const Icon(PhosphorIconsRegular.plus),
-                        onPressed: () => showAddShoppingListSheet(context),
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.screenPaddingHorizontal,
-                  vertical: AppSpacing.sm,
-                ),
-                itemCount: lists.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppSpacing.betweenCards),
-                itemBuilder: (context, index) {
-                  final list = lists[index];
-                  return ShoppingListCard(
-                    list: list,
-                    onTap: () => context.go(AppRoutes.shoppingList(list.id)),
-                  );
-                },
-              );
-            },
-          ),
+          ],
         ),
       ),
     );

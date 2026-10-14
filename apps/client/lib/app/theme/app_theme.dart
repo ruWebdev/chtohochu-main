@@ -28,9 +28,6 @@ class AppTheme {
         ? AppColors.lightThemeColors
         : AppColors.darkThemeColors;
     final textTheme = AppTypography.textTheme(brightness);
-    final shadowScrim = brightness == Brightness.light
-        ? AppShadows.lightScrim
-        : AppShadows.darkScrim;
 
     return ThemeData(
       useMaterial3: true,
@@ -139,7 +136,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.lg),
-          borderSide: BorderSide(color: themeColors.primary, width: 1.5),
+          borderSide: BorderSide(color: themeColors.textSecondary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -155,6 +152,9 @@ class AppTheme {
         ),
         hintStyle: textTheme.bodyMedium?.copyWith(color: themeColors.textMuted),
         labelStyle: textTheme.bodyMedium?.copyWith(
+          color: themeColors.textSecondary,
+        ),
+        floatingLabelStyle: textTheme.bodyMedium?.copyWith(
           color: themeColors.textSecondary,
         ),
         errorStyle: textTheme.labelSmall?.copyWith(color: themeColors.error),
@@ -180,19 +180,27 @@ class AppTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: themeColors.surfaceElevated,
-        elevation: AppShadows.floatingElevation,
-        shadowColor: shadowScrim,
+        elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.xl),
+          side: BorderSide(color: themeColors.border),
         ),
         titleTextStyle: textTheme.titleLarge,
         contentTextStyle: textTheme.bodyMedium,
       ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: themeColors.surfaceElevated,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+          side: BorderSide(color: themeColors.border),
+        ),
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: themeColors.surfaceElevated,
-        elevation: AppShadows.floatingElevation,
-        shadowColor: shadowScrim,
+        elevation: 0,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
@@ -204,12 +212,14 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: themeColors.surfaceElevated,
+        elevation: 0,
         contentTextStyle: textTheme.bodyMedium?.copyWith(
           color: themeColors.textPrimary,
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadii.lg),
+          side: BorderSide(color: themeColors.border),
         ),
       ),
       listTileTheme: ListTileThemeData(
@@ -231,16 +241,10 @@ class AppTheme {
   }
 }
 
-/// Утилита для доступа к теням с учётом темы.
+/// Утилита доступа к тени нижней навигации с учётом темы.
 extension AppShadowsContext on BuildContext {
-  /// Едва заметная тень для лёгкого приподнятия.
-  List<BoxShadow> get shadowSubtle =>
-      AppShadows.subtle(Theme.brightnessOf(this));
-
-  /// Тень основных карточек.
-  List<BoxShadow> get shadowCard => AppShadows.card(Theme.brightnessOf(this));
-
-  /// Тень floating-элементов (круглые action-кнопки и т.п.).
+  /// Тень floating-элементов стеклянного Bottom Navigation Bar.
+  /// Единственная разрешённая декоративная тень в приложении.
   List<BoxShadow> get shadowFloating =>
       AppShadows.floating(Theme.brightnessOf(this));
 }

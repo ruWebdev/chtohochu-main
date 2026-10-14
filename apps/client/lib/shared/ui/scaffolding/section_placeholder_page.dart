@@ -35,17 +35,24 @@ class SectionPlaceholderPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppShellBar(title: title, actions: actions),
+      appBar: AppShellBar(actions: actions),
       body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: AppEmptyState(
-              icon: Icon(icon),
-              title: title,
-              description: message,
+        child: Column(
+          children: [
+            AppScreenTitle(title: title),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: AppEmptyState(
+                    icon: Icon(icon),
+                    title: title,
+                    description: message,
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

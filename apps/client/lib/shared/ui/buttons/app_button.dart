@@ -209,7 +209,14 @@ class AppButton extends StatelessWidget {
         colors.border,
       ),
       AppButtonVariant.ghost => (Colors.transparent, colors.primary, null),
-      AppButtonVariant.destructive => (colors.error, Colors.white, null),
+      // В тёмной теме error — светлый, белый текст теряет контраст.
+      AppButtonVariant.destructive => (
+        colors.error,
+        ThemeData.estimateBrightnessForColor(colors.error) == Brightness.dark
+            ? Colors.white
+            : colors.background,
+        null,
+      ),
     };
     if (isDisabled) {
       return (colors.surfaceMuted, colors.textMuted, null);

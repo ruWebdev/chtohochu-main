@@ -86,8 +86,8 @@ void main() {
 
     test('параметризованные строки', () {
       expect(
-        ru.wishDeleteMessage('Книга'),
-        '«Книга» будет удалено без возможности восстановления.',
+        ru.wishDeleteMessage,
+        'Желание будет удалено без возможности восстановления.',
       );
       expect(ru.listProgress(2, 5), '2 из 5 куплено');
       expect(ru.friendAddedSnack('Анна'), 'Анна добавлен(а) в друзья');

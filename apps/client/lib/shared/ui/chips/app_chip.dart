@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_sizes.dart';
+import '../../../app/theme/app_spacing.dart';
 
 /// Chip приложения.
 class AppChip extends StatelessWidget {
@@ -39,7 +40,10 @@ class AppChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.chipHeight / 2),
         child: Container(
           constraints: const BoxConstraints(minHeight: AppSizes.chipHeight),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: AppSpacing.xxs,
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -48,11 +52,18 @@ class AppChip extends StatelessWidget {
                   data: IconThemeData(color: fg, size: AppSizes.iconSizeSm),
                   child: leading!,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: AppSpacing.xxs),
               ],
-              Text(label, style: style),
+              Flexible(
+                child: Text(
+                  label,
+                  style: style,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               if (onDeleted != null) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: AppSpacing.xxs),
                 IconTheme.merge(
                   data: IconThemeData(color: fg, size: AppSizes.iconSizeSm),
                   child: GestureDetector(

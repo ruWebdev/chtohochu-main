@@ -14,17 +14,26 @@
 | VK (ВКонтакте) | Social login / registration | `services.vk`, `services.vkontakte` |
 | Yandex | Social login / registration | `services.yandex` |
 
-Both providers use the **access-token exchange** pattern, not the authorization-code-with-redirect
-pattern. The client obtains a provider access token and POSTs it to the backend, which validates
-it against the provider's API, resolves or creates a local user, and issues a ЧтоХочу Sanctum
-token. This keeps the redirect/consent UX inside the client (Flutter WebView or Yandex SDK) and
-keeps the backend stateless with respect to OAuth redirects.
+Both providers keep the redirect/consent UX inside the client (embedded WebView on
+sentinel `https://app.*` URIs) and keep the backend stateless — the backend never sees a
+redirect. The hand-off differs per provider:
+
+- **VK** uses **authorization code flow + PKCE** (`id.vk.ru`): the client sends
+  `code`/`device_id`/`code_verifier`, and the backend exchanges the code for an
+  access token server-side. VK implicit tokens are bound to the device IP
+  (`error_subcode 1130`) and cannot be validated from a server — code exchange is the
+  only correct variant.
+- **Yandex** uses **access-token exchange** (implicit): the client posts the provider
+  access token from the redirect fragment; the backend validates it via Socialite.
+
+In both cases the backend resolves or creates a local user and issues a ЧтоХочу Sanctum
+token.
 
 ### 1.1 Endpoints
 
 | Method | Path | Auth | Throttle | Purpose |
 |--------|------|------|----------|---------|
-| `POST` | `/api/v1/auth/vk` | — | `throttle:10,1` | Exchange VK access token for a Sanctum token |
+| `POST` | `/api/v1/auth/vk` | — | `throttle:10,1` | Exchange VK `code`+PKCE for a Sanctum token |
 | `POST` | `/api/v1/auth/yandex` | — | `throttle:10,1` | Exchange Yandex access token for a Sanctum token |
 | `POST` | `/api/v1/auth/vk/link` | Sanctum | `throttle:10,1` | Confirmed linking of a VK account to the current user |
 | `POST` | `/api/v1/auth/yandex/link` | Sanctum | `throttle:10,1` | Confirmed linking of a Yandex account to the current user |
@@ -38,52 +47,62 @@ rate-limited to resist provider-token brute-forcing.
 
 ### 2.1 Client side (Flutter)
 
-1. The Flutter app opens `OAuthPage` — an incognito `InAppWebView`
-   (`flutter_inappwebview`, already used for link previews) — to VK's authorize URL:
+VK uses **authorization code flow + PKCE** (`id.vk.ru`), not implicit: access tokens issued
+via the implicit flow are bound to the device IP (`error_subcode 1130`) and cannot be used
+by the backend. The code is exchanged server-side instead.
+
+1. The Flutter app generates a one-time `state` and a PKCE `code_verifier` (64 chars
+   RFC-7636) + `code_challenge = BASE64URL(SHA256(verifier))`.
+2. It opens `OAuthPage` — an incognito `InAppWebView` — to VK ID's authorize URL:
    ```
-   https://oauth.vk.com/authorize
-     ?client_id={VK_APP_ID}
+   https://id.vk.ru/authorize
+     ?response_type=code
+     &client_id={VK_APP_ID}
      &redirect_uri={VK_REDIRECT_URI}
-     &response_type=token
      &scope=email
-     &v=5.199
-     &display=mobile
      &state={STATE}
+     &code_challenge={CHALLENGE}
+     &code_challenge_method=S256
    ```
    `VK_APP_ID` is supplied via `--dart-define` (public identifier, not a secret).
-   `STATE` is a one-time random value generated per flow.
-2. VK authenticates the user and redirects to `{VK_REDIRECT_URI}#access_token=...&user_id=...&email=...&state=...`.
-   The access token is returned in the **URL fragment**, not as a query parameter, so the
-   redirect target does not receive it server-side.
-3. The WebView's navigation delegate intercepts the redirect, verifies `state` matches the
-   value issued in step 1 (a mismatch or provider `error=` is a failure, not a login),
-   parses the fragment, extracts `access_token` and `email`, and closes the WebView.
-4. The Flutter app POSTs `{"access_token": "...", "email": "..."}` to
-   `POST /api/v1/auth/vk` (`email` is forwarded when present — see §2.2).
-5. On success it stores the returned Sanctum token in `flutter_secure_storage` and the
+3. VK authenticates the user and redirects to
+   `{VK_REDIRECT_URI}?code=...&device_id=...&state=...` (params in the **query**).
+4. The WebView's navigation delegate intercepts the redirect, verifies `state` matches
+   (a mismatch or provider `error=` is a failure, not a login), extracts `code` +
+   `device_id`, and closes the WebView. The `code_verifier` never leaves the client until
+   the exchange POST.
+5. The Flutter app POSTs `{code, device_id, code_verifier, state}` to
+   `POST /api/v1/auth/vk`.
+6. On success it stores the returned Sanctum token in `flutter_secure_storage` and the
    router redirect navigates to the app. On failure it shows the error feedback with retry;
-   closing the WebView without a token is a silent cancel.
+   closing the WebView without a code is a silent cancel.
 
 ### 2.2 Backend side (`SocialAuthController::vk`)
 
-1. Validate the request: `access_token` required string, `email` nullable `email|max:255`.
-2. Call `fetchVkProfile($accessToken)`, which requests
-   `https://api.vk.com/method/users.get` with `fields=id,first_name,last_name,photo_200,domain`
-   and the configured API version (`VK_API_VERSION`, default `5.199`).
-3. If the response is not OK, contains `error`, or has no `response[0]`, return `null` →
-   throw a `ValidationException` with `auth.social_failed` for provider `VK` (→ `422`).
-4. Extract `id`, name (`first_name last_name`), `domain`, `photo_200` (→ `avatar_url`).
-   `users.get` never returns `email`; the client forwards the email from the redirect
-   fragment. If email is absent entirely, a synthetic local email `vk_{id}@vk.local` is used
-   so the `users.email` unique constraint is satisfied.
-5. Look up an existing user **only** by `vk_id` — never by email (see §5).
+1. Validate the request: `code`, `device_id` required strings, `code_verifier` required
+   `min:43|max:128`, `state` nullable.
+2. `fetchVkProfile($data)` performs two provider calls:
+   - `POST https://id.vk.ru/oauth2/auth` (form): `grant_type=authorization_code`, `code`,
+     `code_verifier`, `client_id` (`VK_APP_ID`), `device_id`, `redirect_uri`
+     (`VK_REDIRECT_URI` from `services.vkontakte.redirect`), `state` → returns
+     `access_token` bound to the **server** IP, `user_id`, etc.
+   - `POST https://id.vk.ru/oauth2/user_info` (form): `client_id`, `access_token` →
+     `user` with `user_id`, `first_name`, `last_name`, `avatar`, `email` (when the token
+     carries the `email` scope).
+   Any non-OK response, error body, or missing `user_id` → `null` → `ValidationException`
+   `auth.social_failed` on field `code` (→ `422`). Provider codes/tokens are never logged;
+   only VK's `error`/`error_description` codes are.
+3. Extract `id` (`user_id`), name (`first_name last_name`), `avatar`, `email`. If email is
+   absent, a synthetic local email `vk_{id}@vk.local` is used so the `users.email` unique
+   constraint is satisfied.
+4. Look up an existing user **only** by `vk_id` — never by email (see §5).
    - No match and the (real) email already belongs to an account → `409`
      `{"message": ..., "code": "oauth_link_required"}` — confirmed linking required.
    - No match → create a user inside `DB::transaction` with `name`, generated unique
      `username`, `email` (real or synthetic), random bcrypt password, `vk_id`, `avatar_url`.
    - Match → **backfill only empty fields** (`name`, `avatar_url`, `username`). The
      provider never overwrites an edited profile and never changes the account email.
-6. Issue a Sanctum token named `vk_login` and return `200 {"data": {"token": ..., "user": ...}}` —
+5. Issue a Sanctum token named `vk_login` and return `200 {"data": {"token": ..., "user": ...}}` —
    the same envelope as `register`/`login` (`UserResource` fields; provider ids are not
    leaked).
 
@@ -91,7 +110,8 @@ rate-limited to resist provider-token brute-forcing.
 
 Because VK users may not have a usable username, the backend generates one:
 
-- Base: the VK `domain` if present, else the email local part, else `vk_{id}`.
+- Base: the email local part if present, else `vk_{id}` (`user_info` does not return a
+  screen name).
 - Normalize: lowercase, replace non-`[a-z0-9_]` with `_`, trim underscores, pad to ≥6 chars
   with a random suffix, truncate to 20 chars.
 - Uniquify: append `_2`, `_3`, ... until the username is free.
@@ -146,12 +166,17 @@ email/password registration.
 POST /api/v1/auth/vk HTTP/1.1
 Content-Type: application/json
 
-{ "access_token": "vk1.a.MjA...", "email": "ivan@mail.ru" }
+{
+  "code": "a1b2c3...",
+  "device_id": "xyz...",
+  "code_verifier": "random-43-128-chars",
+  "state": "uuid"
+}
 ```
 
-`email` is optional and used only for VK — it arrives in the provider's redirect fragment
-and `users.get` cannot return it. Yandex requests carry `access_token` only; the email is
-resolved server-side from the provider profile.
+VK requests carry the authorization-code set — the backend exchanges it for a server-bound
+token and fetches the profile (incl. `email` when granted) from `id.vk.ru`. The client
+never sends a VK access token.
 
 ```http
 POST /api/v1/auth/yandex HTTP/1.1
@@ -159,6 +184,9 @@ Content-Type: application/json
 
 { "access_token": "y0_AgAAA..." }
 ```
+
+Yandex requests carry `access_token` only; the email is resolved server-side from the
+provider profile.
 
 ### 4.2 Success response (`200`)
 
@@ -258,8 +286,8 @@ VK and Yandex OAuth require a browser context for consent and cookie-based sessi
 uses `InAppWebView` (from `flutter_inappwebview`, already used for link previews — the doc
 previously named `webview_flutter`; the navigation-delegate contract is identical) rather
 than a platform browser tab because the app must intercept the redirect and extract the
-access token from the URL fragment. A platform browser tab does not reliably expose the
-fragment to the app.
+credential (query `code` for VK, fragment `access_token` for Yandex) from the URL. A
+platform browser tab does not reliably expose the redirect URL to the app.
 
 ### 7.2 Implementation contract
 
@@ -268,12 +296,14 @@ fragment to the app.
 - The WebView runs in **incognito** mode — provider cookies are not persisted between
   sessions, so each login is a fresh consent.
 - The delegate watches for navigations to `{VK|YANDEX}_REDIRECT_URI` and parses the
-  fragment **before** allowing the navigation to complete. The redirect target itself does
-  not need to exist as a real page; it is a sentinel.
-- A one-time `state` is generated per flow and **must** match the value echoed in the
-  fragment; mismatch or `error=` in the fragment is a failure, never a login.
-- On success: extract `access_token` (and `email` for VK), close the WebView, call the
-  exchange endpoint, store the Sanctum token, navigate to home.
+  credential params — query `code`/`device_id`/`state` for VK, fragment
+  `access_token`/`state` for Yandex — **before** allowing the navigation to complete.
+  The redirect target itself does not need to exist as a real page; it is a sentinel.
+- A one-time `state` is generated per flow and **must** match the echoed value; for VK a
+  PKCE `code_verifier`/`code_challenge` pair is generated per flow. Mismatch or `error=`
+  is a failure, never a login.
+- On success: extract the credential (code+device_id for VK, access_token for Yandex),
+  close the WebView, call the exchange endpoint, store the Sanctum token, navigate to home.
 - On user cancel (close button): pop the page, no token exchange, no error shown.
 - On provider error in the fragment or load failure: show the error card with retry.
 
@@ -368,12 +398,14 @@ flutter run \
 
 ## 10. Security Considerations
 
-1. **The provider access token is a secret.** It is sent only to `/api/v1/auth/{provider}`
-   over HTTPS and is never logged. The existing VK logging logs the `users.get` response
-   body, not the access token; this must be preserved in any refactor.
-2. **Provider token validation is server-side.** The backend does not trust the client's
-   claim about the user's identity; it calls the provider's API with the token and uses the
-   returned `id` as the source of truth.
+1. **Provider credentials are secrets in flight.** The VK `code`/`code_verifier` and the
+   Yandex `access_token` are sent only to `/api/v1/auth/{provider}` over HTTPS and are
+   never logged — VK logging is limited to `error`/`error_description` codes and HTTP
+   statuses; this must be preserved in any refactor.
+2. **Provider identity is verified server-side.** The backend does not trust the client's
+   claim about the user's identity: VK exchanges the code via PKCE and reads `user_id`
+   from `id.vk.ru/oauth2/user_info`; Yandex reads the profile via `userFromToken`. The
+   provider-returned `id` is the source of truth.
 3. **Throttling.** The exchange endpoints are rate-limited to 10/min/IP to resist
    token-guessing and enumeration.
 4. **Account takeover via email collision.** There is no implicit linking by email:
@@ -394,10 +426,10 @@ flutter run \
    or the provider account belongs to a different user, `/auth/{provider}/link` refuses
    with `409` (`oauth_already_linked` / `oauth_provider_taken`) — the existing id is never
    overwritten. Covered by `SocialAuthApiTest`.
-8. **Provider token provenance (client).** The client verifies the `state` echoed in the
-   redirect fragment against the value it generated; a fragment without a matching `state`
-   or with `error=` is treated as failure, so an attacker cannot inject a foreign
-   provider token into the WebView flow.
+8. **Provider credential provenance (client).** The client verifies the `state` echoed in
+   the redirect against the value it generated; a redirect without a matching `state` or
+   with `error=` is treated as failure. For VK, PKCE additionally ensures an intercepted
+   `code` is useless without the `code_verifier` held in the client's memory.
 
 ## 11. Testing
 

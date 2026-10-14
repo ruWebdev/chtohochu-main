@@ -14,27 +14,48 @@ use Tests\TestCase;
 /**
  * OAuth-вход через VK / Яндекс и подтверждённая привязка
  * провайдеров к аккаунту (docs/20-backend/oauth.md).
+ *
+ * VK — authorization code flow + PKCE: endpoint принимает
+ * code/device_id/code_verifier, backend обменивает код на
+ * access_token через id.vk.ru/oauth2/auth и берёт профиль из
+ * id.vk.ru/oauth2/user_info.
  */
 class SocialAuthApiTest extends TestCase
 {
     use RefreshDatabase;
 
     /**
-     * users.get отвечает успехом с заданным VK-профилем.
+     * Тело запроса VK-обмена как у клиента (code flow + PKCE).
      */
-    private function fakeVkUsersGet(array $overrides = []): void
+    private function vkPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'code' => 'vk-code',
+            'device_id' => 'device-1',
+            'code_verifier' => str_repeat('v', 43),
+            'state' => 'state-1',
+        ], $overrides);
+    }
+
+    /**
+     * id.vk.ru отвечает успехом: обмен кода + user_info.
+     */
+    private function fakeVkOauth(array $user = []): void
     {
         Http::fake([
-            'api.vk.com/method/users.get*' => Http::response([
-                'response' => [
-                    array_merge([
-                        'id' => 12345,
-                        'first_name' => 'Иван',
-                        'last_name' => 'Петров',
-                        'domain' => 'ivan_petrov',
-                        'photo_200' => 'https://img.example/vk.png',
-                    ], $overrides),
-                ],
+            'id.vk.ru/oauth2/auth' => Http::response([
+                'access_token' => 'vk-srv-token',
+                'refresh_token' => 'vk-refresh',
+                'user_id' => 12345,
+                'expires_in' => 3600,
+            ], 200),
+            'id.vk.ru/oauth2/user_info' => Http::response([
+                'user' => array_merge([
+                    'user_id' => '12345',
+                    'first_name' => 'Иван',
+                    'last_name' => 'Петров',
+                    'avatar' => 'https://img.example/vk.png',
+                ], $user),
             ], 200),
         ]);
     }
@@ -78,14 +99,12 @@ class SocialAuthApiTest extends TestCase
 
     // ─── VK ───────────────────────────────────────────────
 
-    public function test_vk_login_creates_user_with_fragment_email(): void
+    public function test_vk_login_creates_user_with_provider_email(): void
     {
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth(['email' => 'Ivan@Mail.ru']);
 
-        $response = $this->postJson($this->api('/auth/vk'), [
-            'access_token' => 'vk-token',
-            'email' => 'Ivan@Mail.ru',
-        ])->assertOk()
+        $response = $this->postJson($this->api('/auth/vk'), $this->vkPayload())
+            ->assertOk()
             ->assertJsonStructure([
                 'data' => [
                     'token',
@@ -108,11 +127,10 @@ class SocialAuthApiTest extends TestCase
 
     public function test_vk_login_without_email_uses_synthetic_address(): void
     {
-        $this->fakeVkUsersGet(['id' => 555]);
+        $this->fakeVkOauth(['user_id' => '555']);
 
-        $this->postJson($this->api('/auth/vk'), [
-            'access_token' => 'vk-token',
-        ])->assertOk()
+        $this->postJson($this->api('/auth/vk'), $this->vkPayload())
+            ->assertOk()
             ->assertJsonPath('data.user.email', 'vk_555@vk.local');
 
         $this->assertDatabaseHas('users', [
@@ -124,12 +142,10 @@ class SocialAuthApiTest extends TestCase
     public function test_vk_login_existing_user_by_provider_id(): void
     {
         $user = User::factory()->create(['vk_id' => '12345']);
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth(['email' => 'other@mail.ru']);
 
-        $this->postJson($this->api('/auth/vk'), [
-            'access_token' => 'vk-token',
-            'email' => 'other@mail.ru',
-        ])->assertOk()
+        $this->postJson($this->api('/auth/vk'), $this->vkPayload())
+            ->assertOk()
             ->assertJsonPath('data.user.id', $user->id);
 
         // Email аккаунта провайдером не перезаписывается.
@@ -139,12 +155,10 @@ class SocialAuthApiTest extends TestCase
     public function test_vk_login_email_collision_requires_confirmed_link(): void
     {
         $existing = User::factory()->create(['email' => 'ivan@mail.ru']);
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth(['email' => 'ivan@mail.ru']);
 
-        $this->postJson($this->api('/auth/vk'), [
-            'access_token' => 'vk-token',
-            'email' => 'ivan@mail.ru',
-        ])->assertStatus(409)
+        $this->postJson($this->api('/auth/vk'), $this->vkPayload())
+            ->assertStatus(409)
             ->assertJsonPath('code', 'oauth_link_required');
 
         // Автопривязки нет: провайдер не проставлен, токен не выдан.
@@ -152,25 +166,26 @@ class SocialAuthApiTest extends TestCase
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
-    public function test_vk_login_invalid_provider_token(): void
+    public function test_vk_login_invalid_code(): void
     {
         Http::fake([
-            'api.vk.com/method/users.get*' => Http::response([
-                'error' => ['error_code' => 5, 'error_msg' => 'invalid token'],
-            ], 200),
+            'id.vk.ru/oauth2/auth' => Http::response([
+                'error' => 'invalid_grant',
+                'error_description' => 'code is invalid or expired',
+            ], 400),
         ]);
 
-        $this->postJson($this->api('/auth/vk'), [
-            'access_token' => 'bad-token',
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['access_token']);
+        $this->postJson($this->api('/auth/vk'), $this->vkPayload([
+            'code' => 'bad-code',
+        ]))->assertUnprocessable()
+            ->assertJsonValidationErrors(['code']);
     }
 
-    public function test_vk_login_requires_access_token(): void
+    public function test_vk_login_requires_code_fields(): void
     {
         $this->postJson($this->api('/auth/vk'), [])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['access_token']);
+            ->assertJsonValidationErrors(['code', 'device_id', 'code_verifier']);
     }
 
     // ─── Yandex ───────────────────────────────────────────
@@ -233,20 +248,18 @@ class SocialAuthApiTest extends TestCase
 
     public function test_link_requires_authentication(): void
     {
-        $this->postJson($this->api('/auth/vk/link'), [
-            'access_token' => 'vk-token',
-        ])->assertUnauthorized();
+        $this->postJson($this->api('/auth/vk/link'), $this->vkPayload())
+            ->assertUnauthorized();
     }
 
     public function test_vk_link_attaches_provider_to_current_user(): void
     {
         $user = User::factory()->create(['email' => 'ivan@mail.ru']);
         Sanctum::actingAs($user);
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth();
 
-        $this->postJson($this->api('/auth/vk/link'), [
-            'access_token' => 'vk-token',
-        ])->assertOk()
+        $this->postJson($this->api('/auth/vk/link'), $this->vkPayload())
+            ->assertOk()
             ->assertJsonPath('data.user.id', $user->id);
 
         $this->assertSame('12345', $user->fresh()->vk_id);
@@ -256,11 +269,10 @@ class SocialAuthApiTest extends TestCase
     {
         $user = User::factory()->create(['vk_id' => '12345']);
         Sanctum::actingAs($user);
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth();
 
-        $this->postJson($this->api('/auth/vk/link'), [
-            'access_token' => 'vk-token',
-        ])->assertOk();
+        $this->postJson($this->api('/auth/vk/link'), $this->vkPayload())
+            ->assertOk();
 
         $this->assertSame('12345', $user->fresh()->vk_id);
     }
@@ -270,11 +282,10 @@ class SocialAuthApiTest extends TestCase
         User::factory()->create(['vk_id' => '12345']);
         $user = User::factory()->create();
         Sanctum::actingAs($user);
-        $this->fakeVkUsersGet();
+        $this->fakeVkOauth();
 
-        $this->postJson($this->api('/auth/vk/link'), [
-            'access_token' => 'vk-token',
-        ])->assertStatus(409)
+        $this->postJson($this->api('/auth/vk/link'), $this->vkPayload())
+            ->assertStatus(409)
             ->assertJsonPath('code', 'oauth_provider_taken');
 
         $this->assertNull($user->fresh()->vk_id);
@@ -284,11 +295,10 @@ class SocialAuthApiTest extends TestCase
     {
         $user = User::factory()->create(['vk_id' => '999']);
         Sanctum::actingAs($user);
-        $this->fakeVkUsersGet(); // возвращает id 12345
+        $this->fakeVkOauth(); // возвращает user_id 12345
 
-        $this->postJson($this->api('/auth/vk/link'), [
-            'access_token' => 'vk-token',
-        ])->assertStatus(409)
+        $this->postJson($this->api('/auth/vk/link'), $this->vkPayload())
+            ->assertStatus(409)
             ->assertJsonPath('code', 'oauth_already_linked');
 
         $this->assertSame('999', $user->fresh()->vk_id);

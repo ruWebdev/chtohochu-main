@@ -16,7 +16,8 @@ import '../../helpers/test_app.dart';
 /// OAuth-флоу на уровне репозитория и контроллера.
 ///
 /// WebView-часть (OAuthPage) платформенная и в widget-тестах не
-/// проверяется — здесь покрыт контракт обмена: success, отказ
+/// проверяется — здесь покрыт контракт обмена: VK authorization
+/// code + PKCE, Яндекс implicit access_token, success, отказ
 /// провайдера (422), конфликт email (409 oauth_link_required),
 /// подтверждённая привязка и состояния контроллера.
 void main() {
@@ -26,6 +27,15 @@ void main() {
   late ApiAuthRepository repo;
   late SecureStorageService secureStorage;
   late PreferencesService prefs;
+
+  /// VK credentials как их отдаёт OAuthPage: code + device_id +
+  /// code_verifier из redirect-перехвата.
+  OAuthCredentials vkCreds(String code) => OAuthCredentials(
+    code: code,
+    deviceId: 'device-1',
+    codeVerifier: 'v' * 43,
+    state: 'state-1',
+  );
 
   setUp(() async {
     setupTestStorage();
@@ -42,10 +52,8 @@ void main() {
   });
 
   group('loginWithVk', () {
-    test('обменивает provider-токен на сессию и персистит её', () async {
-      final session = await repo.loginWithVk(
-        credentials: const OAuthCredentials(accessToken: 'vk-abc'),
-      );
+    test('обменивает authorization code на сессию и персистит её', () async {
+      final session = await repo.loginWithVk(credentials: vkCreds('vk-abc'));
 
       expect(session.token, isNotEmpty);
       // Синтетический email по provider id — как на backend.
@@ -54,12 +62,10 @@ void main() {
       expect(prefs.currentUserId(), session.user.id);
     });
 
-    test('email из фрагмента передаётся на backend', () async {
+    test('email из user_info провайдера попадает в сессию', () async {
+      // Фейк: code вида `email:<адрес>` — провайдер вернул email.
       final session = await repo.loginWithVk(
-        credentials: const OAuthCredentials(
-          accessToken: 'vk-abc',
-          email: 'ivan@mail.ru',
-        ),
+        credentials: vkCreds('email:ivan@mail.ru'),
       );
       expect(session.user.email, 'ivan@mail.ru');
     });
@@ -77,21 +83,14 @@ void main() {
       );
 
       expect(
-        () => repo.loginWithVk(
-          credentials: const OAuthCredentials(
-            accessToken: 'vk-abc',
-            email: 'ivan@mail.ru',
-          ),
-        ),
+        () => repo.loginWithVk(credentials: vkCreds('email:ivan@mail.ru')),
         throwsA(isA<OAuthLinkRequiredError>()),
       );
     });
 
     test('отказ провайдера (422) → OAuthFailedError', () {
       expect(
-        () => repo.loginWithVk(
-          credentials: const OAuthCredentials(accessToken: 'bad-token'),
-        ),
+        () => repo.loginWithVk(credentials: vkCreds('bad-code')),
         throwsA(isA<OAuthFailedError>()),
       );
     });
@@ -110,9 +109,7 @@ void main() {
 
   group('link', () {
     test('link проставляет provider id на сервере', () async {
-      final session = await repo.loginWithVk(
-        credentials: const OAuthCredentials(accessToken: 'vk-abc'),
-      );
+      final session = await repo.loginWithVk(credentials: vkCreds('vk-abc'));
 
       await repo.linkWithYandex(
         credentials: const OAuthCredentials(accessToken: 'ya-abc'),
@@ -131,9 +128,7 @@ void main() {
       );
       await repo.clearCredentials();
 
-      await repo.loginWithVk(
-        credentials: const OAuthCredentials(accessToken: 'vk-other'),
-      );
+      await repo.loginWithVk(credentials: vkCreds('vk-other'));
 
       expect(
         () => repo.linkWithYandex(
@@ -161,7 +156,7 @@ void main() {
       );
       await container
           .read(authControllerProvider.notifier)
-          .loginWithVk(const OAuthCredentials(accessToken: 'vk-abc'));
+          .loginWithVk(vkCreds('vk-abc'));
 
       final state = container.read(authControllerProvider);
       expect(state, isA<AuthFormSuccess>());
@@ -174,7 +169,7 @@ void main() {
       );
       await container
           .read(authControllerProvider.notifier)
-          .loginWithVk(const OAuthCredentials(accessToken: 'vk-abc'));
+          .loginWithVk(vkCreds('vk-abc'));
 
       final state = container.read(authControllerProvider);
       expect(state, isA<AuthFormIdle>());

@@ -355,7 +355,22 @@ class ApiAuthRepository implements AuthRepository {
   Future<AuthSession> loginWithYandex({required OAuthCredentials credentials}) =>
       _socialLogin('yandex', credentials);
 
-  /// Обмен provider access_token на Sanctum-токен:
+  /// Тело запроса обмена по схеме провайдера:
+  /// VK — authorization code + PKCE (code/device_id/code_verifier);
+  /// Яндекс — implicit access_token.
+  static Map<String, dynamic> _credentialsPayload(
+    String provider,
+    OAuthCredentials c,
+  ) => provider == 'vk'
+      ? {
+          'code': c.code,
+          'device_id': c.deviceId,
+          'code_verifier': c.codeVerifier,
+          'state': c.state,
+        }
+      : {'access_token': c.accessToken};
+
+  /// Обмен данных провайдера на Sanctum-токен:
   /// `POST /auth/{provider}` → `{data: {token, user}}`.
   /// Тот же конверт ответа, что у register/login.
   Future<AuthSession> _socialLogin(
@@ -365,10 +380,7 @@ class ApiAuthRepository implements AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/auth/$provider',
-        data: {
-          'access_token': credentials.accessToken,
-          if (credentials.email != null) 'email': credentials.email,
-        },
+        data: _credentialsPayload(provider, credentials),
       );
       final data = _data(res);
       return await _persist(
@@ -399,10 +411,7 @@ class ApiAuthRepository implements AuthRepository {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/auth/$provider/link',
-        data: {
-          'access_token': credentials.accessToken,
-          if (credentials.email != null) 'email': credentials.email,
-        },
+        data: _credentialsPayload(provider, credentials),
       );
       final json = _data(res)['user'] as Map<String, dynamic>;
       final user = _userFromJson(json);

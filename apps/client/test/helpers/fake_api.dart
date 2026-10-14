@@ -254,18 +254,23 @@ class FakeApiAdapter implements HttpClientAdapter {
       final provider = path.split('/')[2];
       final uid = _userIdForToken(token);
       final user = _users.values.firstWhere((u) => u['id'] == uid);
-      final accessToken = body!['access_token'] as String?;
-      if (accessToken == null || accessToken.isEmpty) {
+      // VK — code flow: `code`; Яндекс — `access_token`.
+      final cred = provider == 'vk'
+          ? body!['code'] as String?
+          : body!['access_token'] as String?;
+      if (cred == null || cred.isEmpty) {
         throw _error(
           422,
           'The given data was invalid.',
           errors: {
-            'access_token': ['The access token field is required.'],
+            provider == 'vk' ? 'code' : 'access_token': [
+              'The credential field is required.',
+            ],
           },
         );
       }
       final pidCol = '${provider}_id';
-      final pid = 'pid_$accessToken';
+      final pid = 'pid_$cred';
       if (_users.values.any((u) => u['id'] != uid && u[pidCol] == pid)) {
         throw _error(
           409,
@@ -285,30 +290,40 @@ class FakeApiAdapter implements HttpClientAdapter {
       data = {'user': user};
     } else if ((path == '/auth/vk' || path == '/auth/yandex') &&
         method == 'POST') {
-      // Обмен provider-токена на сессию — контракт
-      // SocialAuthController::{vk,yandex}. 'bad-token' имитирует
-      // отказ провайдера.
+      // Обмен данных провайдера на сессию — контракт
+      // SocialAuthController::{vk,yandex}. VK — code flow
+      // (`code` + `device_id` + `code_verifier`), Яндекс —
+      // implicit `access_token`. 'bad-code'/'bad-token'
+      // имитируют отказ провайдера.
       final provider = path.split('/').last;
-      final accessToken = body!['access_token'] as String?;
-      if (accessToken == null ||
-          accessToken.isEmpty ||
-          accessToken == 'bad-token') {
+      final cred = provider == 'vk'
+          ? body!['code'] as String?
+          : body!['access_token'] as String?;
+      final badCred = provider == 'vk' ? 'bad-code' : 'bad-token';
+      if (cred == null || cred.isEmpty || cred == badCred) {
         throw _error(
           422,
           'The given data was invalid.',
           errors: {
-            'access_token': ['Failed to verify the provider token.'],
+            provider == 'vk' ? 'code' : 'access_token': [
+              'Failed to verify the provider credentials.',
+            ],
           },
         );
       }
       final pidCol = '${provider}_id';
-      final pid = 'pid_$accessToken';
+      final pid = 'pid_$cred';
       var user = _userByProvider(pidCol, pid);
       if (user == null) {
-        var email = body['email'] as String?;
-        // У Яндекса email приходит «от провайдера» — в фейке
-        // детерминированно выводим из токена.
-        email ??= provider == 'yandex' ? 'ya_$accessToken@yandex.ru' : null;
+        // Email приходит от провайдера: у VK из user_info, у
+        // Яндекса из профиля. Фейк: code вида `email:<адрес>`
+        // (VK) и любой токен (Яндекс) детерминированно дают email.
+        String? email;
+        if (provider == 'yandex') {
+          email = 'ya_$cred@yandex.ru';
+        } else if (cred.startsWith('email:')) {
+          email = cred.substring(6);
+        }
         if (email != null && _users.containsKey(email)) {
           throw _error(
             409,

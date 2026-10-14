@@ -48,7 +48,7 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> loginWithVk({required OAuthCredentials credentials}) =>
-      _persist('token_vk_${credentials.accessToken}');
+      _persist('token_vk_${credentials.code}');
 
   @override
   Future<AuthSession> loginWithYandex({

@@ -26,28 +26,29 @@ class SocialAuthController extends Controller
     ];
 
     /**
-     * Вход через VK по access_token.
+     * Вход через VK ID — authorization code flow + PKCE.
      *
-     * `email` — адрес из redirect-фрагмента провайдера (scope `email`);
-     * `users.get` email не возвращает, поэтому клиент передаёт его явно.
+     * Клиент присылает код подтверждения из redirect-URL и
+     * code_verifier; backend обменивает код на access_token
+     * серверным запросом к id.vk.ru (токен из implicit-флоу
+     * IP-bound и непригоден для серверных вызовов).
      */
     public function vk(Request $request)
     {
         $data = $request->validate([
-            'access_token' => ['required', 'string'],
-            'email' => ['nullable', 'email', 'max:255'],
+            'code' => ['required', 'string'],
+            'device_id' => ['required', 'string'],
+            'code_verifier' => ['required', 'string', 'min:43', 'max:128'],
+            'state' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $profile = $this->fetchVkProfile($data['access_token']);
+        $profile = $this->fetchVkProfile($data);
 
         if (! $profile) {
             throw ValidationException::withMessages([
-                'access_token' => [trans('auth.social_failed', ['provider' => 'VK'])],
+                'code' => [trans('auth.social_failed', ['provider' => 'VK'])],
             ]);
         }
-
-        // Email у VK приходит из redirect-фрагмента, не из users.get.
-        $profile['email'] ??= isset($data['email']) ? mb_strtolower($data['email']) : null;
 
         return $this->loginVia('vk', $profile, $request);
     }
@@ -147,20 +148,28 @@ class SocialAuthController extends Controller
      */
     private function link(string $provider, Request $request)
     {
-        $data = $request->validate([
-            'access_token' => ['required', 'string'],
-            'email' => ['nullable', 'email', 'max:255'],
-        ]);
+        $data = $provider === 'vk'
+            ? $request->validate([
+                'code' => ['required', 'string'],
+                'device_id' => ['required', 'string'],
+                'code_verifier' => ['required', 'string', 'min:43', 'max:128'],
+                'state' => ['nullable', 'string', 'max:255'],
+            ])
+            : $request->validate([
+                'access_token' => ['required', 'string'],
+            ]);
 
         $label = self::PROVIDER_LABEL[$provider];
 
         $profile = $provider === 'vk'
-            ? $this->fetchVkProfile($data['access_token'])
+            ? $this->fetchVkProfile($data)
             : $this->fetchYandexProfile($data['access_token']);
 
         if (! $profile) {
             throw ValidationException::withMessages([
-                'access_token' => [trans('auth.social_failed', ['provider' => $label])],
+                $provider === 'vk' ? 'code' : 'access_token' => [
+                    trans('auth.social_failed', ['provider' => $label]),
+                ],
             ]);
         }
 
@@ -259,49 +268,83 @@ class SocialAuthController extends Controller
     }
 
     /**
-     * Запрашивает профиль пользователя у VK по access_token.
-     * Email здесь не появляется — его отдаёт redirect-фрагмент.
+     * Профиль VK ID по коду подтверждения (authorization code + PKCE).
+     *
+     * 1. `POST id.vk.ru/oauth2/auth` — обмен code на access_token,
+     *    привязанный к серверу (implicit-токены VK IP-bound к
+     *    устройству и не работают из backend).
+     * 2. `POST id.vk.ru/oauth2/user_info` — профиль пользователя
+     *    (email приходит при scope=email).
+     *
+     * `null` — обмен или user_info отклонены провайдером (→ 422).
+     * Токены и коды провайдера в логи не пишутся.
      */
-    protected function fetchVkProfile(string $accessToken): ?array
+    protected function fetchVkProfile(array $data): ?array
     {
         $vkConfig = config('services.vk');
+        $redirectUri = config('services.vkontakte.redirect');
 
-        $response = Http::withHeaders([
-            'User-Agent' => 'Mozilla/5.0 (compatible; chtohochu-app/1.0)',
-        ])->get('https://api.vk.com/method/users.get', [
-            'access_token' => $accessToken,
-            'v' => $vkConfig['version'] ?? '5.199',
-            'fields' => 'id,first_name,last_name,photo_200,domain',
-        ]);
+        try {
+            $tokenResponse = Http::asForm()->post('https://id.vk.ru/oauth2/auth', [
+                'grant_type' => 'authorization_code',
+                'code' => $data['code'],
+                'code_verifier' => $data['code_verifier'],
+                'client_id' => $vkConfig['client_id'],
+                'device_id' => $data['device_id'],
+                'redirect_uri' => $redirectUri,
+                'state' => $data['state'] ?? '',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('VK token exchange failed: '.$e->getMessage());
 
-        $body = $response->json();
-
-        Log::info('VK users.get response', [
-            'status' => $response->status(),
-            'body' => $body,
-        ]);
-
-        if (! $response->ok()) {
             return null;
         }
 
-        if (isset($body['error'])) {
-            // VK вернул ошибку авторизации или запроса
+        $tokenBody = $tokenResponse->json();
+        $accessToken = $tokenBody['access_token'] ?? null;
+
+        if (! $tokenResponse->ok() || ! $accessToken) {
+            Log::error('VK token exchange rejected', [
+                'status' => $tokenResponse->status(),
+                'error' => $tokenBody['error'] ?? null,
+                'error_description' => $tokenBody['error_description'] ?? null,
+            ]);
+
             return null;
         }
 
-        if (! isset($body['response'][0])) {
+        try {
+            $infoResponse = Http::asForm()->post('https://id.vk.ru/oauth2/user_info', [
+                'client_id' => $vkConfig['client_id'],
+                'access_token' => $accessToken,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('VK user_info failed: '.$e->getMessage());
+
             return null;
         }
 
-        $user = $body['response'][0];
+        $user = $infoResponse->json('user');
+
+        if (! $infoResponse->ok() || ! is_array($user) || empty($user['user_id'])) {
+            Log::error('VK user_info rejected', [
+                'status' => $infoResponse->status(),
+                'error' => $infoResponse->json('error') ?? null,
+            ]);
+
+            return null;
+        }
+
         $name = trim(($user['first_name'] ?? '').' '.($user['last_name'] ?? ''));
 
         return [
-            'id' => $user['id'] ?? null,
+            'id' => $user['user_id'],
             'name' => $name ?: null,
-            'login' => $user['domain'] ?? null,
-            'avatar' => $user['photo_200'] ?? null,
+            'login' => null,
+            'avatar' => $user['avatar'] ?? null,
+            'email' => isset($user['email'])
+                ? mb_strtolower((string) $user['email'])
+                : null,
         ];
     }
 

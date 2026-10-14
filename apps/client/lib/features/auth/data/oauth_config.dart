@@ -37,26 +37,28 @@ class OAuthProviderConfig {
     OAuthProvider.yandex => 'Яндекс',
   };
 
-  /// Authorize-URL провайдера (implicit flow). [state] —
-  /// одноразовое значение для проверки ответа на подмену.
-  Uri authorizeUri({required String state}) => switch (provider) {
-    OAuthProvider.vk => Uri.https('oauth.vk.com', '/authorize', {
-      'client_id': clientId,
-      'redirect_uri': redirectUri,
-      'response_type': 'token',
-      'scope': 'email',
-      'v': '5.199',
-      'display': 'mobile',
-      'state': state,
-    }),
-    OAuthProvider.yandex => Uri.https('oauth.yandex.ru', '/authorize', {
-      'response_type': 'token',
-      'client_id': clientId,
-      'redirect_uri': redirectUri,
-      'scope': 'login:email login:info',
-      'state': state,
-    }),
-  };
+  /// Authorize-URL провайдера. [state] — одноразовое значение для
+  /// проверки ответа на подмену; [codeChallenge] — PKCE (S256),
+  /// обязателен для VK ID (code flow), у Яндекса не используется.
+  Uri authorizeUri({required String state, String? codeChallenge}) =>
+      switch (provider) {
+        OAuthProvider.vk => Uri.https('id.vk.ru', '/authorize', {
+          'response_type': 'code',
+          'client_id': clientId,
+          'redirect_uri': redirectUri,
+          'scope': 'email',
+          'state': state,
+          'code_challenge': ?codeChallenge,
+          'code_challenge_method': ?(codeChallenge == null ? null : 'S256'),
+        }),
+        OAuthProvider.yandex => Uri.https('oauth.yandex.ru', '/authorize', {
+          'response_type': 'token',
+          'client_id': clientId,
+          'redirect_uri': redirectUri,
+          'scope': 'login:email login:info',
+          'state': state,
+        }),
+      };
 }
 
 /// Конфигурация обоих провайдеров из окружения сборки.

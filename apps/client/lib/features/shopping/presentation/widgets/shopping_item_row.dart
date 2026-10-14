@@ -6,10 +6,10 @@ import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../shared/ui/images/app_image.dart';
+import '../../../../shared/ui/ui.dart';
 import '../../domain/shopping_item.dart';
 
-/// Строка позиции в списке покупок.
+/// Строка позиции в списке покупок — flat-карточка.
 ///
 /// Компоновка: [фото/placeholder] — [название] — [checkbox «куплено»].
 ///
@@ -45,65 +45,61 @@ class ShoppingItemRow extends StatelessWidget {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: AppSpacing.md),
         decoration: BoxDecoration(
-          color: colors.errorSurface,
+          color: colors.error,
           borderRadius: BorderRadius.circular(AppRadii.lg),
         ),
-        child: Icon(
+        child: const Icon(
           PhosphorIconsRegular.trash,
-          color: colors.error,
+          color: Colors.white,
           size: AppSizes.iconSize,
         ),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onToggle,
-          onLongPress: onLongPress,
-          borderRadius: BorderRadius.circular(AppRadii.lg),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xs,
-              vertical: AppSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                _ItemThumbnail(imagePath: item.imageLocalPath),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text.rich(
+      child: AppCard(
+        variant: AppCardVariant.elevated,
+        radius: AppRadii.lg,
+        onTap: onToggle,
+        onLongPress: onLongPress,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            _ItemThumbnail(imagePath: item.imageLocalPath),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: [
                     TextSpan(
-                      children: [
-                        TextSpan(
-                          text: item.title,
-                          style: t.body.copyWith(
-                            color: item.isChecked
-                                ? colors.textMuted
-                                : colors.textPrimary,
-                            decoration: item.isChecked
-                                ? TextDecoration.lineThrough
-                                : null,
-                            decorationColor: colors.textMuted,
-                          ),
-                        ),
-                        if (item.quantity > 1)
-                          TextSpan(
-                            text: '  × ${item.quantity}',
-                            style: t.secondary.copyWith(
-                              color: colors.textMuted,
-                              decoration: TextDecoration.none,
-                            ),
-                          ),
-                      ],
+                      text: item.title,
+                      style: t.body.copyWith(
+                        color: item.isChecked
+                            ? colors.textMuted
+                            : colors.textPrimary,
+                        decoration: item.isChecked
+                            ? TextDecoration.lineThrough
+                            : null,
+                        decorationColor: colors.textMuted,
+                      ),
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                    if (item.quantity > 1)
+                      TextSpan(
+                        text: '  × ${item.quantity}',
+                        style: t.secondary.copyWith(
+                          color: colors.textMuted,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                _CheckBox(checked: item.isChecked),
-              ],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
+            const SizedBox(width: AppSpacing.sm),
+            _CheckBox(checked: item.isChecked),
+          ],
         ),
       ),
     );
@@ -127,13 +123,13 @@ class _ItemThumbnail extends StatelessWidget {
       width: _size,
       height: _size,
       decoration: BoxDecoration(
-        color: colors.surfaceMuted,
+        color: colors.accentShopping.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       alignment: Alignment.center,
       child: Icon(
         PhosphorIconsRegular.basket,
-        color: colors.textMuted,
+        color: colors.accentShopping,
         size: AppSizes.iconSize,
       ),
     );
@@ -170,19 +166,19 @@ class _CheckBox extends StatelessWidget {
       width: 24,
       height: 24,
       decoration: BoxDecoration(
-        color: checked ? colors.primary : Colors.transparent,
+        color: checked ? colors.accentShopping : Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadii.xs),
         border: Border.all(
-          color: checked ? colors.primary : colors.textMuted,
+          color: checked ? colors.accentShopping : colors.border,
           width: 1.5,
         ),
       ),
       alignment: Alignment.center,
       child: checked
-          ? Icon(
+          ? const Icon(
               PhosphorIconsRegular.check,
               size: AppSizes.iconSizeSm,
-              color: colors.primaryForeground,
+              color: Colors.white,
             )
           : null,
     );

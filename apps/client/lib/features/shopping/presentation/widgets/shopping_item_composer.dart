@@ -156,8 +156,9 @@ class _ShoppingItemComposerState extends ConsumerState<ShoppingItemComposer> {
                     minHeight: AppSizes.iconButtonSize,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.surfaceMuted,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(AppRadii.lg),
+                    border: Border.all(color: colors.border),
                   ),
                   child: TextField(
                     controller: _controller,
@@ -167,7 +168,7 @@ class _ShoppingItemComposerState extends ConsumerState<ShoppingItemComposer> {
                     textInputAction: TextInputAction.newline,
                     decoration: InputDecoration(
                       hintText: l10n.itemComposerHint,
-                      // Тема задаёт filled/surfaceMuted + minHeight 48 —
+                      // Тема задаёт filled/surface + minHeight 48 —
                       // здесь плашку рисует контейнер, поле прозрачное.
                       filled: false,
                       constraints: const BoxConstraints(),

@@ -55,6 +55,7 @@ class AppColors {
     infoSurface: Color(0xFFE7F0FB),
     accentShopping: Color(0xFF2FAE9E),
     accentFriends: Color(0xFFE9715E),
+    inputFocus: Color(0xFFE9715E),
     scrim: Color(0x66000000),
   );
 
@@ -83,6 +84,7 @@ class AppColors {
     infoSurface: Color(0xFF1E2A3A),
     accentShopping: Color(0xFF66D4C2),
     accentFriends: Color(0xFFFF9C8C),
+    inputFocus: Color(0xFFFF9C8C),
     scrim: Color(0x99000000),
   );
 }
@@ -116,6 +118,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     required this.infoSurface,
     required this.accentShopping,
     required this.accentFriends,
+    required this.inputFocus,
     required this.scrim,
   });
 
@@ -128,7 +131,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   /// Приподнятая поверхность (диалоги, sheets).
   final Color surfaceElevated;
 
-  /// Приглушённая поверхность (поля, chips фон).
+  /// Приглушённая поверхность (chips фон, аватар-заглушки).
   final Color surfaceMuted;
 
   /// Основной текст.
@@ -188,6 +191,11 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
   /// Акцент раздела «Друзья» (тёплый coral).
   final Color accentFriends;
 
+  /// Состояние фокуса полей ввода: рамка, floating label, курсор.
+  /// Тёплый coral в весе акцента «Друзья»; на обводке и лейбле
+  /// применяется с alpha — см. `inputDecorationTheme`.
+  final Color inputFocus;
+
   /// Затемнение scrim.
   final Color scrim;
 
@@ -216,6 +224,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
     Color? infoSurface,
     Color? accentShopping,
     Color? accentFriends,
+    Color? inputFocus,
     Color? scrim,
   }) {
     return AppThemeColors(
@@ -242,6 +251,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       infoSurface: infoSurface ?? this.infoSurface,
       accentShopping: accentShopping ?? this.accentShopping,
       accentFriends: accentFriends ?? this.accentFriends,
+      inputFocus: inputFocus ?? this.inputFocus,
       scrim: scrim ?? this.scrim,
     );
   }
@@ -281,6 +291,7 @@ class AppThemeColors extends ThemeExtension<AppThemeColors> {
       infoSurface: Color.lerp(infoSurface, other.infoSurface, t)!,
       accentShopping: Color.lerp(accentShopping, other.accentShopping, t)!,
       accentFriends: Color.lerp(accentFriends, other.accentFriends, t)!,
+      inputFocus: Color.lerp(inputFocus, other.inputFocus, t)!,
       scrim: Color.lerp(scrim, other.scrim, t)!,
     );
   }

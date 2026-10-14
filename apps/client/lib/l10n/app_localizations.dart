@@ -1282,6 +1282,12 @@ abstract class AppLocalizations {
   /// **'В списке пока ничего нет'**
   String get listEmptyItems;
 
+  /// Divider label between unchecked and checked shopping items
+  ///
+  /// In ru, this message translates to:
+  /// **'Куплено'**
+  String get listCheckedSection;
+
   /// Placeholder of the shopping item composer text field
   ///
   /// In ru, this message translates to:

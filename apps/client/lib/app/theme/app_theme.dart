@@ -120,7 +120,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: themeColors.surfaceMuted,
+        fillColor: themeColors.surface,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.sm,
@@ -136,7 +136,10 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.lg),
-          borderSide: BorderSide(color: themeColors.textSecondary, width: 1.5),
+          borderSide: BorderSide(
+            color: themeColors.inputFocus.withValues(alpha: 0.45),
+            width: 1.5,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.lg),
@@ -155,7 +158,7 @@ class AppTheme {
           color: themeColors.textSecondary,
         ),
         floatingLabelStyle: textTheme.bodyMedium?.copyWith(
-          color: themeColors.textSecondary,
+          color: themeColors.inputFocus.withValues(alpha: 0.7),
         ),
         errorStyle: textTheme.labelSmall?.copyWith(color: themeColors.error),
       ),
@@ -207,7 +210,12 @@ class AppTheme {
             top: Radius.circular(AppRadii.xl),
           ),
         ),
-        showDragHandle: true,
+        // Handle не включаем на уровне темы: кастомные sheet'ы с
+        // прозрачным фоном рисуют свою пилюлю внутри контейнера,
+        // а автоматическая при этом повисала бы над шитом на scrim
+        // (дубль). Ручка задаётся параметром `showDragHandle` в
+        // `showAppBottomSheet` и вручную в кастомных sheet'ах.
+        showDragHandle: false,
         dragHandleColor: themeColors.divider,
       ),
       snackBarTheme: SnackBarThemeData(
@@ -234,6 +242,11 @@ class AppTheme {
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: themeColors.primary,
         linearTrackColor: themeColors.divider,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: themeColors.inputFocus,
+        selectionColor: themeColors.inputFocus.withValues(alpha: 0.24),
+        selectionHandleColor: themeColors.inputFocus,
       ),
       splashFactory: InkSparkle.splashFactory,
       visualDensity: VisualDensity.standard,

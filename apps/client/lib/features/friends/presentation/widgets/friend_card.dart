@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radii.dart';
 import '../../../../app/theme/app_sizes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -28,7 +29,9 @@ class FriendCard extends StatelessWidget {
     final l10n = context.l10n;
 
     return AppCard(
+      variant: AppCardVariant.elevated,
       onTap: onTap,
+      radius: AppRadii.xl,
       padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
         children: [

@@ -668,6 +668,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get listEmptyItems => 'В списке пока ничего нет';
 
   @override
+  String get listCheckedSection => 'Куплено';
+
+  @override
   String get itemComposerHint => 'Что купить?';
 
   @override

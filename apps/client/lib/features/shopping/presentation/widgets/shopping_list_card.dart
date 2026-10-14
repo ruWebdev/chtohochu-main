@@ -35,7 +35,9 @@ class ShoppingListCard extends StatelessWidget {
     };
 
     return AppCard(
+      variant: AppCardVariant.elevated,
       onTap: onTap,
+      radius: AppRadii.xl,
       padding: const EdgeInsets.all(AppSpacing.sm),
       child: Row(
         children: [

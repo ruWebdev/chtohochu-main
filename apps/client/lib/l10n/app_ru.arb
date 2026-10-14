@@ -449,6 +449,8 @@
   },
   "listEmptyItems": "В списке пока ничего нет",
   "@listEmptyItems": { "description": "Hint shown inside an empty shopping list" },
+  "listCheckedSection": "Куплено",
+  "@listCheckedSection": { "description": "Divider label between unchecked and checked shopping items" },
   "itemComposerHint": "Что купить?",
   "@itemComposerHint": { "description": "Placeholder of the shopping item composer text field" },
   "itemPhotoAttach": "Фото к позиции",

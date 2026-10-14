@@ -283,6 +283,14 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
     // либо владельцу — как вход в управление составом.
     final showMembers = currentUserId != null && (list.isShared || isOwner);
 
+    // Купленные позиции уходят вниз; порядок внутри групп
+    // сохраняется (групповая фильтрация вместо sort — стабильно).
+    final unchecked = list.items.where((i) => !i.isChecked).toList();
+    final items = [
+      ...unchecked,
+      ...list.items.where((i) => i.isChecked),
+    ];
+
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: ListView(
@@ -307,30 +315,31 @@ class _ShoppingListPageState extends ConsumerState<ShoppingListPage> {
           ],
           const SizedBox(height: AppSpacing.md),
 
-          if (list.items.isEmpty)
+          if (items.isEmpty)
             const _EmptyItems()
           else
-            for (var i = 0; i < list.items.length; i++) ...[
-              // Тонкий разделитель, выровненный с началом названия
-              // (padding строки + превью 40 + gap).
-              if (i > 0)
-                const AppListDivider(
-                  indent: AppSpacing.xs + 40 + AppSpacing.sm,
-                ),
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.xs),
+              // Разделитель с подписью на границе групп — только
+              // когда есть и купленные, и некупленные позиции.
+              if (i == unchecked.length && unchecked.isNotEmpty) ...[
+                _CheckedSectionDivider(),
+                const SizedBox(height: AppSpacing.xs),
+              ],
               ShoppingItemRow(
-                key: ValueKey(list.items[i].id),
-                item: list.items[i],
+                key: ValueKey(items[i].id),
+                item: items[i],
                 onToggle: () => _runMutation(
                   () => ref
                       .read(shoppingListsControllerProvider.notifier)
-                      .toggleItem(list.id, list.items[i].id),
+                      .toggleItem(list.id, items[i].id),
                 ),
                 onDelete: () => _runMutation(
                   () => ref
                       .read(shoppingListsControllerProvider.notifier)
-                      .deleteItem(list.id, list.items[i].id),
+                      .deleteItem(list.id, items[i].id),
                 ),
-                onLongPress: () => _openItemActions(list, list.items[i]),
+                onLongPress: () => _openItemActions(list, items[i]),
               ),
             ],
 
@@ -405,6 +414,7 @@ class _MembersRow extends StatelessWidget {
     final shown = ordered.take(4).toList();
     const avatarSize = AppAvatarSize.sm;
     const overlap = 8.0;
+    final avatarDiameter = avatarSize.value;
 
     return Material(
       color: Colors.transparent,
@@ -421,13 +431,14 @@ class _MembersRow extends StatelessWidget {
               SizedBox(
                 width: shown.isEmpty
                     ? 0
-                    : 24 + (shown.length - 1) * (24 - overlap) + 0,
-                height: 24,
+                    : avatarDiameter +
+                        (shown.length - 1) * (avatarDiameter - overlap),
+                height: avatarDiameter,
                 child: Stack(
                   children: [
                     for (var i = 0; i < shown.length; i++)
                       Positioned(
-                        left: i * (24 - overlap),
+                        left: i * (avatarDiameter - overlap),
                         child: AppAvatar(
                           imageUrl: shown[i].avatarUrl,
                           initials: shown[i].initials,
@@ -462,7 +473,40 @@ class _MembersRow extends StatelessWidget {
   }
 }
 
-/// Тонкий прогресс-бар в токенах дизайн-системы.
+/// Разделитель между некупленными и купленными позициями:
+/// две тонкие линии по краям и подпись «Куплено» по центру.
+class _CheckedSectionDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final t = AppTypography.of(context);
+
+    Widget line() => Expanded(child: Divider(color: colors.divider));
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
+      child: Row(
+        children: [
+          line(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: Text(
+              context.l10n.listCheckedSection,
+              style: t.caption.copyWith(color: colors.textMuted),
+            ),
+          ),
+          line(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Прогресс-бар покупок в токенах дизайн-системы.
+///
+/// Заполнение анимируется при смене значения (отметка «куплено»
+/// и realtime-обновления плавно двигают полосу). Цвет — акцент
+/// раздела «Покупки», на 100% — `success`.
 class _ProgressBar extends StatelessWidget {
   const _ProgressBar({required this.value});
 
@@ -476,15 +520,36 @@ class _ProgressBar extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadii.full),
       child: SizedBox(
-        height: 4,
-        child: Stack(
-          children: [
-            Positioned.fill(child: ColoredBox(color: colors.surfaceMuted)),
-            FractionallySizedBox(
-              widthFactor: value.clamp(0.0, 1.0),
-              child: ColoredBox(color: done ? colors.success : colors.primary),
-            ),
-          ],
+        height: 6,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: ColoredBox(color: colors.surfaceMuted),
+                ),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(end: value.clamp(0.0, 1.0)),
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, animated, _) {
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: constraints.maxWidth * animated,
+                        decoration: BoxDecoration(
+                          color: done
+                              ? colors.success
+                              : colors.accentShopping,
+                          borderRadius: BorderRadius.circular(AppRadii.full),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
